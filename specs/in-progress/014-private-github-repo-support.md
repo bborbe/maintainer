@@ -1,7 +1,8 @@
 ---
-status: generating
+status: prompted
 approved: "2026-05-03T17:48:43Z"
 generating: "2026-05-03T17:48:43Z"
+prompted: "2026-05-03T17:56:12Z"
 branch: dark-factory/private-github-repo-support
 ---
 
