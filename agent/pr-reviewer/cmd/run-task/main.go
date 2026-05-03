@@ -25,6 +25,7 @@ import (
 
 	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
 )
 
 func main() {
@@ -62,6 +63,7 @@ type application struct {
 	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
 
 	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
+	// cmd/run-task uses NoopAuthSetup — the developer's existing gh auth login handles git credentials.
 	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
@@ -89,6 +91,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
+	authSetup := githubauth.NewNoopAuthSetup()
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir: a.ClaudeConfigDir,
 		AgentDir:        a.AgentDir,
@@ -98,6 +101,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		WorkPath:        workPath,
 		ReviewMode:      a.ReviewMode,
 		RepoAllowlist:   repoAllowlist,
+		AuthSetup:       authSetup,
 		Phase:           a.Phase,
 		TaskContent:     string(taskContent),
 		Deliverer:       deliverer,

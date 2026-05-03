@@ -14,6 +14,7 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
 )
 
 // RunConfig is the input to RunAgent — everything the orchestrator needs
@@ -26,7 +27,8 @@ type RunConfig struct {
 	ReposPath       string
 	WorkPath        string
 	ReviewMode      string
-	RepoAllowlist   []string // host-qualified repos the agent may clone
+	RepoAllowlist   []string                // host-qualified repos the agent may clone
+	AuthSetup       githubauth.Configurator // pod: real gh-auth-setup; local-CLI: noop
 	Phase           domain.TaskPhase
 	TaskContent     string
 	Deliverer       agentlib.ResultDeliverer
@@ -55,6 +57,10 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 		{Marketplace: "bborbe/coding", Name: "coding"},
 	}); err != nil {
 		return nil, errors.Wrap(ctx, err, "ensure plugins installed")
+	}
+
+	if err := cfg.AuthSetup.Setup(ctx); err != nil {
+		return nil, errors.Wrap(ctx, err, "github auth setup failed")
 	}
 
 	env := map[string]string{}

@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-04-27T19:44:33Z"
 generating: "2026-04-27T19:44:54Z"
 prompted: "2026-04-27T19:47:35Z"
 verifying: "2026-04-27T20:03:13Z"
+completed: "2026-05-03T18:24:50Z"
 branch: dark-factory/ensure-plugins-installer
 ---
 Tags: [[Dark Factory - Spec Writing Guide]]

@@ -26,6 +26,7 @@ import (
 
 	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
 )
 
 func main() {
@@ -67,7 +68,8 @@ type application struct {
 	TaskID       agentlib.TaskIdentifier `required:"false" arg:"task-id"       env:"TASK_ID"       usage:"Agent task identifier for publishing results back to task controller"`
 
 	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
+	// Also used by the real GitHubAuthSetup to configure git credential helper at pod startup.
+	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth and git credential helper at pod startup" display:"length"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
@@ -88,6 +90,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer cleanup()
 
+	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir: a.ClaudeConfigDir,
 		AgentDir:        a.AgentDir,
@@ -97,6 +100,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		WorkPath:        a.WorkPath,
 		ReviewMode:      a.ReviewMode,
 		RepoAllowlist:   repoAllowlist,
+		AuthSetup:       authSetup,
 		Phase:           a.Phase,
 		TaskContent:     a.TaskContent,
 		Deliverer:       deliverer,

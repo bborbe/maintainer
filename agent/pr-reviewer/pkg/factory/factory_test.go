@@ -6,6 +6,7 @@ package factory_test
 
 import (
 	"context"
+	"reflect"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
 )
 
 var _ = Describe("Factory", func() {
@@ -116,6 +118,24 @@ var _ = Describe("Factory", func() {
 				currentDateTime,
 			)
 			Expect(deliverer).NotTo(BeNil())
+		})
+	})
+
+	Describe("RunConfig.AuthSetup wiring", func() {
+		It("pod path: NewGhAuthSetupGit produces the real impl type", func() {
+			cfg := factory.RunConfig{
+				AuthSetup: githubauth.NewGhAuthSetupGit("fake-token"),
+			}
+			Expect(cfg.AuthSetup).NotTo(BeNil())
+			Expect(reflect.TypeOf(cfg.AuthSetup).String()).To(Equal("*githubauth.ghAuthSetupGit"))
+		})
+
+		It("local-CLI path: NewNoopAuthSetup produces the noop impl type", func() {
+			cfg := factory.RunConfig{
+				AuthSetup: githubauth.NewNoopAuthSetup(),
+			}
+			Expect(cfg.AuthSetup).NotTo(BeNil())
+			Expect(reflect.TypeOf(cfg.AuthSetup).String()).To(Equal("*githubauth.noopAuthSetup"))
 		})
 	})
 })

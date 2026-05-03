@@ -1,5 +1,5 @@
 ---
-status: executing
+status: committing
 spec: [014-private-github-repo-support]
 container: code-reviewer-082-spec-014-githubauth-package
 dark-factory-version: v0.147.2-1-g30ba42f
