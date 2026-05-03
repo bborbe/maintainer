@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [013-repo-allowlist-stage-isolation]
 summary: Added REPO_ALLOWLIST env var to watcher/github with RepoAllowlistFilter leaf, RepoKey field on filter.PR, host-qualified env file updates, and full Ginkgo/Gomega test coverage.
 container: code-reviewer-079-spec-013-watcher-allowlist
@@ -7,6 +7,7 @@ dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T16:30:00Z"
 queued: "2026-05-03T16:58:25Z"
 started: "2026-05-03T16:58:56Z"
+completed: "2026-05-03T17:04:20Z"
 branch: dark-factory/repo-allowlist-stage-isolation
 ---
 
