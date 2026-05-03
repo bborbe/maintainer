@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [014-private-github-repo-support]
 summary: Created scenarios/014-private-repo-happy-path.md and scenarios/015-private-repo-no-token.md covering the private-repo happy path (3 sub-scenarios) and no-token failure paths (4 sub-scenarios A–D) for spec-014.
 container: code-reviewer-084-spec-014-scenarios
@@ -7,6 +7,7 @@ dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T18:00:00Z"
 queued: "2026-05-03T18:14:47Z"
 started: "2026-05-03T18:31:29Z"
+completed: "2026-05-03T18:33:36Z"
 branch: dark-factory/private-github-repo-support
 ---
 
