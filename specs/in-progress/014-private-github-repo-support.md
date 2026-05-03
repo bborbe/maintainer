@@ -1,6 +1,8 @@
 ---
-status: draft
-created: "2026-05-03T17:00:00Z"
+status: generating
+approved: "2026-05-03T17:48:43Z"
+generating: "2026-05-03T17:48:43Z"
+branch: dark-factory/private-github-repo-support
 ---
 
 ## Summary
@@ -35,12 +37,12 @@ After this work, the agent reviews private GitHub repositories end-to-end on the
 2. Subsequent `git clone --bare <https-url>` calls inside the execution phase succeed for both public and private GitHub repositories without any code change at the clone call site
 3. The `cmd/run-task` local-CLI entry point performs no agent-managed auth setup and never writes to the developer's `~/.gitconfig` or any other shared config
 4. A clone that fails specifically because the pod has no usable credentials for the target host returns a `NeedsInput` outcome routing the task to `phase: human_review` with a diagnostic that names the parsed `host/owner/repo` (no token), distinguishing this case from the existing hard-failure paths (malformed URL, network error, ref-not-found)
-5. Both entry points share the same auth-setup contract — the wiring lives in `factory.RunConfig`, the pod main injects a real github-auth-setup, the local-CLI main injects a no-op; no special-casing inside `factory.RunAgent` based on entry point
-6. The `GH_TOKEN` value never appears in the task vault file, the task body, the `## Review` JSON, the verdict, agent log lines, error wrap messages, exec.Cmd args printed by go (`cmd.String()`), or any test assertion fixture
-7. A pod started with `GH_TOKEN=""` continues to review public repositories successfully and produces the human_review diagnostic only on the first private-clone attempt — public processing is not affected by missing token
+5. The `GH_TOKEN` value never appears in the task vault file, the task body, the `## Review` JSON, the verdict, agent log lines, error wrap messages, exec.Cmd args printed by go (`cmd.String()`), or any test assertion fixture
+6. A pod started with `GH_TOKEN=""` continues to review public repositories successfully and produces the human_review diagnostic only on the first private-clone attempt — public processing is not affected by missing token
 
 ## Constraints
 
+- Both entry points share the same auth-setup contract — the wiring lives in `factory.RunConfig`, the pod main injects a real github-auth-setup, the local-CLI main injects a no-op; no special-casing inside `factory.RunAgent` based on entry point
 - The auth-setup contract is `Setup(ctx context.Context) error`; the pod implementation calls `gh auth setup-git` (which `~/Documents/workspaces/code-reviewer/agent/pr-reviewer/Dockerfile` already installs via `apk add github-cli`); the no-op implementation returns nil
 - Auth-setup logic lives in a new package under `agent/pr-reviewer/pkg/` (not `pkg/factory/`) per `go-factory-pattern.md` — factories compose constructors, they do not own subprocess invocation
 - Error wrapping uses `github.com/bborbe/errors` `Wrapf(ctx, err, ...)` — never `fmt.Errorf` and never `%w` chaining; safe identifiers only in wrap messages (`owner/repo`, never `cloneURL` if a future change ever interpolates a token)
@@ -83,7 +85,7 @@ After this work, the agent reviews private GitHub repositories end-to-end on the
 - [ ] `agent/pr-reviewer/cmd/run-task/main.go` injects the no-op implementation into `RunConfig.AuthSetup`
 - [ ] `GHToken` arg shape in both entry points stays `required:"false"`; the comment is updated to mention git-auth setup at pod startup; no other arg shape changes
 - [ ] The execution step (`pkg/steps_checkout_execution.go`) detects clone failures whose error matches the github-no-credentials condition and returns `agentlib.AgentStatusNeedsInput` with a diagnostic naming the parsed `host/owner/repo` and a configured-allowlist-size-style hint about GH_TOKEN; existing failure paths (malformed URL, ref not found, generic network error) keep their current `Status: Failed` semantics
-- [ ] Unit tests cover: real auth-setup with non-empty token (mock `commander.Run` is called once with `gh auth setup-git`), real auth-setup with empty token (mock is NOT called), no-op auth-setup always returns nil, factory wiring assertions for both entry points, clone-failure-to-NeedsInput translation in the execution step, diagnostic-does-not-contain-token assertion
+- [ ] Unit tests cover: the real auth-setup invokes `gh auth setup-git` exactly once when the token is non-empty and is not invoked when the token is empty; the no-op auth-setup always returns nil; factory wiring asserts the pod main injects the real impl and the local-CLI main injects the no-op (type-literal assertion or equivalent); clone-failure-to-`NeedsInput` translation in the execution step; the diagnostic emitted on the no-credentials path does not contain the literal token value (asserted with a recognizable fake token, including a token whose substring overlaps `owner/repo`)
 - [ ] Integration: `make run-dummy-task` against a public PR continues to work in local-CLI mode (no regression)
 - [ ] After dev deploy: triggering trading PR #110 (private, `bborbe/trading`) via the watcher results in a vault task whose `## Review` section contains a verdict from `/coding:pr-review` with at least one specialist sub-agent fan-out
 - [ ] After prod deploy: re-triggering the existing prod task `b0cec7d9` for trading PR #110 produces a populated `## Review` section instead of escalating to human_review
@@ -102,7 +104,7 @@ Manual smoke after dev deploy:
 1. Build and deploy `agent/pr-reviewer` to dev with `GH_TOKEN` set in the pod env (it already is — used by planning's `gh pr view`)
 2. Confirm pod startup log line indicates auth-setup completed (count-only style: e.g. `agent-pr-reviewer git auth: gh setup-git complete`)
 3. Trigger trading PR #110 via the dev watcher; observe vault task progress to `phase: done` and `## Review` section populated with a verdict
-4. Grep dev pod logs for the literal `GH_TOKEN` value — assert zero hits
+4. Grep dev pod logs for the literal token value (the secret string itself, not the env var name `GH_TOKEN`) — assert zero hits
 5. Open a fresh public PR in `bborbe/code-reviewer` and confirm it still completes end-to-end (no regression)
 6. Manually patch a dev pod's `GH_TOKEN` env var to empty; trigger any private PR; confirm task escalates to `phase: human_review` with diagnostic naming the rejected `host/owner/repo`; restore env
 
