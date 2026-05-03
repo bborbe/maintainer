@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.12
+
+- feat(k8s): wire `REPO_ALLOWLIST` env var through both `agent/pr-reviewer` Config CRD and `watcher/github` StatefulSet manifests so the value flows from `dev.env` / `prod.env` into pod env at deploy time. Without these manifest entries the watcher and agent never saw the host-qualified allowlist their code already reads.
+- fix(test): replace hardcoded `/bin/true` and `/bin/false` paths with bare `true` / `false` in `pkg/githubauth` test so `make precommit` works on macOS hosts (where `/bin/true` is absent — only `/usr/bin/true` exists).
+- test(scenario): add scenario 014 covering private GitHub repo PR review end-to-end (private clone via `gh auth setup-git`, no token leak in pod logs, public-repo regression check).
+- chore(env): update `dev.env` to `REPO_ALLOWLIST=github.com/bborbe/go-skeleton` (single test-bed repo) and `prod.env` to `REPO_ALLOWLIST=github.com/bborbe/code-reviewer,github.com/bborbe/jira-task-creator` (host-qualified production scope including private jira-task-creator).
+
 ## v0.23.11
 
 - feat(pr-reviewer): translate git auth-failure clone errors to `AgentStatusNeedsInput`, routing private-repo tasks to human review with a diagnostic naming `host/owner/repo` and a `GH_TOKEN` config hint. Adds `git.IsGitAuthFailure` helper covering known GitHub auth-failure substrings.

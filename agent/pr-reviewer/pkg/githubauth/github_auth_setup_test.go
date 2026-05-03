@@ -104,12 +104,14 @@ var _ = Describe("NewGhAuthSetupGit", func() {
 
 var _ = Describe("DefaultExecFunc", func() {
 	It("returns nil when the command succeeds", func() {
-		err := githubauth.DefaultExecFunc(context.Background(), "/bin/true")
+		// `true` is in /bin on alpine/Linux containers and in /usr/bin on macOS;
+		// rely on PATH resolution rather than hardcoding either prefix
+		err := githubauth.DefaultExecFunc(context.Background(), "true")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("returns an error when the command fails", func() {
-		err := githubauth.DefaultExecFunc(context.Background(), "/bin/false")
+		err := githubauth.DefaultExecFunc(context.Background(), "false")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed"))
 	})

@@ -16,6 +16,9 @@ spec:
     # Without this, the agent runs without /coding plugin loaded → /coding:pr-review
     # slash command not registered → execution phase falls back to inline prompt.
     CLAUDE_CONFIG_DIR: /home/claude/.claude
+    # Defense-in-depth allowlist mirroring watcher's REPO_ALLOWLIST. Agent refuses
+    # to clone tasks whose host/owner/repo is not on the list. Empty = allow-all.
+    REPO_ALLOWLIST: '{{ "REPO_ALLOWLIST" | env }}'
   trigger:
     statuses:
       - in_progress

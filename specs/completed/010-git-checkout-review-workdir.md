@@ -1,5 +1,5 @@
 ---
-status: verified
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,11 +7,8 @@ approved: "2026-04-29T11:25:04Z"
 generating: "2026-04-29T11:26:52Z"
 prompted: "2026-04-29T11:39:07Z"
 verifying: "2026-04-29T12:27:41Z"
-verified: "2026-05-01T08:10:00Z"
+completed: "2026-05-03T19:28:57Z"
 branch: dark-factory/git-checkout-review-workdir
-notes:
-    - "Verified 5/6 DoD criteria via dev e2e scenarios 001-003 (GitHub HTTPS + SCP + arbitrary ref)."
-    - "Bitbucket PR scenario 004 deferred: needs accessible target. Tracked separately."
 ---
 
 ## Summary
