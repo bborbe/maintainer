@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 spec: [014-private-github-repo-support]
 container: code-reviewer-082-spec-014-githubauth-package
 dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T18:00:00Z"
 queued: "2026-05-03T18:14:47Z"
 started: "2026-05-03T18:14:49Z"
+completed: "2026-05-03T18:26:57Z"
 branch: dark-factory/private-github-repo-support
 ---
 
