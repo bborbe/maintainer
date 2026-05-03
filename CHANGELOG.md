@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.8
+
+- feat(watcher): add `REPO_ALLOWLIST` env var (comma-separated `host/owner/repo` entries) that restricts task creation to configured repos. Empty allowlist is allow-all (preserves today's behavior). Malformed entries cause startup failure with a clear log. Adds `RepoAllowlistFilter` leaf to the `TaskCreationFilter` chain. Updated `dev.env` and `prod.env` to host-qualified form (`github.com/bborbe/code-reviewer`).
+
 ## v0.23.7
 
 - fix(github-pr-watcher): write `clone_url`, `ref`, `base_ref` to task frontmatter on PR creation so the agent's execution phase has the fields it needs to clone and diff. Without them every watcher-triggered review failed at `execution step: clone_url is missing from task frontmatter`, escalating to `phase: human_review` with no `## Review` section ever written. Adds a new `GetPRDetails` GitHub API method (replacing `GetHeadSHA`) that returns head SHA + clone URL + base ref in one PullRequests.Get call.

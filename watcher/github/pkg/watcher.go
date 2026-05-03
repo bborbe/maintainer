@@ -139,6 +139,7 @@ func (w *watcher) processPRs(
 				IsDraft:     pr.IsDraft,
 				Title:       pr.Title,
 				UpdatedAt:   pr.UpdatedAt,
+				RepoKey:     "github.com/" + pr.Owner + "/" + pr.Repo,
 			},
 		) {
 			glog.V(3).Infof("skipping pr=%s/%s#%d reason=filtered", pr.Owner, pr.Repo, pr.Number)

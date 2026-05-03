@@ -38,6 +38,25 @@ func validateRepoScope(ctx context.Context, scope string) error {
 	return nil
 }
 
+// parseMaxPRAge parses raw as a libtime.Duration. Empty string returns 0 (disabled).
+// Negative values are rejected.
+func parseMaxPRAge(ctx context.Context, raw string) (libtime.Duration, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	parsed, err := libtime.ParseDuration(ctx, raw)
+	if err != nil {
+		return 0, errors.Wrapf(ctx, err, "parse MAX_PR_AGE")
+	}
+	if parsed != nil && *parsed < 0 {
+		return 0, errors.Errorf(ctx, "MAX_PR_AGE must not be negative, got %s", *parsed)
+	}
+	if parsed == nil {
+		return 0, nil
+	}
+	return *parsed, nil
+}
+
 // parseBackfillDuration parses raw as a libtime.Duration. Empty string returns 0 (disabled).
 // Negative values are rejected.
 func parseBackfillDuration(ctx context.Context, raw string) (libtime.Duration, error) {
@@ -66,16 +85,17 @@ type application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"            usage:"HTTP listen address (healthz/readiness/metrics)"                                           default:":9090"`
-	GHToken          string           `required:"true"  arg:"gh-token"          env:"GH_TOKEN"          usage:"GitHub token (read scope sufficient)"                                                                                              display:"length"`
+	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"            usage:"HTTP listen address (healthz/readiness/metrics)"                                               default:":9090"`
+	GHToken          string           `required:"true"  arg:"gh-token"          env:"GH_TOKEN"          usage:"GitHub token (read scope sufficient)"                                                                                                  display:"length"`
 	KafkaBrokers     libkafka.Brokers `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma-separated Kafka broker list"`
 	Stage            string           `required:"true"  arg:"stage"             env:"STAGE"             usage:"Deployment stage (dev|prod)"`
-	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"     usage:"Poll interval (Go duration)"                                                               default:"5m"`
-	RepoScope        string           `required:"false" arg:"repo-scope"        env:"REPO_SCOPE"        usage:"GitHub user/org scope"                                                                     default:"bborbe"`
-	BotAllowlist     string           `required:"false" arg:"bot-allowlist"     env:"BOT_ALLOWLIST"     usage:"Comma-separated bot author allowlist"                                                      default:"dependabot[bot],renovate[bot]"`
+	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"     usage:"Poll interval (Go duration)"                                                                   default:"5m"`
+	RepoScope        string           `required:"false" arg:"repo-scope"        env:"REPO_SCOPE"        usage:"GitHub user/org scope"                                                                         default:"bborbe"`
+	BotAllowlist     string           `required:"false" arg:"bot-allowlist"     env:"BOT_ALLOWLIST"     usage:"Comma-separated bot author allowlist"                                                          default:"dependabot[bot],renovate[bot]"`
 	TrustedAuthors   string           `required:"false" arg:"trusted-authors"   env:"TRUSTED_AUTHORS"   usage:"Comma-separated trusted GitHub author logins (required; empty list refuses startup)"`
-	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"        usage:"Skip PRs older than this (Go duration; empty disables)"                                    default:"2160h"`
-	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION" usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)" default:"720h"`
+	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"        usage:"Skip PRs older than this (Go duration; empty disables)"                                        default:"2160h"`
+	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION" usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)"     default:"720h"`
+	RepoAllowlist    string           `required:"false" arg:"repo-allowlist"    env:"REPO_ALLOWLIST"    usage:"Comma-separated host-qualified repo allowlist (host/owner/repo format); empty means allow-all"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -91,18 +111,9 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	botAllowlist := pkg.ParseBotAllowlist(a.BotAllowlist)
 	startTime := libtime.NewCurrentDateTime().Now()
 
-	var maxAge libtime.Duration
-	if a.MaxPRAge != "" {
-		parsed, err := libtime.ParseDuration(ctx, a.MaxPRAge)
-		if err != nil {
-			return errors.Wrapf(ctx, err, "parse MAX_PR_AGE")
-		}
-		if parsed != nil {
-			maxAge = *parsed
-		}
-	}
-	if maxAge < 0 {
-		return errors.Errorf(ctx, "MAX_PR_AGE must not be negative, got %s", maxAge)
+	maxAge, err := parseMaxPRAge(ctx, a.MaxPRAge)
+	if err != nil {
+		return err
 	}
 
 	backfillDuration, err := parseBackfillDuration(ctx, a.BackfillDuration)
@@ -115,11 +126,22 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 			Infof("cursor cold-start backfilled by %s; initial=%s", backfillDuration, startTime)
 	}
 
+	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
+	if err != nil {
+		return err
+	}
+	if len(repoAllowlist) == 0 {
+		glog.V(2).Infof("repo-allowlist count=0 (allow-all)")
+	} else {
+		glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
+	}
+
 	taskCreationFilter := filter.TaskCreationFilters{
 		filter.NewDraftFilter(),
 		filter.NewBotAuthorFilter(botAllowlist),
 		filter.NewWIPTitleFilter(),
 		filter.NewAgeFilter(maxAge, startTime),
+		filter.NewRepoAllowlistFilter(repoAllowlist),
 	}
 
 	trustedAuthors := pkg.ParseTrustedAuthors(a.TrustedAuthors)

@@ -13,6 +13,27 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = DescribeTable("parseMaxPRAge",
+	func(raw string, expected libtime.Duration, expectError bool, errContains string) {
+		ctx := context.Background()
+		got, err := parseMaxPRAge(ctx, raw)
+		if expectError {
+			Expect(err).To(HaveOccurred())
+			if errContains != "" {
+				Expect(err.Error()).To(ContainSubstring(errContains))
+			}
+		} else {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(expected))
+		}
+	},
+	Entry("empty string disables age filter", "", libtime.Duration(0), false, ""),
+	Entry("2160h parses correctly", "2160h", libtime.Duration(2160*time.Hour), false, ""),
+	Entry("90d equals 2160h", "90d", libtime.Duration(2160*time.Hour), false, ""),
+	Entry("negative duration is rejected", "-1h", libtime.Duration(0), true, "negative"),
+	Entry("garbage input returns parse error", "not-a-duration", libtime.Duration(0), true, ""),
+)
+
 var _ = DescribeTable("parseBackfillDuration",
 	func(raw string, expected libtime.Duration, expectError bool, errContains string) {
 		ctx := context.Background()

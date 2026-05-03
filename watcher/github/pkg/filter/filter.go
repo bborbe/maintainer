@@ -24,6 +24,7 @@ type PR struct {
 	IsDraft     bool
 	Title       string
 	UpdatedAt   libtime.DateTime
+	RepoKey     string
 }
 
 //counterfeiter:generate -o ../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
