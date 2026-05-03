@@ -35,6 +35,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 			map[string]string{},
 			claudelib.AllowedTools{"Read"},
 			"standard",
+			nil,
 		)
 	})
 
@@ -118,6 +119,104 @@ var _ = Describe("checkoutExecutionStep", func() {
 				Expect(runErr).To(HaveOccurred())
 				Expect(result).To(BeNil())
 				Expect(runErr.Error()).To(ContainSubstring("ensure worktree"))
+			})
+		})
+
+		Context("allowlist checks", func() {
+			const taskMarkdown = "---\nclone_url: https://github.com/bborbe/code-reviewer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
+
+			Context("when allowlist is empty", func() {
+				It("proceeds to EnsureWorktree (allow-all behavior)", func() {
+					stepWithEmpty := pkg.NewCheckoutExecutionStep(
+						repoManager,
+						"",
+						"agent",
+						"sonnet",
+						map[string]string{},
+						claudelib.AllowedTools{"Read"},
+						"standard",
+						nil,
+					)
+					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
+
+					md, err := agentlib.ParseMarkdown(ctx, taskMarkdown)
+					Expect(err).NotTo(HaveOccurred())
+					_, runErr := stepWithEmpty.Run(ctx, md)
+					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(1))
+					Expect(runErr).To(HaveOccurred())
+				})
+			})
+
+			Context("when allowlist is non-empty and clone_url matches", func() {
+				It("proceeds to EnsureWorktree", func() {
+					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
+						repoManager,
+						"",
+						"agent",
+						"sonnet",
+						map[string]string{},
+						claudelib.AllowedTools{"Read"},
+						"standard",
+						[]string{"github.com/bborbe/code-reviewer"},
+					)
+					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
+
+					md, err := agentlib.ParseMarkdown(ctx, taskMarkdown)
+					Expect(err).NotTo(HaveOccurred())
+					_, runErr := stepWithAllowlist.Run(ctx, md)
+					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(1))
+					Expect(runErr).To(HaveOccurred())
+				})
+			})
+
+			Context("when allowlist is non-empty and clone_url does NOT match", func() {
+				It("returns NeedsInput and does not call EnsureWorktree", func() {
+					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
+						repoManager,
+						"",
+						"agent",
+						"sonnet",
+						map[string]string{},
+						claudelib.AllowedTools{"Read"},
+						"standard",
+						[]string{"github.com/bborbe/other-repo"},
+					)
+					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/code-reviewer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
+
+					md, err := agentlib.ParseMarkdown(ctx, nonMatchingTask)
+					Expect(err).NotTo(HaveOccurred())
+					result, runErr := stepWithAllowlist.Run(ctx, md)
+					Expect(runErr).NotTo(HaveOccurred())
+					Expect(result).NotTo(BeNil())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+					Expect(result.Message).To(ContainSubstring("github.com/bborbe/code-reviewer"))
+					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(0))
+				})
+			})
+
+			Context("when allowlist is non-empty and clone_url is unparseable", func() {
+				It("returns Failed (not NeedsInput) and does not call EnsureWorktree", func() {
+					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
+						repoManager,
+						"",
+						"agent",
+						"sonnet",
+						map[string]string{},
+						claudelib.AllowedTools{"Read"},
+						"standard",
+						[]string{"github.com/bborbe/code-reviewer"},
+					)
+					const badURLTask = "---\nclone_url: not-a-url\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
+
+					md, err := agentlib.ParseMarkdown(ctx, badURLTask)
+					Expect(err).NotTo(HaveOccurred())
+					result, runErr := stepWithAllowlist.Run(ctx, md)
+					Expect(runErr).NotTo(HaveOccurred())
+					Expect(result).NotTo(BeNil())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.Message).To(ContainSubstring("failed to parse clone_url"))
+					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(0))
+				})
 			})
 		})
 	})

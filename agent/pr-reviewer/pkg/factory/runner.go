@@ -26,6 +26,7 @@ type RunConfig struct {
 	ReposPath       string
 	WorkPath        string
 	ReviewMode      string
+	RepoAllowlist   []string // host-qualified repos the agent may clone
 	Phase           domain.TaskPhase
 	TaskContent     string
 	Deliverer       agentlib.ResultDeliverer
@@ -69,6 +70,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 		env,
 		repoManager,
 		cfg.ReviewMode,
+		cfg.RepoAllowlist,
 	)
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)
 }

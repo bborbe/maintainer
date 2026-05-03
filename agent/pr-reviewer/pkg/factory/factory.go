@@ -151,6 +151,7 @@ func CreateAgent(
 	env map[string]string,
 	repoManager git.RepoManager,
 	reviewMode string,
+	repoAllowlist []string,
 ) AgentRunner {
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
@@ -168,6 +169,7 @@ func CreateAgent(
 		env,
 		executionTools,
 		reviewMode,
+		repoAllowlist,
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),

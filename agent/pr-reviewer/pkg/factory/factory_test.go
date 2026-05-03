@@ -55,6 +55,7 @@ var _ = Describe("Factory", func() {
 				map[string]string{},
 				repoManager,
 				"standard",
+				nil,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
@@ -69,6 +70,7 @@ var _ = Describe("Factory", func() {
 				map[string]string{"GH_TOKEN": "test-token"},
 				repoManager,
 				"standard",
+				nil,
 			)
 			Expect(agent).NotTo(BeNil())
 		})

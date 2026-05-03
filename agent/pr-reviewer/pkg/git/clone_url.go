@@ -22,27 +22,33 @@ var scpURLRegexp = regexp.MustCompile(
 	`^[a-zA-Z0-9._\-]+@([a-zA-Z0-9.\-]+):([^:].*)$`,
 )
 
-// ParseCloneURL converts a git clone URL to a relative bare-repo path:
-// "<host>/<owner>/<repo>.git". Accepts URL-form ("https://host/owner/repo.git")
-// and SCP-form SSH ("user@host:owner/repo.git"). Returns an error for malformed
-// or unsafe inputs.
-func ParseCloneURL(ctx context.Context, rawURL string) (string, error) {
+// CloneURLParts holds the validated components of a git clone URL.
+type CloneURLParts struct {
+	Host  string
+	Owner string
+	Repo  string
+}
+
+// ParseCloneURLParts parses a git clone URL into its host, owner, and repo
+// components. Accepts URL-form ("https://host/owner/repo.git") and SCP-form
+// SSH ("user@host:owner/repo.git"). Returns an error for malformed or unsafe
+// inputs.
+func ParseCloneURLParts(ctx context.Context, rawURL string) (*CloneURLParts, error) {
 	if rawURL == "" {
-		return "", errors.Errorf(ctx, "clone URL must not be empty")
+		return nil, errors.Errorf(ctx, "clone URL must not be empty")
 	}
 
 	host, path, err := splitCloneURL(ctx, rawURL)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// Strip leading '/' and trailing '.git', then split into segments.
 	path = strings.TrimPrefix(path, "/")
 	path = strings.TrimSuffix(path, ".git")
 
 	segments := strings.Split(path, "/")
 	if len(segments) != 2 {
-		return "", errors.Errorf(
+		return nil, errors.Errorf(
 			ctx,
 			"clone URL path must have exactly 2 segments (<owner>/<repo>), got %d: %s",
 			len(segments),
@@ -52,11 +58,23 @@ func ParseCloneURL(ctx context.Context, rawURL string) (string, error) {
 
 	for _, seg := range segments {
 		if err := validateCloneURLSegment(ctx, seg); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
-	return host + "/" + segments[0] + "/" + segments[1] + ".git", nil
+	return &CloneURLParts{Host: host, Owner: segments[0], Repo: segments[1]}, nil
+}
+
+// ParseCloneURL converts a git clone URL to a relative bare-repo path:
+// "<host>/<owner>/<repo>.git". Accepts URL-form ("https://host/owner/repo.git")
+// and SCP-form SSH ("user@host:owner/repo.git"). Returns an error for malformed
+// or unsafe inputs.
+func ParseCloneURL(ctx context.Context, rawURL string) (string, error) {
+	parts, err := ParseCloneURLParts(ctx, rawURL)
+	if err != nil {
+		return "", err
+	}
+	return parts.Host + "/" + parts.Owner + "/" + parts.Repo + ".git", nil
 }
 
 // splitCloneURL extracts (host, path) from either a standard URL or an

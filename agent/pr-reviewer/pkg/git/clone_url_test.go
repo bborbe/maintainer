@@ -73,3 +73,43 @@ var _ = Describe("ParseCloneURL", func() {
 		Entry("SCP-style with only one path segment", "git@github.com:owner"),
 	)
 })
+
+var _ = Describe("ParseCloneURLParts", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	DescribeTable(
+		"valid URLs return correct parts",
+		func(rawURL string, expected git.CloneURLParts) {
+			result, err := git.ParseCloneURLParts(ctx, rawURL)
+			Expect(err).To(BeNil())
+			Expect(result).NotTo(BeNil())
+			Expect(*result).To(Equal(expected))
+		},
+		Entry(
+			"HTTPS URL with .git suffix",
+			"https://github.com/bborbe/code-reviewer.git",
+			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"},
+		),
+		Entry(
+			"SCP SSH URL with .git suffix",
+			"git@github.com:bborbe/code-reviewer.git",
+			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"},
+		),
+	)
+
+	DescribeTable(
+		"invalid URLs return error",
+		func(rawURL string) {
+			result, err := git.ParseCloneURLParts(ctx, rawURL)
+			Expect(err).NotTo(BeNil())
+			Expect(result).To(BeNil())
+		},
+		Entry("empty string", ""),
+		Entry("single-segment path", "https://github.com/owner"),
+		Entry("invalid segment characters", "https://github.com/owner/repo;rm -rf /"),
+	)
+})

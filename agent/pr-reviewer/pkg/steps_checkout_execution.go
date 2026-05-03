@@ -26,6 +26,7 @@ type checkoutExecutionStep struct {
 	env             map[string]string
 	allowedTools    claudelib.AllowedTools
 	reviewMode      string
+	repoAllowlist   []string
 }
 
 // NewCheckoutExecutionStep constructs the execution-phase step that wires
@@ -38,6 +39,7 @@ func NewCheckoutExecutionStep(
 	env map[string]string,
 	allowedTools claudelib.AllowedTools,
 	reviewMode string,
+	repoAllowlist []string,
 ) agentlib.Step {
 	return &checkoutExecutionStep{
 		repoManager:     repoManager,
@@ -47,6 +49,7 @@ func NewCheckoutExecutionStep(
 		env:             env,
 		allowedTools:    allowedTools,
 		reviewMode:      reviewMode,
+		repoAllowlist:   repoAllowlist,
 	}
 }
 
@@ -89,6 +92,10 @@ func (s *checkoutExecutionStep) Run(
 		}, nil
 	}
 
+	if result := s.checkAllowlist(ctx, cloneURL); result != nil {
+		return result, nil
+	}
+
 	worktreePath, err := s.repoManager.EnsureWorktree(ctx, cloneURL, ref, taskID)
 	if err != nil {
 		return nil, errors.Wrapf(
@@ -118,6 +125,42 @@ func (s *checkoutExecutionStep) Run(
 	}
 
 	return s.runClaude(ctx, md, worktreePath, instructions)
+}
+
+// checkAllowlist returns a non-nil Result if the cloneURL is blocked by the
+// allowlist or fails to parse. Returns nil when the clone is permitted.
+// Must be called before EnsureWorktree — cloning is the trust boundary.
+func (s *checkoutExecutionStep) checkAllowlist(
+	ctx context.Context,
+	cloneURL string,
+) *agentlib.Result {
+	if len(s.repoAllowlist) == 0 {
+		return nil
+	}
+	parts, parseErr := git.ParseCloneURLParts(ctx, cloneURL)
+	if parseErr != nil {
+		return &agentlib.Result{
+			Status: agentlib.AgentStatusFailed,
+			Message: fmt.Sprintf(
+				"execution step: failed to parse clone_url for allowlist check: %v",
+				parseErr,
+			),
+		}
+	}
+	repoKey := parts.Host + "/" + parts.Owner + "/" + parts.Repo
+	for _, entry := range s.repoAllowlist {
+		if entry == repoKey {
+			return nil
+		}
+	}
+	return &agentlib.Result{
+		Status: agentlib.AgentStatusNeedsInput,
+		Message: fmt.Sprintf(
+			"execution step: repo %q is not on the allowlist (%d entries); task routed to human review without clone",
+			repoKey,
+			len(s.repoAllowlist),
+		),
+	}
 }
 
 func (s *checkoutExecutionStep) runClaude(

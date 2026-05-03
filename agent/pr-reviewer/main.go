@@ -24,6 +24,7 @@ import (
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
+	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
 )
 
@@ -67,10 +68,19 @@ type application struct {
 
 	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
 	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
+
+	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
+	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	glog.V(2).Infof("agent-pr-reviewer started phase=%s", a.Phase)
+
+	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
+	if err != nil {
+		return err
+	}
+	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {
@@ -86,6 +96,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		ReposPath:       a.ReposPath,
 		WorkPath:        a.WorkPath,
 		ReviewMode:      a.ReviewMode,
+		RepoAllowlist:   repoAllowlist,
 		Phase:           a.Phase,
 		TaskContent:     a.TaskContent,
 		Deliverer:       deliverer,
