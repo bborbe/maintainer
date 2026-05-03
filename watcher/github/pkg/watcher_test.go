@@ -120,7 +120,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("abc123", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "abc123",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -161,7 +168,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha-existing", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-existing",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 
 			// Pre-populate cursor with the same SHA
 			w := newTestWatcher(
@@ -210,7 +224,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("old-sha", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "old-sha",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -226,7 +247,14 @@ var _ = Describe("pkg.Watcher", func() {
 
 			// Second poll: new SHA (force-push)
 			pub = new(mocks.CommandPublisher)
-			ghClient.GetHeadSHAReturns("new-sha", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "new-sha",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishUpdateFrontmatterReturns(nil)
 
 			w = newTestWatcher(
@@ -344,7 +372,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha123", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha123",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(errors.New("kafka unavailable"))
 
 			w := newTestWatcher(
@@ -477,7 +512,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha-initial", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-initial",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -535,7 +577,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha-v1", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-v1",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -550,7 +599,14 @@ var _ = Describe("pkg.Watcher", func() {
 			Expect(pub.PublishCreateCallCount()).To(Equal(1))
 
 			// Second poll: force-push detected, but Kafka publish fails
-			ghClient.GetHeadSHAReturns("sha-v2", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-v2",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub2 := new(mocks.CommandPublisher)
 			pub2.PublishUpdateFrontmatterReturns(errors.New("kafka unavailable"))
 			w2 := newTestWatcher(
@@ -586,7 +642,7 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("", errors.New("github api error"))
+			ghClient.GetPRDetailsReturns(pkg.PRDetails{}, errors.New("github api error"))
 
 			w := newTestWatcher(
 				ghClient,
@@ -607,7 +663,7 @@ var _ = Describe("pkg.Watcher", func() {
 	})
 
 	Describe("fetchHeadSHA cache hit with duplicate task ID", func() {
-		It("calls GetHeadSHA once and PublishCreate once for same PR twice in results", func() {
+		It("calls GetPRDetails once and PublishCreate once for same PR twice in results", func() {
 			pr1 := pkg.PullRequest{
 				Number:      10,
 				Owner:       "bborbe",
@@ -623,7 +679,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha-dedup", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-dedup",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -636,7 +699,7 @@ var _ = Describe("pkg.Watcher", func() {
 			)
 			Expect(w.Poll(ctx)).NotTo(HaveOccurred())
 
-			Expect(ghClient.GetHeadSHACallCount()).To(Equal(1))
+			Expect(ghClient.GetPRDetailsCallCount()).To(Equal(1))
 			Expect(pub.PublishCreateCallCount()).To(Equal(1))
 		})
 	})
@@ -662,8 +725,8 @@ var _ = Describe("pkg.Watcher", func() {
 		})
 	})
 
-	Describe("GetHeadSHA caches result", func() {
-		It("calls GetHeadSHA once per unique PR", func() {
+	Describe("GetPRDetails caches result", func() {
+		It("calls GetPRDetails once per unique PR", func() {
 			prs := []pkg.PullRequest{
 				{
 					Number:      1,
@@ -678,7 +741,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha1", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha1",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -690,7 +760,7 @@ var _ = Describe("pkg.Watcher", func() {
 				trust.NewAuthorAllowlist([]string{"alice"}),
 			)
 			Expect(w.Poll(ctx)).NotTo(HaveOccurred())
-			Expect(ghClient.GetHeadSHACallCount()).To(Equal(1))
+			Expect(ghClient.GetPRDetailsCallCount()).To(Equal(1))
 		})
 	})
 
@@ -709,7 +779,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha1", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha1",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 
 			w := newTestWatcher(
@@ -749,7 +826,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha-v1", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-v1",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub.PublishCreateReturns(nil)
 			w := newTestWatcher(
 				ghClient,
@@ -763,7 +847,14 @@ var _ = Describe("pkg.Watcher", func() {
 
 			// Second poll: force-push
 			pub2 := new(mocks.CommandPublisher)
-			ghClient.GetHeadSHAReturns("sha-v2", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha-v2",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 			pub2.PublishUpdateFrontmatterReturns(nil)
 			w2 := newTestWatcher(
 				ghClient,
@@ -809,7 +900,14 @@ var _ = Describe("pkg.Watcher", func() {
 				HasNextPage:   false,
 				RateRemaining: 100,
 			}, nil)
-			ghClient.GetHeadSHAReturns("sha1", nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "sha1",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
 		})
 
 		Describe("Trusted-author new PR", func() {
@@ -853,7 +951,14 @@ var _ = Describe("pkg.Watcher", func() {
 				Expect(pub.PublishCreateCallCount()).To(Equal(1))
 
 				pub2 := new(mocks.CommandPublisher)
-				ghClient.GetHeadSHAReturns("sha2", nil)
+				ghClient.GetPRDetailsReturns(
+					pkg.PRDetails{
+						HeadSHA:  "sha2",
+						CloneURL: "https://github.com/owner/repo.git",
+						BaseRef:  "master",
+					},
+					nil,
+				)
 				pub2.PublishUpdateFrontmatterReturns(nil)
 				w2 := newTestWatcher(ghClient, pub2, cursorPath, startTime, fakeMetrics,
 					trust.NewAuthorAllowlist([]string{"bob"}))

@@ -38,13 +38,31 @@ type SearchResult struct {
 	RateResetAt   libtime.DateTime
 }
 
+// PRDetails holds the per-PR fields the watcher needs to materialize a task
+// the execution phase can act on. The Search API does not expose any of
+// these; they require a follow-up PullRequests.Get call.
+type PRDetails struct {
+	// HeadSHA is the commit hash of the PR's head branch. Used for force-push
+	// detection and as the `ref` the agent checks out for review.
+	HeadSHA string
+
+	// CloneURL is the HTTPS clone URL of the head repo (e.g.
+	// `https://github.com/owner/repo.git`). Used as the `clone_url` the
+	// agent's execution phase passes to git clone.
+	CloneURL string
+
+	// BaseRef is the base branch name (e.g. `master`, `main`). Used as
+	// the `base_ref` the execution phase diffs against.
+	BaseRef string
+}
+
 //counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub API calls.
 type GitHubClient interface {
 	// SearchPRs issues a GitHub Search query for open PRs updated since cursor.
 	// page=1 for the first call; use SearchResult.NextPage for subsequent calls.
-	// PullRequest.HeadSHA in the result is empty — call GetHeadSHA to fetch it.
+	// PullRequest.HeadSHA in the result is empty — call GetPRDetails to fetch it.
 	SearchPRs(
 		ctx context.Context,
 		scope string,
@@ -52,10 +70,10 @@ type GitHubClient interface {
 		page int,
 	) (SearchResult, error)
 
-	// GetHeadSHA fetches the head commit SHA for a single PR. The Search
-	// API does NOT return head SHA, so the poll loop must call this for
-	// any PR it needs head-SHA tracking for (force-push detection).
-	GetHeadSHA(ctx context.Context, owner, repo string, number int) (string, error)
+	// GetPRDetails fetches the head SHA, clone URL, and base ref for a single PR.
+	// The Search API does NOT return any of these, so the poll loop must call
+	// this for every PR before publishing a task command.
+	GetPRDetails(ctx context.Context, owner, repo string, number int) (PRDetails, error)
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
@@ -119,16 +137,27 @@ func (c *githubClient) SearchPRs(
 	}, nil
 }
 
-func (c *githubClient) GetHeadSHA(
+func (c *githubClient) GetPRDetails(
 	ctx context.Context,
 	owner, repo string,
 	number int,
-) (string, error) {
+) (PRDetails, error) {
 	pr, _, err := c.client.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return "", errors.Wrapf(ctx, err, "get pull request %s/%s#%d", owner, repo, number)
+		return PRDetails{}, errors.Wrapf(
+			ctx,
+			err,
+			"get pull request %s/%s#%d",
+			owner,
+			repo,
+			number,
+		)
 	}
-	return pr.GetHead().GetSHA(), nil
+	return PRDetails{
+		HeadSHA:  pr.GetHead().GetSHA(),
+		CloneURL: pr.GetHead().GetRepo().GetCloneURL(),
+		BaseRef:  pr.GetBase().GetRef(),
+	}, nil
 }
 
 // parseOwnerRepo extracts owner and repo from a GitHub API repository URL.

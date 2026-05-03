@@ -127,7 +127,7 @@ func (w *watcher) processPRs(
 ) libtime.DateTime {
 	since := cursorState.LastUpdatedAt
 	maxUpdatedAt := since
-	headSHACache := make(map[string]string)
+	prDetailsCache := make(map[string]PRDetails)
 	newHeadSHAs := make(map[string]string, len(allPRs))
 
 	for _, pr := range allPRs {
@@ -149,17 +149,23 @@ func (w *watcher) processPRs(
 			continue
 		}
 
-		headSHA, err := w.fetchHeadSHA(ctx, pr, taskIDStr, headSHACache)
+		details, err := w.fetchPRDetails(ctx, pr, taskIDStr, prDetailsCache)
 		if err != nil {
-			glog.Errorf("get head sha failed pr=%s/%s#%d err=%v", pr.Owner, pr.Repo, pr.Number, err)
+			glog.Errorf(
+				"get pr details failed pr=%s/%s#%d err=%v",
+				pr.Owner,
+				pr.Repo,
+				pr.Number,
+				err,
+			)
 			if known, ok := cursorState.HeadSHAs[taskIDStr]; ok {
 				newHeadSHAs[taskIDStr] = known
 			}
 			continue
 		}
 
-		if w.handlePR(ctx, cursorState, pr, taskIDStr, headSHA) {
-			newHeadSHAs[taskIDStr] = headSHA
+		if w.handlePR(ctx, cursorState, pr, taskIDStr, details) {
+			newHeadSHAs[taskIDStr] = details.HeadSHA
 			if pr.UpdatedAt.After(maxUpdatedAt) {
 				maxUpdatedAt = pr.UpdatedAt
 			}
@@ -176,14 +182,15 @@ func (w *watcher) handlePR(
 	ctx context.Context,
 	cursorState *Cursor,
 	pr PullRequest,
-	taskIDStr, headSHA string,
+	taskIDStr string,
+	details PRDetails,
 ) bool {
 	knownSHA, exists := cursorState.HeadSHAs[taskIDStr]
 	switch {
 	case !exists:
-		return w.publishCreate(ctx, cursorState, pr, taskIDStr, headSHA)
-	case knownSHA != headSHA:
-		return w.publishForcePush(ctx, cursorState, pr, taskIDStr, knownSHA, headSHA)
+		return w.publishCreate(ctx, cursorState, pr, taskIDStr, details)
+	case knownSHA != details.HeadSHA:
+		return w.publishForcePush(ctx, cursorState, pr, taskIDStr, knownSHA, details.HeadSHA)
 	default:
 		glog.V(3).
 			Infof("no change, skipping pr=%s/%s#%d taskID=%s", pr.Owner, pr.Repo, pr.Number, taskIDStr)
@@ -195,7 +202,8 @@ func (w *watcher) publishCreate(
 	ctx context.Context,
 	cursorState *Cursor,
 	pr PullRequest,
-	taskIDStr, headSHA string,
+	taskIDStr string,
+	details PRDetails,
 ) bool {
 	author := pr.AuthorLogin
 
@@ -210,7 +218,7 @@ func (w *watcher) publishCreate(
 	if trustResult.Success() {
 		cmd = agentlib.CreateTaskCommand{
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage),
+			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildTaskBody(pr),
 		}
 	} else {
@@ -220,7 +228,7 @@ func (w *watcher) publishCreate(
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
 		cmd = agentlib.CreateTaskCommand{
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage),
+			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildUntrustedBody(author, trustResult.Description()),
 		}
 	}
@@ -230,7 +238,7 @@ func (w *watcher) publishCreate(
 		w.metrics.IncPRPublished("error")
 		return false
 	}
-	cursorState.HeadSHAs[taskIDStr] = headSHA
+	cursorState.HeadSHAs[taskIDStr] = details.HeadSHA
 	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d taskID=%s trusted=%t",
 		pr.Owner, pr.Repo, pr.Number, taskIDStr, trustResult.Success())
 	w.metrics.IncPRPublished("create")
@@ -295,21 +303,28 @@ func (w *watcher) publishForcePush(
 	return true
 }
 
-func (w *watcher) fetchHeadSHA(
+func (w *watcher) fetchPRDetails(
 	ctx context.Context,
 	pr PullRequest,
 	taskIDStr string,
-	cache map[string]string,
-) (string, error) {
-	if sha, ok := cache[taskIDStr]; ok {
-		return sha, nil
+	cache map[string]PRDetails,
+) (PRDetails, error) {
+	if details, ok := cache[taskIDStr]; ok {
+		return details, nil
 	}
-	sha, err := w.ghClient.GetHeadSHA(ctx, pr.Owner, pr.Repo, pr.Number)
+	details, err := w.ghClient.GetPRDetails(ctx, pr.Owner, pr.Repo, pr.Number)
 	if err != nil {
-		return "", errors.Wrapf(ctx, err, "get head sha pr=%s/%s#%d", pr.Owner, pr.Repo, pr.Number)
+		return PRDetails{}, errors.Wrapf(
+			ctx,
+			err,
+			"get pr details pr=%s/%s#%d",
+			pr.Owner,
+			pr.Repo,
+			pr.Number,
+		)
 	}
-	cache[taskIDStr] = sha
-	return sha, nil
+	cache[taskIDStr] = details
+	return details, nil
 }
 
 func buildTaskBody(pr PullRequest) string {
@@ -319,6 +334,7 @@ func buildTaskBody(pr PullRequest) string {
 func buildFrontmatter(
 	pr PullRequest,
 	taskIDStr, stage string,
+	details PRDetails,
 ) agentlib.TaskFrontmatter {
 	return agentlib.TaskFrontmatter{
 		"assignee":        "pr-reviewer-agent",
@@ -327,12 +343,16 @@ func buildFrontmatter(
 		"stage":           stage,
 		"task_identifier": taskIDStr,
 		"title":           pr.Title,
+		"clone_url":       details.CloneURL,
+		"ref":             details.HeadSHA,
+		"base_ref":        details.BaseRef,
 	}
 }
 
 func buildHumanReviewFrontmatter(
 	pr PullRequest,
 	taskIDStr, stage string,
+	details PRDetails,
 ) agentlib.TaskFrontmatter {
 	return agentlib.TaskFrontmatter{
 		"assignee":        "pr-reviewer-agent",
@@ -341,6 +361,9 @@ func buildHumanReviewFrontmatter(
 		"stage":           stage,
 		"task_identifier": taskIDStr,
 		"title":           pr.Title,
+		"clone_url":       details.CloneURL,
+		"ref":             details.HeadSHA,
+		"base_ref":        details.BaseRef,
 	}
 }
 

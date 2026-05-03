@@ -10,20 +10,20 @@ import (
 )
 
 type GitHubClient struct {
-	GetHeadSHAStub        func(context.Context, string, string, int) (string, error)
-	getHeadSHAMutex       sync.RWMutex
-	getHeadSHAArgsForCall []struct {
+	GetPRDetailsStub        func(context.Context, string, string, int) (pkg.PRDetails, error)
+	getPRDetailsMutex       sync.RWMutex
+	getPRDetailsArgsForCall []struct {
 		arg1 context.Context
 		arg2 string
 		arg3 string
 		arg4 int
 	}
-	getHeadSHAReturns struct {
-		result1 string
+	getPRDetailsReturns struct {
+		result1 pkg.PRDetails
 		result2 error
 	}
-	getHeadSHAReturnsOnCall map[int]struct {
-		result1 string
+	getPRDetailsReturnsOnCall map[int]struct {
+		result1 pkg.PRDetails
 		result2 error
 	}
 	SearchPRsStub        func(context.Context, string, time.DateTime, int) (pkg.SearchResult, error)
@@ -46,19 +46,19 @@ type GitHubClient struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *GitHubClient) GetHeadSHA(arg1 context.Context, arg2 string, arg3 string, arg4 int) (string, error) {
-	fake.getHeadSHAMutex.Lock()
-	ret, specificReturn := fake.getHeadSHAReturnsOnCall[len(fake.getHeadSHAArgsForCall)]
-	fake.getHeadSHAArgsForCall = append(fake.getHeadSHAArgsForCall, struct {
+func (fake *GitHubClient) GetPRDetails(arg1 context.Context, arg2 string, arg3 string, arg4 int) (pkg.PRDetails, error) {
+	fake.getPRDetailsMutex.Lock()
+	ret, specificReturn := fake.getPRDetailsReturnsOnCall[len(fake.getPRDetailsArgsForCall)]
+	fake.getPRDetailsArgsForCall = append(fake.getPRDetailsArgsForCall, struct {
 		arg1 context.Context
 		arg2 string
 		arg3 string
 		arg4 int
 	}{arg1, arg2, arg3, arg4})
-	stub := fake.GetHeadSHAStub
-	fakeReturns := fake.getHeadSHAReturns
-	fake.recordInvocation("GetHeadSHA", []interface{}{arg1, arg2, arg3, arg4})
-	fake.getHeadSHAMutex.Unlock()
+	stub := fake.GetPRDetailsStub
+	fakeReturns := fake.getPRDetailsReturns
+	fake.recordInvocation("GetPRDetails", []interface{}{arg1, arg2, arg3, arg4})
+	fake.getPRDetailsMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3, arg4)
 	}
@@ -68,47 +68,47 @@ func (fake *GitHubClient) GetHeadSHA(arg1 context.Context, arg2 string, arg3 str
 	return fakeReturns.result1, fakeReturns.result2
 }
 
-func (fake *GitHubClient) GetHeadSHACallCount() int {
-	fake.getHeadSHAMutex.RLock()
-	defer fake.getHeadSHAMutex.RUnlock()
-	return len(fake.getHeadSHAArgsForCall)
+func (fake *GitHubClient) GetPRDetailsCallCount() int {
+	fake.getPRDetailsMutex.RLock()
+	defer fake.getPRDetailsMutex.RUnlock()
+	return len(fake.getPRDetailsArgsForCall)
 }
 
-func (fake *GitHubClient) GetHeadSHACalls(stub func(context.Context, string, string, int) (string, error)) {
-	fake.getHeadSHAMutex.Lock()
-	defer fake.getHeadSHAMutex.Unlock()
-	fake.GetHeadSHAStub = stub
+func (fake *GitHubClient) GetPRDetailsCalls(stub func(context.Context, string, string, int) (pkg.PRDetails, error)) {
+	fake.getPRDetailsMutex.Lock()
+	defer fake.getPRDetailsMutex.Unlock()
+	fake.GetPRDetailsStub = stub
 }
 
-func (fake *GitHubClient) GetHeadSHAArgsForCall(i int) (context.Context, string, string, int) {
-	fake.getHeadSHAMutex.RLock()
-	defer fake.getHeadSHAMutex.RUnlock()
-	argsForCall := fake.getHeadSHAArgsForCall[i]
+func (fake *GitHubClient) GetPRDetailsArgsForCall(i int) (context.Context, string, string, int) {
+	fake.getPRDetailsMutex.RLock()
+	defer fake.getPRDetailsMutex.RUnlock()
+	argsForCall := fake.getPRDetailsArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
 }
 
-func (fake *GitHubClient) GetHeadSHAReturns(result1 string, result2 error) {
-	fake.getHeadSHAMutex.Lock()
-	defer fake.getHeadSHAMutex.Unlock()
-	fake.GetHeadSHAStub = nil
-	fake.getHeadSHAReturns = struct {
-		result1 string
+func (fake *GitHubClient) GetPRDetailsReturns(result1 pkg.PRDetails, result2 error) {
+	fake.getPRDetailsMutex.Lock()
+	defer fake.getPRDetailsMutex.Unlock()
+	fake.GetPRDetailsStub = nil
+	fake.getPRDetailsReturns = struct {
+		result1 pkg.PRDetails
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *GitHubClient) GetHeadSHAReturnsOnCall(i int, result1 string, result2 error) {
-	fake.getHeadSHAMutex.Lock()
-	defer fake.getHeadSHAMutex.Unlock()
-	fake.GetHeadSHAStub = nil
-	if fake.getHeadSHAReturnsOnCall == nil {
-		fake.getHeadSHAReturnsOnCall = make(map[int]struct {
-			result1 string
+func (fake *GitHubClient) GetPRDetailsReturnsOnCall(i int, result1 pkg.PRDetails, result2 error) {
+	fake.getPRDetailsMutex.Lock()
+	defer fake.getPRDetailsMutex.Unlock()
+	fake.GetPRDetailsStub = nil
+	if fake.getPRDetailsReturnsOnCall == nil {
+		fake.getPRDetailsReturnsOnCall = make(map[int]struct {
+			result1 pkg.PRDetails
 			result2 error
 		})
 	}
-	fake.getHeadSHAReturnsOnCall[i] = struct {
-		result1 string
+	fake.getPRDetailsReturnsOnCall[i] = struct {
+		result1 pkg.PRDetails
 		result2 error
 	}{result1, result2}
 }

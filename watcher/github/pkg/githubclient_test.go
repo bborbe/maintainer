@@ -268,8 +268,8 @@ var _ = Describe("pkg.GitHubClient", func() {
 		})
 	})
 
-	Describe("GetHeadSHA", func() {
-		It("returns the head SHA for a PR", func() {
+	Describe("GetPRDetails", func() {
+		It("returns head SHA, clone URL, and base ref for a PR", func() {
 			server := httptest.NewServer(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.URL.Path).To(Equal("/repos/owner/repo/pulls/42"))
@@ -277,7 +277,13 @@ var _ = Describe("pkg.GitHubClient", func() {
 					fmt.Fprintf(w, `{
 					"number": 42,
 					"head": {
-						"sha": "abc123def456abc123def456abc123def456abc1"
+						"sha": "abc123def456abc123def456abc123def456abc1",
+						"repo": {
+							"clone_url": "https://github.com/owner/repo.git"
+						}
+					},
+					"base": {
+						"ref": "master"
 					}
 				}`)
 				}),
@@ -285,9 +291,11 @@ var _ = Describe("pkg.GitHubClient", func() {
 			defer server.Close()
 
 			client := buildClient(server)
-			sha, err := client.GetHeadSHA(ctx, "owner", "repo", 42)
+			details, err := client.GetPRDetails(ctx, "owner", "repo", 42)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(sha).To(Equal("abc123def456abc123def456abc123def456abc1"))
+			Expect(details.HeadSHA).To(Equal("abc123def456abc123def456abc123def456abc1"))
+			Expect(details.CloneURL).To(Equal("https://github.com/owner/repo.git"))
+			Expect(details.BaseRef).To(Equal("master"))
 		})
 
 		It("returns an error on HTTP failure", func() {
@@ -301,7 +309,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 			defer server.Close()
 
 			client := buildClient(server)
-			_, err := client.GetHeadSHA(ctx, "owner", "repo", 99)
+			_, err := client.GetPRDetails(ctx, "owner", "repo", 99)
 			Expect(err).To(HaveOccurred())
 		})
 	})
