@@ -25,7 +25,6 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
 )
 
 func main() {
@@ -73,60 +72,53 @@ type application struct {
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	glog.V(2).Infof("agent-pr-reviewer started phase=%s", a.Phase)
 
-	workdirCfg := git.WorkdirConfig{
-		ReposPath: a.ReposPath,
-		WorkPath:  a.WorkPath,
-	}
-	repoManager := git.NewRepoManager(workdirCfg)
-	if err := repoManager.PruneAllWorktrees(ctx); err != nil {
-		glog.Warningf("startup worktree prune: %v", err)
-	}
-
-	installer := claudelib.NewPluginInstaller(claudelib.NewExecPluginCommander())
-	if err := installer.EnsureInstalled(ctx, []claudelib.PluginSpec{
-		{Marketplace: "bborbe/coding", Name: "coding"},
-	}); err != nil {
-		return errors.Wrap(ctx, err, "ensure plugins installed")
-	}
-
-	var resultDeliverer agentlib.ResultDeliverer
-	var cleanup func()
-
-	if a.TaskID == "" {
-		glog.V(2).Infof("TASK_ID not set, skipping task result publishing")
-		resultDeliverer = delivery.NewNoopResultDeliverer()
-		cleanup = func() {}
-	} else {
-		if len(a.KafkaBrokers) == 0 {
-			return errors.Errorf(ctx, "KAFKA_BROKERS must be set when TASK_ID is set")
-		}
-		currentDateTime := libtime.NewCurrentDateTime()
-		var err error
-		resultDeliverer, cleanup, err = factory.CreateDeliverer(ctx, a.TaskID, a.KafkaBrokers, a.Branch, a.TaskContent, currentDateTime)
-		if err != nil {
-			return errors.Wrap(ctx, err, "create deliverer")
-		}
+	deliverer, cleanup, err := a.createDeliverer(ctx)
+	if err != nil {
+		return err
 	}
 	defer cleanup()
 
-	env := map[string]string{}
-	if a.GHToken != "" {
-		env["GH_TOKEN"] = a.GHToken
-	}
-
-	agent := factory.CreateAgent(
-		a.ClaudeConfigDir,
-		a.AgentDir,
-		a.Model,
-		a.GHToken,
-		env,
-		repoManager,
-		a.ReviewMode,
-	)
-
-	result, err := agent.Run(ctx, a.Phase, a.TaskContent, resultDeliverer)
+	result, err := factory.RunAgent(ctx, factory.RunConfig{
+		ClaudeConfigDir: a.ClaudeConfigDir,
+		AgentDir:        a.AgentDir,
+		Model:           a.Model,
+		GHToken:         a.GHToken,
+		ReposPath:       a.ReposPath,
+		WorkPath:        a.WorkPath,
+		ReviewMode:      a.ReviewMode,
+		Phase:           a.Phase,
+		TaskContent:     a.TaskContent,
+		Deliverer:       deliverer,
+	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "agent run failed")
 	}
 	return agentlib.PrintResult(result)
+}
+
+// createDeliverer builds the Kafka result deliverer when TASK_ID is set,
+// otherwise returns a noop deliverer (for local-pod debugging without Kafka).
+func (a *application) createDeliverer(
+	ctx context.Context,
+) (agentlib.ResultDeliverer, func(), error) {
+	if a.TaskID == "" {
+		glog.V(2).Infof("TASK_ID not set, skipping task result publishing")
+		return delivery.NewNoopResultDeliverer(), func() {}, nil
+	}
+	if len(a.KafkaBrokers) == 0 {
+		return nil, nil, errors.Errorf(ctx, "KAFKA_BROKERS must be set when TASK_ID is set")
+	}
+	currentDateTime := libtime.NewCurrentDateTime()
+	deliverer, cleanup, err := factory.CreateDeliverer(
+		ctx,
+		a.TaskID,
+		a.KafkaBrokers,
+		a.Branch,
+		a.TaskContent,
+		currentDateTime,
+	)
+	if err != nil {
+		return nil, nil, errors.Wrap(ctx, err, "create deliverer")
+	}
+	return deliverer, cleanup, nil
 }

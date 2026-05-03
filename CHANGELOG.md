@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.6
+
+- refactor(pr-reviewer): extract shared startup orchestration into `factory.RunAgent` so both entry points (`main.go` for Kafka pod, `cmd/run-task/main.go` for local CLI) install the `bborbe/coding` plugin and prune stale worktrees identically. Closes the silent-degradation gap where local smoke runs skipped `PluginInstaller` and produced reviews without specialist sub-agent dispatch.
+
 ## v0.23.5
 
 - feat(pr-reviewer): default `ClaudeConfigDir` arg to `~/.claude` in both entry points (`main.go` and `cmd/run-task/main.go`). Defense-in-depth: prevents the silent "empty CLAUDE_CONFIG_DIR → plugin not discoverable" failure mode hit in dev on 2026-05-02. K8s deploys still take their explicit `CLAUDE_CONFIG_DIR` from the Config CRD env (env > arg default).

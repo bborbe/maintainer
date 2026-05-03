@@ -23,7 +23,6 @@ import (
 	"github.com/bborbe/vault-cli/pkg/domain"
 
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
 )
 
 func main() {
@@ -72,46 +71,49 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrapf(ctx, err, "read task file: %s", a.TaskFilePath)
 	}
 
+	reposPath, workPath, err := a.resolveCachePaths(ctx)
+	if err != nil {
+		return err
+	}
+
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
-	reposPath := a.ReposPath
-	workPath := a.WorkPath
-	if reposPath == "" || workPath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return errors.Wrap(ctx, err, "resolve user home dir")
-		}
-		if reposPath == "" {
-			reposPath = filepath.Join(home, ".cache", "code-reviewer", "repos")
-		}
-		if workPath == "" {
-			workPath = filepath.Join(home, ".cache", "code-reviewer", "work")
-		}
-	}
-	workdirCfg := git.WorkdirConfig{
-		ReposPath: reposPath,
-		WorkPath:  workPath,
-	}
-	repoManager := git.NewRepoManager(workdirCfg)
-
-	env := map[string]string{}
-	if a.GHToken != "" {
-		env["GH_TOKEN"] = a.GHToken
-	}
-
-	agent := factory.CreateAgent(
-		a.ClaudeConfigDir,
-		a.AgentDir,
-		a.Model,
-		a.GHToken,
-		env,
-		repoManager,
-		a.ReviewMode,
-	)
-
-	result, err := agent.Run(ctx, a.Phase, string(taskContent), deliverer)
+	result, err := factory.RunAgent(ctx, factory.RunConfig{
+		ClaudeConfigDir: a.ClaudeConfigDir,
+		AgentDir:        a.AgentDir,
+		Model:           a.Model,
+		GHToken:         a.GHToken,
+		ReposPath:       reposPath,
+		WorkPath:        workPath,
+		ReviewMode:      a.ReviewMode,
+		Phase:           a.Phase,
+		TaskContent:     string(taskContent),
+		Deliverer:       deliverer,
+	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "agent run failed")
 	}
 	return agentlib.PrintResult(result)
+}
+
+// resolveCachePaths fills in defaults for ReposPath/WorkPath when unset
+// (~/.cache/code-reviewer/{repos,work}). The pod entry point requires explicit
+// /repos and /work mounts, but local CLI usage benefits from a sensible default.
+func (a *application) resolveCachePaths(ctx context.Context) (string, string, error) {
+	reposPath := a.ReposPath
+	workPath := a.WorkPath
+	if reposPath != "" && workPath != "" {
+		return reposPath, workPath, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", errors.Wrap(ctx, err, "resolve user home dir")
+	}
+	if reposPath == "" {
+		reposPath = filepath.Join(home, ".cache", "code-reviewer", "repos")
+	}
+	if workPath == "" {
+		workPath = filepath.Join(home, ".cache", "code-reviewer", "work")
+	}
+	return reposPath, workPath, nil
 }
