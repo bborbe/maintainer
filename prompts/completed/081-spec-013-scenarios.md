@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [013-repo-allowlist-stage-isolation]
 summary: Created scenarios/012-watcher-repo-allowlist-filter.md and scenarios/013-agent-repo-allowlist-clone-refusal.md with four sub-scenarios each covering the watcher filter and agent clone-refusal paths for spec-013.
 container: code-reviewer-081-spec-013-scenarios
@@ -7,6 +7,7 @@ dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T16:30:00Z"
 queued: "2026-05-03T16:58:25Z"
 started: "2026-05-03T17:10:45Z"
+completed: "2026-05-03T17:12:42Z"
 branch: dark-factory/repo-allowlist-stage-isolation
 ---
 
