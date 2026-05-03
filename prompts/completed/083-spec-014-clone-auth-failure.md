@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [014-private-github-repo-support]
 summary: 'Added git auth-failure detection: IsGitAuthFailure helper in pkg/git/auth_failure.go, pre-parse of clone_url in Run(), NeedsInput return on auth failures with host/owner/repo diagnostic and GH_TOKEN hint, token non-leakage enforced, all tests passing, make precommit exit 0.'
 container: code-reviewer-083-spec-014-clone-auth-failure
@@ -7,6 +7,7 @@ dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T18:00:00Z"
 queued: "2026-05-03T18:14:47Z"
 started: "2026-05-03T18:27:00Z"
+completed: "2026-05-03T18:31:27Z"
 branch: dark-factory/private-github-repo-support
 ---
 
