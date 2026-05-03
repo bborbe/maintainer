@@ -1,7 +1,11 @@
 ---
-status: draft
+status: executing
 spec: [014-private-github-repo-support]
+container: code-reviewer-082-spec-014-githubauth-package
+dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T18:00:00Z"
+queued: "2026-05-03T18:14:47Z"
+started: "2026-05-03T18:14:49Z"
 branch: dark-factory/private-github-repo-support
 ---
 
@@ -50,6 +54,7 @@ Key facts (verified against the codebase):
 - The `exec.CommandContext` call for `gh auth setup-git` must have gosec G204 suppressed with a comment: `// #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input`
 - When `GH_TOKEN` is empty, the real implementation MUST return nil without invoking `gh` — this is the pod-reviews-public-repos path
 - The test for the real implementation cannot exec the actual `gh` binary; instead, test via an injected command factory or by verifying the no-token path returns nil and the with-token path calls the command with the correct args. See `steps_gh_token_test.go` for a pattern that uses `httptest.NewServer` to stub the external call — but for exec.Command the idiomatic approach in this codebase is to use an `ExecFunc` injection (a `func(ctx, name, args...) error` field). Read `agent/pr-reviewer/pkg/steps_gh_token.go` to see if there is an exec-stubbing pattern already established. If there is NO such pattern, implement a minimal `ExecFunc` field on the real implementation struct (`type GhAuthSetupGit struct { ExecFunc func(ctx context.Context, name string, args ...string) error; ghToken string }`) so tests can inject a fake exec; the `New` constructor wires in the real `exec.CommandContext` wrapper. This avoids shelling out in unit tests.
+- Real-binary boundary coverage (actual `gh auth setup-git` invocation in a real container) lives in `3-spec-014-scenarios.md` scenario, not in this prompt's unit tests.
 </context>
 
 <requirements>
@@ -117,8 +122,9 @@ Key facts (verified against the codebase):
    func defaultExecFunc(ctx context.Context, name string, args ...string) error {
        // #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input
        cmd := exec.CommandContext(ctx, name, args...)
-       if out, err := cmd.CombinedOutput(); err != nil {
-           return errors.Errorf(ctx, "%s %v: %s", name, args, out)
+       if _, err := cmd.CombinedOutput(); err != nil {
+           // out intentionally omitted: gh may print messages including the token; safer to drop entirely than risk leak
+           return errors.Errorf(ctx, "%s %v failed", name, args)
        }
        return nil
    }
@@ -133,6 +139,15 @@ Key facts (verified against the codebase):
    type noopAuthSetup struct{}
 
    func (n *noopAuthSetup) Setup(_ context.Context) error { return nil }
+
+   // NewGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
+   // exec function for testing. Do not use in production code.
+   func NewGhAuthSetupGitWithExecFunc(
+       ghToken string,
+       execFunc func(ctx context.Context, name string, args ...string) error,
+   ) GitHubAuthSetup {
+       return &ghAuthSetupGit{ghToken: ghToken, execFunc: execFunc}
+   }
    ```
 
 3. **Create `agent/pr-reviewer/pkg/githubauth/github_auth_setup_test.go`** with Ginkgo v2 + Gomega:
@@ -146,7 +161,7 @@ Key facts (verified against the codebase):
 
    import (
        "context"
-       "errors"
+       "errors" // stdlib errors.New is used here for fake exec output construction; production code wraps with bborbe/errors
        "testing"
 
        . "github.com/onsi/ginkgo/v2"
@@ -218,6 +233,18 @@ Key facts (verified against the codebase):
            setup := githubauth.NewGhAuthSetupGitWithExecFunc(fakeToken, fakeExec)
            Expect(setup.Setup(ctx)).To(Succeed())
        })
+
+       It("does not leak the token via wrapped exec error output", func() {
+           const fakeToken = "ghp_SUPERSECRET123"
+           // Simulate gh failure where stdout/stderr contains the literal token string.
+           fakeExec = func(_ context.Context, _ string, _ ...string) error {
+               return errors.New("gh stderr: authenticated as " + fakeToken + " (failed)")
+           }
+           setup := githubauth.NewGhAuthSetupGitWithExecFunc(fakeToken, fakeExec)
+           err := setup.Setup(ctx)
+           Expect(err).To(HaveOccurred())
+           Expect(err.Error()).NotTo(ContainSubstring(fakeToken))
+       })
    })
 
    var _ = Describe("NoopAuthSetup", func() {
@@ -228,20 +255,7 @@ Key facts (verified against the codebase):
    })
    ```
 
-4. **Add `NewGhAuthSetupGitWithExecFunc` to `github_auth_setup.go`** — a test-only constructor that accepts an injected exec function (exported for `_test` package access):
-
-   ```go
-   // NewGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
-   // exec function for testing. Do not use in production code.
-   func NewGhAuthSetupGitWithExecFunc(
-       ghToken string,
-       execFunc func(ctx context.Context, name string, args ...string) error,
-   ) GitHubAuthSetup {
-       return &ghAuthSetupGit{ghToken: ghToken, execFunc: execFunc}
-   }
-   ```
-
-5. **Run `go generate ./pkg/githubauth/...`** in `agent/pr-reviewer/` to generate the counterfeiter mock:
+4. **Run `go generate ./pkg/githubauth/...`** in `agent/pr-reviewer/` to generate the counterfeiter mock:
 
    ```bash
    cd agent/pr-reviewer && go generate ./pkg/githubauth/...
@@ -249,12 +263,12 @@ Key facts (verified against the codebase):
 
    If this fails, run counterfeiter directly:
    ```bash
-   cd agent/pr-reviewer && go run github.com/maxbrunsfeld/counterfeiter/v6 -o mocks/github-auth-setup.go --fake-name GitHubAuthSetup ./pkg/githubauth/. GitHubAuthSetup
+   cd agent/pr-reviewer && go run github.com/maxbrunsfeld/counterfeiter/v6 -o mocks/github-auth-setup.go --fake-name GitHubAuthSetup ./pkg/githubauth GitHubAuthSetup
    ```
 
    Verify `mocks/github-auth-setup.go` was created.
 
-6. **Add `AuthSetup githubauth.GitHubAuthSetup` to `RunConfig`** in `agent/pr-reviewer/pkg/factory/runner.go`:
+5. **Add `AuthSetup githubauth.GitHubAuthSetup` to `RunConfig`** in `agent/pr-reviewer/pkg/factory/runner.go`:
 
    After the `RepoAllowlist []string` field, add:
    ```go
@@ -266,7 +280,7 @@ Key facts (verified against the codebase):
    "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
    ```
 
-7. **Call `cfg.AuthSetup.Setup(ctx)` in `RunAgent`** in `agent/pr-reviewer/pkg/factory/runner.go`:
+6. **Call `cfg.AuthSetup.Setup(ctx)` in `RunAgent`** in `agent/pr-reviewer/pkg/factory/runner.go`:
 
    After the `installer.EnsureInstalled(...)` block (which ends around line 58), add:
 
@@ -278,31 +292,39 @@ Key facts (verified against the codebase):
 
    This must appear BEFORE the `CreateAgent(...)` call.
 
-8. **Add wiring test for `RunConfig.AuthSetup` type-literal assertions** in `agent/pr-reviewer/pkg/factory/factory_test.go`:
+7. **Add wiring test for `RunConfig.AuthSetup` type-literal assertions** in `agent/pr-reviewer/pkg/factory/factory_test.go`:
 
    Read the existing test file first to understand its structure. Add a new `Describe("RunConfig.AuthSetup wiring")` block (or append `It(...)` cases to an existing appropriate block) that:
-   - Constructs a `factory.RunConfig` with `AuthSetup: githubauth.NewGhAuthSetupGit("fake-token")` and asserts the field is non-nil and is of the expected concrete type using `Expect(cfg.AuthSetup).To(BeAssignableToTypeOf(&githubauth.GhAuthSetupGit{}))` — but note `ghAuthSetupGit` is unexported; instead assert `Expect(cfg.AuthSetup).NotTo(BeNil())` and `Expect(cfg.AuthSetup).NotTo(BeAssignableToTypeOf(githubauth.NewNoopAuthSetup()))` to confirm it is NOT the noop type
-   - Asserts that `githubauth.NewNoopAuthSetup()` is a different type than `githubauth.NewGhAuthSetupGit("x")`
+   - Imports `"reflect"` in the test file.
+   - Constructs a `factory.RunConfig` with `AuthSetup: githubauth.NewGhAuthSetupGit("fake-token")` and asserts the field is non-nil and is of the expected concrete unexported type using a reflection-based check:
+     ```go
+     Expect(cfg.AuthSetup).NotTo(BeNil())
+     Expect(reflect.TypeOf(cfg.AuthSetup).String()).To(Equal("*githubauth.ghAuthSetupGit"))
+     ```
+   - For the local-CLI path, similarly:
+     ```go
+     Expect(reflect.TypeOf(cfg.AuthSetup).String()).To(Equal("*githubauth.noopAuthSetup"))
+     ```
 
    The purpose: guard against a future refactor accidentally wiring the wrong type.
 
-9. **Update `agent/pr-reviewer/main.go`** — inject the real implementation:
+8. **Update `agent/pr-reviewer/main.go`** — inject the real implementation:
 
-   Step 9a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
+   Step 8a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
 
-   Step 9b — update the `GHToken` field comment in `application` struct:
+   Step 8b — update the `GHToken` field comment in `application` struct:
    ```go
    // GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
    // Also used by the real GitHubAuthSetup to configure git credential helper at pod startup.
    GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth and git credential helper at pod startup" display:"length"`
    ```
 
-   Step 9c — in `Run()`, before `factory.RunAgent(...)`, construct and pass the real auth setup:
+   Step 8c — in `Run()`, before `factory.RunAgent(...)`, construct and pass the real auth setup:
    ```go
    authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
    ```
 
-   Step 9d — wire into `RunConfig`:
+   Step 8d — wire into `RunConfig`:
    ```go
    result, err := factory.RunAgent(ctx, factory.RunConfig{
        ...
@@ -311,23 +333,23 @@ Key facts (verified against the codebase):
    })
    ```
 
-10. **Update `agent/pr-reviewer/cmd/run-task/main.go`** — inject the noop:
+9. **Update `agent/pr-reviewer/cmd/run-task/main.go`** — inject the noop:
 
-    Step 10a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
+    Step 9a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
 
-    Step 10b — update the `GHToken` field comment (same style as step 9b but note this is the noop path):
+    Step 9b — update the `GHToken` field comment (same style as step 8b but note this is the noop path):
     ```go
     // GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
     // cmd/run-task uses NoopAuthSetup — the developer's existing gh auth login handles git credentials.
     GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
     ```
 
-    Step 10c — in `Run()`, construct and pass the noop:
+    Step 9c — in `Run()`, construct and pass the noop:
     ```go
     authSetup := githubauth.NewNoopAuthSetup()
     ```
 
-    Step 10d — wire into `RunConfig`:
+    Step 9d — wire into `RunConfig`:
     ```go
     result, err := factory.RunAgent(ctx, factory.RunConfig{
         ...
@@ -336,7 +358,7 @@ Key facts (verified against the codebase):
     })
     ```
 
-11. **Update `CHANGELOG.md`** — create `## Unreleased` section above the most recent `## vX.Y.Z`:
+10. **Update `CHANGELOG.md`** — create `## Unreleased` section above the most recent `## vX.Y.Z`:
 
     ```markdown
     ## Unreleased
@@ -344,7 +366,7 @@ Key facts (verified against the codebase):
     - feat(pr-reviewer): add `pkg/githubauth` package with `GitHubAuthSetup` interface, real `GhAuthSetupGit` implementation (runs `gh auth setup-git` at pod startup when `GH_TOKEN` is set), and `NoopAuthSetup` (used by `cmd/run-task`). Wire through `factory.RunConfig.AuthSetup` so pods authenticate git against GitHub private repos; local-CLI mode is unaffected.
     ```
 
-12. **Run `make precommit`** in `agent/pr-reviewer/`:
+11. **Run `make precommit`** in `agent/pr-reviewer/`:
 
     ```bash
     cd agent/pr-reviewer && make precommit

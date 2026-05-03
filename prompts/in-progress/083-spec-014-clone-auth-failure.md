@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [014-private-github-repo-support]
 created: "2026-05-03T18:00:00Z"
+queued: "2026-05-03T18:14:47Z"
 branch: dark-factory/private-github-repo-support
 ---
 
@@ -10,7 +11,7 @@ branch: dark-factory/private-github-repo-support
 - The `NeedsInput` diagnostic names the parsed `host/owner/repo` from the `clone_url` frontmatter field and hints at the `GH_TOKEN` configuration — never including the token value itself
 - A helper function `IsGitAuthFailure(err error) bool` (in `agent/pr-reviewer/pkg/git/`) is added to centralize the auth-failure substring check, keeping the detection logic testable in isolation
 - Existing failure paths are preserved: a malformed `clone_url` (unparseable) still returns `AgentStatusFailed` (hard failure); a non-auth network error (e.g., DNS failure) still propagates as an error; only the subset of errors matching the auth-failure substrings is routed to `NeedsInput`
-- Unit tests cover: auth-failure error string → `NeedsInput` result; each known git auth-failure substring triggers the conversion; non-auth error string → error propagation (unchanged); the diagnostic on the `NeedsInput` path contains `host/owner/repo` and `GH_TOKEN` hint and does NOT contain the fake token literal (token non-leakage assertion)
+- Unit tests cover: auth-failure error string → `NeedsInput` result; each known git auth-failure substring triggers the conversion (including `"Repository not found"` which GitHub returns for unauthenticated access to private repos and accepts a known false-positive on typo'd public repos); non-auth error string → error propagation (unchanged); the diagnostic on the `NeedsInput` path contains `host/owner/repo` and `GH_TOKEN` hint; token non-leakage is verified by injecting a distinctive fake token (e.g. `"FAKE_TOKEN_DO_NOT_LEAK_xyz123"`) into the underlying clone error and asserting it does NOT appear in `result.Message`
 - The no-clone invariant holds: when `NeedsInput` is returned from the auth-failure path, `EnsureWorktree` was called but failed before producing a clone — the task is routed to human review without a filesystem clone artifact
 - CHANGELOG `## Unreleased` entry added covering the auth-failure-to-NeedsInput translation and the operator-visible behavior change on private repos
 </summary>
@@ -40,7 +41,7 @@ Key facts (verified against the codebase):
 - `IsGitAuthFailure` belongs in `agent/pr-reviewer/pkg/git/` (e.g., `agent/pr-reviewer/pkg/git/auth_failure.go`) so it is co-located with the git package and testable in isolation; `steps_checkout_execution.go` calls `git.IsGitAuthFailure(err)` 
 - Pre-parsing `clone_url` into `CloneURLParts` BEFORE the `EnsureWorktree` call avoids a second parse in the error handler; store `parts, parseErr := git.ParseCloneURLParts(ctx, cloneURL)` after the frontmatter nil checks and use `parts` in both the `checkAllowlist` call and the auth-failure diagnostic. If `parseErr != nil` at this pre-parse stage, return `AgentStatusFailed` immediately (the clone_url is unparseable — same hard-failure behavior as before)
 - NOTE: the allowlist check (`s.checkAllowlist`) currently also calls `git.ParseCloneURLParts` internally. After this prompt, the pre-parse makes that internal parse redundant. However, do NOT refactor `checkAllowlist` to accept pre-parsed parts — leave that as a follow-up. Simply add the pre-parse before the allowlist call in `Run()` and keep `checkAllowlist` unchanged.
-- The diagnostic format for the `NeedsInput` result: `fmt.Sprintf("execution step: repo %q has no usable git credentials; configure GH_TOKEN to enable private repo clones (git error: %s)", repoKey, sanitizedErrMsg)` where `repoKey = parts.Host+"/"+parts.Owner+"/"+parts.Repo` and `sanitizedErrMsg` is the error string stripped of any token-like substrings — but since `EnsureWorktree` errors never embed tokens (the token is only in the process env, never passed as a git arg), the raw `err.Error()` is safe to include in the diagnostic message
+- The diagnostic format for the `NeedsInput` result is a fixed template that does NOT embed `err.Error()`: `fmt.Sprintf("execution step: clone failed for %s: authentication required (set GH_TOKEN and re-trigger)", repoKey)` where `repoKey = parts.Host+"/"+parts.Owner+"/"+parts.Repo`. The underlying git error is intentionally NOT included in the diagnostic — it is logged at glog `v(2)` so operators can dig into pod logs, but the task's `## Review` / `Message` field stays clean and free of any risk that git ever echoed credential-bearing strings
 </context>
 
 <requirements>
@@ -63,10 +64,23 @@ Key facts (verified against the codebase):
    // gitAuthFailureSubstrings are the error message fragments that git (and GitHub)
    // produce when authentication fails on an HTTPS clone. The agent detects these
    // to distinguish "no usable credentials" from generic network or config errors.
+   //
+   // TRADE-OFF: substring matching is pattern-based and brittle — git or gh CLI
+   // upgrades may rephrase these strings, silently breaking detection. This is an
+   // interim solution until a typed sentinel error (or structured error code) is
+   // plumbed through the git package. See spec 014 for the follow-up.
+   //
+   // Notably, "Repository not found" is intentionally classified as auth failure:
+   // GitHub returns this exact message when an unauthenticated client requests a
+   // private repository. The known false-positive is a typo'd public repo URL —
+   // an operator who mistypes a public repo name will see this routed to
+   // NeedsInput as "auth required" rather than as a hard failure. This is an
+   // acceptable trade-off because the diagnostic still names host/owner/repo and
+   // the operator can verify the URL when re-triggering.
    var gitAuthFailureSubstrings = []string{
        "could not read Username",
        "Authentication failed",
-       "Repository not found",
+       "Repository not found", // private repos w/o creds get this exact message; see comment above
        "returned error: 403",
        "returned error: 401",
    }
@@ -182,13 +196,15 @@ Key facts (verified against the codebase):
    worktreePath, err := s.repoManager.EnsureWorktree(ctx, cloneURL, ref, taskID)
    if err != nil {
        if git.IsGitAuthFailure(err) {
+           // Underlying git error is intentionally NOT included in the diagnostic
+           // (it could in theory echo credential-bearing strings). Operators dig
+           // into pod logs at glog v(2) for the raw git stderr.
+           glog.V(2).Infof("clone auth failure repo=%s ref=%s task_id=%s err=%v", repoKey, ref, taskID, err)
            return &agentlib.Result{
                Status: agentlib.AgentStatusNeedsInput,
                Message: fmt.Sprintf(
-                   "execution step: repo %q has no usable git credentials; "+
-                       "configure GH_TOKEN to enable private repo clones (git error: %s)",
+                   "execution step: clone failed for %s: authentication required (set GH_TOKEN and re-trigger)",
                    repoKey,
-                   err.Error(),
                ),
            }, nil
        }
@@ -203,7 +219,7 @@ Key facts (verified against the codebase):
    }
    ```
 
-   Note: the error wrap message now uses `repoKey` (safe `host/owner/repo`) instead of `cloneURL` (could be an HTTPS URL that in theory could contain a token in future code). This is a security hardening — per the spec: "safe identifiers only in wrap messages".
+   Note: the error wrap message now uses `repoKey` (safe `host/owner/repo`) instead of `cloneURL` (could be an HTTPS URL that in theory could contain a token in future code). This is a security hardening — per the spec: "safe identifiers only in wrap messages". The auth-failure diagnostic is a fixed template containing only `repoKey` — `err.Error()` is NOT embedded, so any credential-bearing string git might echo cannot leak into the task's `## Review` / `Message` field. The raw git error is preserved at glog `v(2)` for operator debugging.
 
 5. **Add tests to `agent/pr-reviewer/pkg/steps_checkout_execution_test.go`**:
 
@@ -211,8 +227,6 @@ Key facts (verified against the codebase):
 
    ```go
    Context("when EnsureWorktree fails with a git auth-failure error", func() {
-       const fakeToken = "ghp_TESTTOKEN_abc123"
-
        BeforeEach(func() {
            repoManager.EnsureWorktreeReturns(
                "",
@@ -243,24 +257,45 @@ Key facts (verified against the codebase):
            Expect(result.Message).To(ContainSubstring("GH_TOKEN"))
        })
 
-       It("diagnostic does not contain the literal token value", func() {
+       It("diagnostic does NOT leak the underlying git error (token non-leakage)", func() {
+           // Inject a distinctive fake token into the underlying clone error.
+           // The diagnostic uses a fixed template and must not echo err.Error(),
+           // so the fake token must NOT appear in result.Message.
+           const fakeToken = "FAKE_TOKEN_DO_NOT_LEAK_xyz123"
            repoManager.EnsureWorktreeReturns(
                "",
-               fmt.Errorf("git clone --bare: could not read Username for '%s': terminal prompts disabled", fakeToken),
+               fmt.Errorf("git clone --bare: fatal: could not read Username for 'https://%s@github.com': terminal prompts disabled", fakeToken),
            )
            md, err := agentlib.ParseMarkdown(ctx, "---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n")
            Expect(err).NotTo(HaveOccurred())
-           result, _ := step.Run(ctx, md)
-           // The raw git error is included in the message but must not accidentally
-           // expose a token. Here we verify the token substring is not present in a
-           // case where an operator named a token after their repo (paranoia test).
-           // Since this is a fake token in an error string, the message WILL contain
-           // the error string. But a real GH_TOKEN is never part of clone args — this
-           // test documents the expected invariant.
+           result, runErr := step.Run(ctx, md)
+           Expect(runErr).NotTo(HaveOccurred())
+           Expect(result).NotTo(BeNil())
            Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
-           // Primary assertion: the token-as-token (from env, not from git args) is never in the diagnostic.
-           // Verify by checking the host/owner/repo key is in the message instead:
-           Expect(result.Message).To(ContainSubstring("github.com/bborbe/trading"))
+           Expect(result.Message).NotTo(ContainSubstring(fakeToken))
+       })
+   })
+
+   Context("when EnsureWorktree fails with 'Repository not found'", func() {
+       // GitHub returns this exact string for unauthenticated requests to private
+       // repos. Intentionally classified as auth failure; known false-positive on
+       // typo'd public repo URLs (operator can verify URL when re-triggering).
+       BeforeEach(func() {
+           repoManager.EnsureWorktreeReturns(
+               "",
+               fmt.Errorf("git clone --bare: remote: Repository not found.\nfatal: repository 'https://github.com/bborbe/private.git/' not found"),
+           )
+       })
+
+       It("returns AgentStatusNeedsInput", func() {
+           md, err := agentlib.ParseMarkdown(ctx, "---\nclone_url: https://github.com/bborbe/private.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n")
+           Expect(err).NotTo(HaveOccurred())
+           result, runErr := step.Run(ctx, md)
+           Expect(runErr).NotTo(HaveOccurred())
+           Expect(result).NotTo(BeNil())
+           Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+           Expect(result.Message).To(ContainSubstring("github.com/bborbe/private"))
+           Expect(result.Message).To(ContainSubstring("GH_TOKEN"))
        })
    })
 
@@ -301,7 +336,7 @@ Key facts (verified against the codebase):
 - Do NOT commit — dark-factory handles git
 - The `NeedsInput` path MUST only fire when `git.IsGitAuthFailure(err) == true`; all other `EnsureWorktree` errors continue to propagate as wrapped errors (fatal)
 - The diagnostic for the auth-failure `NeedsInput` path MUST contain `host/owner/repo` (from `ParseCloneURLParts`) and MUST contain the string `"GH_TOKEN"`
-- The diagnostic MUST NOT contain the literal `GH_TOKEN` env var value — the token is in the pod env and never passed as a git argument, so it will not appear in git stderr, but the test documents this invariant
+- The diagnostic MUST be a fixed template — it MUST NOT embed `err.Error()` from the underlying clone failure. The raw git error is logged at glog `v(2)` only. This is verified by a test that injects a distinctive fake token into the underlying clone error and asserts the token does NOT appear in `result.Message`.
 - `IsGitAuthFailure` lives in `agent/pr-reviewer/pkg/git/` package, not in `pkg/` — keep it co-located with the git error production code
 - Error wrapping for the non-auth path uses `repoKey` (safe identifier `host/owner/repo`) instead of `cloneURL` in the wrap message — security hardening per spec constraints
 - Use `github.com/bborbe/errors` (`errors.Wrapf`); never `fmt.Errorf` for new error-wrapping calls
@@ -320,7 +355,7 @@ ls agent/pr-reviewer/pkg/git/auth_failure.go agent/pr-reviewer/pkg/git/auth_fail
 grep -n "IsGitAuthFailure" agent/pr-reviewer/pkg/steps_checkout_execution.go
 
 # Confirm NeedsInput is returned on auth failure:
-grep -n "AgentStatusNeedsInput.*auth\|auth.*AgentStatusNeedsInput\|has no usable git credentials" agent/pr-reviewer/pkg/steps_checkout_execution.go
+grep -n "AgentStatusNeedsInput\|authentication required (set GH_TOKEN" agent/pr-reviewer/pkg/steps_checkout_execution.go
 
 # Confirm repoKey (not cloneURL) is in the wrap message:
 grep -n "repo=" agent/pr-reviewer/pkg/steps_checkout_execution.go

@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [014-private-github-repo-support]
 created: "2026-05-03T18:00:00Z"
+queued: "2026-05-03T18:14:47Z"
 branch: dark-factory/private-github-repo-support
 ---
 
@@ -9,8 +10,9 @@ branch: dark-factory/private-github-repo-support
 - Two new scenario files are created under `scenarios/` to provide integration-level validation coverage for the private GitHub repo support introduced by spec-014
 - Scenario 014 covers the happy path: a private GitHub PR (`bborbe/trading#110`) is triggered in dev with `GH_TOKEN` set; the vault task progresses to `phase: done` with `## Review` populated; pod logs contain zero hits for the literal token string
 - Scenario 015 covers the no-token path: `GH_TOKEN` is unset; a private PR is triggered; the vault task is routed to `phase: human_review` with a diagnostic naming `host/owner/repo` and mentioning `GH_TOKEN`; public PRs continue to complete successfully in the same config
-- A third sub-scenario in 015 confirms pod startup failure when `gh auth setup-git` itself fails (e.g., `gh` binary missing from image) — the pod exits non-zero with a wrapped error, no tasks are processed
-- The scenarios are locally verifiable: scenarios 014 (happy path) and 015 (no-token) require a dev cluster; the `cmd/run-task` local tool can exercise the no-token NeedsInput path without a cluster using a crafted task file
+- A fourth sub-scenario in 015 (cluster) covers the invalid/revoked-token path: `gh auth setup-git` succeeds at startup (token non-empty) but git rejects credentials at clone time, routing the task to `phase: human_review` with the same `host/owner/repo` + `GH_TOKEN` diagnostic shape as the empty-token case
+- The "gh binary missing" failure mode is documented as covered by unit tests (`pkg/githubauth/setup_test.go`) rather than a manual scenario, because the local `cmd/run-task` tool injects a no-op auth setup and cluster reproduction would require a custom image
+- The scenarios are locally verifiable: scenario 014 (happy path) and 015 sub-scenarios B/C/D require a dev cluster; sub-scenario A of 015 (no-token) can be exercised locally via `cmd/run-task` without a cluster using a crafted task file
 - No Go code is written; no `make precommit` is needed
 </summary>
 
@@ -36,10 +38,7 @@ Key facts (verified against the codebase and spec):
 - Token non-leakage: `kubectl logs` grep for the literal token string must return zero hits across all log lines
 - The no-token `NeedsInput` diagnostic contains `"github.com/bborbe/trading"` and `"GH_TOKEN"` (from `steps_checkout_execution.go` auth-failure path introduced in spec-014 prompt 2)
 - For local verification of the no-token path: use `cmd/run-task` with a task file whose `clone_url` is `https://github.com/bborbe/trading.git` and NO `GH_TOKEN` or `GH_TOKEN=""` set — the agent will attempt to clone the private repo and fail with the auth-failure NeedsInput result (this does not require a live cluster)
-- `make run-dummy-task` in `agent/pr-reviewer/` may be useful for local runs — check the Makefile before writing the scenario:
-  ```bash
-  grep -n "run-dummy\|run-task\|TASK_FILE" agent/pr-reviewer/Makefile | head -20
-  ```
+- For local runs use the run-task binary directly: `cd agent/pr-reviewer && go build ./cmd/run-task/ && ./run-task ...` (no `make run-dummy-task` target exists; only `verify-gh-token` is in `agent/pr-reviewer/Makefile`)
 </context>
 
 <requirements>
@@ -66,19 +65,19 @@ unit tests alone because git's HTTPS credential lookup depends on the runtime
 environment (`~/.gitconfig`, `GH_TOKEN` env var, network access to github.com).
 
 ## Prerequisites
-- [ ] Dev cluster is running and healthy (`kubectl get pods -n code-reviewer`)
-- [ ] `agent/pr-reviewer` is deployed to dev with spec-014 changes (prompts 1 and 2 merged)
-- [ ] `GH_TOKEN` env var is set in the pod (already configured via K8s secret for planning phase); confirm:
+- [ ] Set namespace: `export NAMESPACE=dev` (or `prod`) — matches the `NAMESPACE` var in `dev.env`/`prod.env`
+- [ ] Dev cluster is running and healthy (`kubectl get pods -n $NAMESPACE`)
+- [ ] `agent/pr-reviewer` is deployed to `$NAMESPACE` with spec-014 changes (prompts 1 and 2 merged). Note: `agent-pr-reviewer` is deployed as a custom CRD `Config` (`kind: Config`, `apiVersion: agent.benjamin-borbe.de/v1`), NOT a Deployment; the agent runs as ephemeral Jobs spawned by the task-controller from the CRD spec.
+- [ ] `GH_TOKEN` env var is set in the Config CRD (already configured via K8s secret for planning phase); confirm:
       ```bash
-      kubectl get deployment agent-pr-reviewer -n code-reviewer \
-        -o jsonpath='{.spec.template.spec.containers[0].env}' \
-        | python3 -m json.tool | grep GH_TOKEN
+      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+        -o jsonpath='{.spec.env}' | python3 -m json.tool | grep GH_TOKEN
       # Expected: entry with name=GH_TOKEN and valueFrom pointing to the secret
       ```
 - [ ] The `pr-review-of-ben` GitHub account (the agent's identity) has read access to `bborbe/trading`:
       ```bash
       gh api /repos/bborbe/trading --jq '.permissions'
-      # Expected: {"admin":false,"maintain":false,"push":true,"triage":true,"pull":true}
+      # Expected: contains "pull":true (read-only is sufficient for clone)
       ```
 - [ ] Vault CLI available: `vault kv list secret/code-reviewer/tasks/` returns results
 
@@ -120,7 +119,7 @@ environment (`~/.gitconfig`, `GH_TOKEN` env var, network access to github.com).
       ```
 - [ ] Pod startup log contains the auth-setup completion line:
       ```bash
-      kubectl logs -n code-reviewer <pod-name> | grep "github-auth-setup"
+      kubectl logs -n $NAMESPACE <pod-name> | grep "github-auth-setup"
       # Expected: "github-auth-setup: gh auth setup-git complete"
       ```
 
@@ -129,11 +128,11 @@ environment (`~/.gitconfig`, `GH_TOKEN` env var, network access to github.com).
 ### Action
 - [ ] Capture the pod's full log output:
       ```bash
-      kubectl logs -n code-reviewer <pod-name> > /tmp/pod-log-<task-id>.txt
+      kubectl logs -n $NAMESPACE <pod-name> > /tmp/pod-log-<task-id>.txt
       ```
 - [ ] Retrieve the literal `GH_TOKEN` secret value:
       ```bash
-      GH_TOKEN_VALUE=$(kubectl get secret <gh-token-secret> -n code-reviewer \
+      GH_TOKEN_VALUE=$(kubectl get secret <gh-token-secret> -n $NAMESPACE \
         -o jsonpath='{.data.GH_TOKEN}' | base64 -d)
       ```
 - [ ] Search the log for the token:
@@ -188,7 +187,8 @@ Sub-scenarios A and B require a dev cluster. Sub-scenario A can also be
 verified locally using `cmd/run-task` without a cluster (described below).
 
 ## Prerequisites
-- [ ] `agent/pr-reviewer` is built (spec-014 changes): `cd agent/pr-reviewer && go build ./cmd/run-task/`
+- [ ] Set namespace for cluster sub-scenarios: `export NAMESPACE=dev` (or `prod`) — matches the `NAMESPACE` var in `dev.env`/`prod.env`
+- [ ] `agent/pr-reviewer` is built (spec-014 changes): `cd agent/pr-reviewer && go build ./cmd/run-task/` — produces the binary at `agent/pr-reviewer/run-task`
 - [ ] Vault CLI available for cluster sub-scenarios
 - [ ] A temp directory for local task files: `mkdir -p /tmp/scenario-015`
 
@@ -222,7 +222,7 @@ This sub-scenario is verifiable locally without a cluster.
       WORK_PATH=/tmp/scenario-015/work \
       BRANCH=dev \
       TASK_FILE=/tmp/scenario-015/private-task.md \
-      ./agent/pr-reviewer/cmd/run-task/run-task 2>&1 | head -30
+      ./agent/pr-reviewer/run-task 2>&1 | head -30
       ```
 
 ### Expected
@@ -235,45 +235,61 @@ This sub-scenario is verifiable locally without a cluster.
       [ -z "$(ls -A /tmp/scenario-015/repos)" ] && echo "ok: repos empty"
       [ -z "$(ls -A /tmp/scenario-015/work)"  ] && echo "ok: work empty"
       ```
-- [ ] Agent startup log shows `github-auth-setup: GH_TOKEN not set, skipping gh auth setup-git` (real impl no-op path)
+- [ ] Agent startup log indicates the auth-setup no-op was taken when the token is empty:
+      ```bash
+      grep -E "GH_TOKEN.*not set|skipping.*github.*auth" /tmp/scenario-015/run.log
+      ```
 
 ## Sub-scenario B (cluster): no-token pod reviews public repo normally
 
-Requires dev cluster with `GH_TOKEN` temporarily removed from the agent pod.
+Requires dev cluster with `GH_TOKEN` temporarily removed from the agent's Config CRD.
+Note: `agent-pr-reviewer` is a `Config` CRD (`agent.benjamin-borbe.de/v1`), not a Deployment.
+Future Jobs spawned by the task-controller pick up the edited spec; existing in-flight Jobs are unaffected.
 
 ### Action
-- [ ] Temporarily unset `GH_TOKEN` in the agent pod deployment:
+- [ ] Temporarily remove the `GH_TOKEN` env entry from the Config CRD:
       ```bash
-      kubectl set env deployment/agent-pr-reviewer -n code-reviewer GH_TOKEN-
-      kubectl rollout status deployment/agent-pr-reviewer -n code-reviewer --timeout=60s
+      kubectl edit config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE
+      # In the editor: delete the env entry whose `name: GH_TOKEN` (with valueFrom secretKeyRef)
+      # Save and exit. Verify:
+      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+        -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
+      # Expected: 0
       ```
 - [ ] Open a PR on `bborbe/code-reviewer` (public repo) from the trusted author account
-- [ ] Wait for the agent to process it (≤ one full pipeline cycle)
+- [ ] Wait for the next agent Job to be spawned and process it (≤ one full pipeline cycle)
 
 ### Expected
 - [ ] The vault task for the public PR progresses to `phase: done` with a populated `## Review` section
 - [ ] No auth-failure routing occurs for the public repo (empty token is fine for public repos — `gh auth setup-git` is skipped, plain clone works)
 
 ### Cleanup
-- [ ] Restore `GH_TOKEN` in the agent pod:
+- [ ] Restore the `GH_TOKEN` env entry in the Config CRD by re-editing it:
       ```bash
-      kubectl set env deployment/agent-pr-reviewer -n code-reviewer \
-        GH_TOKEN=<original-value>
-      kubectl rollout status deployment/agent-pr-reviewer -n code-reviewer --timeout=60s
+      kubectl edit config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE
+      # Re-add the env entry:
+      #   - name: GH_TOKEN
+      #     valueFrom:
+      #       secretKeyRef:
+      #         name: agent-pr-reviewer
+      #         key: GH_TOKEN
+      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+        -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
+      # Expected: 1
       ```
 
 ## Sub-scenario C (cluster): private-repo task with no-token pod → human_review with diagnostic
 
-Continues from Sub-scenario B (pod has `GH_TOKEN` unset).
+Continues from Sub-scenario B (Config CRD has `GH_TOKEN` env entry removed).
 
 ### Action
-- [ ] Trigger a private-repo PR (e.g., `bborbe/trading` PR #110) while the agent pod has no `GH_TOKEN`:
+- [ ] Trigger a private-repo PR (e.g., `bborbe/trading` PR #110) while the Config CRD has no `GH_TOKEN`:
       ```bash
       # Force the watcher to re-trigger the private PR task:
       # Either open a new PR on bborbe/trading, or re-promote an existing task:
       vault kv patch secret/code-reviewer/tasks/<trading-task-id> phase=in_progress status=in_progress
       ```
-- [ ] Wait for the agent pod to process and complete
+- [ ] Wait for the next agent Job to be spawned, process and complete
 
 ### Expected
 - [ ] The vault task for the private PR is updated to `phase: human_review`:
@@ -285,38 +301,68 @@ Continues from Sub-scenario B (pod has `GH_TOKEN` unset).
 - [ ] The vault task body contains a diagnostic mentioning `github.com/bborbe/trading` and `GH_TOKEN`
 - [ ] Pod log shows the auth-failure NeedsInput message:
       ```bash
-      kubectl logs -n code-reviewer <pod-name> | grep "no usable git credentials\|GH_TOKEN"
+      kubectl logs -n $NAMESPACE <pod-name> | grep "no usable git credentials\|GH_TOKEN"
+      ```
+
+## Sub-scenario D (cluster): GH_TOKEN set but invalid/revoked → human_review with diagnostic
+
+Validates that even when `gh auth setup-git` succeeds at startup (because the token is non-empty),
+git rejects the credentials at clone time and the task is routed to `human_review` with a
+diagnostic similar to the empty-token case.
+
+### Setup
+- [ ] Restore the `GH_TOKEN` env entry in the Config CRD if currently removed (see Sub-scenario B cleanup), then patch the underlying secret to a known-bad value:
+      ```bash
+      # Capture the original token first (for restoration):
+      ORIG_GH_TOKEN=$(kubectl get secret agent-pr-reviewer -n $NAMESPACE \
+        -o jsonpath='{.data.GH_TOKEN}' | base64 -d)
+      echo "$ORIG_GH_TOKEN" > /tmp/scenario-015/orig-gh-token  # save for cleanup; chmod 600
+      chmod 600 /tmp/scenario-015/orig-gh-token
+
+      # Patch the secret to a known-bad token:
+      BAD=$(printf 'gho_invalid_token_for_test' | base64)
+      kubectl patch secret agent-pr-reviewer -n $NAMESPACE \
+        -p "{\"data\":{\"GH_TOKEN\":\"$BAD\"}}"
+      ```
+
+### Action
+- [ ] Trigger a private-repo PR (e.g., `bborbe/trading` PR #110) while the Config CRD has the invalid `GH_TOKEN`:
+      ```bash
+      vault kv patch secret/code-reviewer/tasks/<trading-task-id> phase=in_progress status=in_progress
+      ```
+- [ ] Wait for the next agent Job to be spawned, process and complete
+
+### Expected
+- [ ] Pod startup log shows `github-auth-setup: gh auth setup-git complete` (setup itself succeeds with non-empty token)
+- [ ] The vault task is routed to `phase: human_review` with a diagnostic mentioning `github.com/bborbe/trading` and `GH_TOKEN` (git rejects credentials at clone time)
+- [ ] No literal token value (`gho_invalid_token_for_test`) appears in pod logs:
+      ```bash
+      kubectl logs -n $NAMESPACE <pod-name> | grep -c "gho_invalid_token_for_test" || true
+      # Expected: 0
       ```
 
 ### Cleanup
-- [ ] Restore `GH_TOKEN` (if not already done in Sub-scenario B cleanup)
-
-## Sub-scenario D (local): gh binary missing → pod startup fails loudly
-
-Simulates what happens if the pod image is missing `github-cli`.
-
-### Action
-- [ ] Run `cmd/run-task` with a `GH_TOKEN` set but `gh` binary replaced by a missing path.
-      The easiest local simulation: set `PATH` to a directory that has no `gh`:
+- [ ] Restore the original `GH_TOKEN` secret value:
       ```bash
-      mkdir -p /tmp/scenario-015/empty-bin
-      GH_TOKEN=fake-token-for-test \
-      PATH=/tmp/scenario-015/empty-bin \
-      BRANCH=dev \
-      TASK_FILE=/tmp/scenario-015/private-task.md \
-      ./agent/pr-reviewer/cmd/run-task/run-task 2>&1 | head -10
+      ORIG=$(base64 < /tmp/scenario-015/orig-gh-token)
+      kubectl patch secret agent-pr-reviewer -n $NAMESPACE \
+        -p "{\"data\":{\"GH_TOKEN\":\"$ORIG\"}}"
+      shred -u /tmp/scenario-015/orig-gh-token 2>/dev/null || rm -f /tmp/scenario-015/orig-gh-token
       ```
+- [ ] Restore `GH_TOKEN` in the Config CRD (if not already done in Sub-scenario B cleanup)
 
-### Expected
-- [ ] Agent exits non-zero immediately (startup failure before any PR processing)
-- [ ] Output contains a message about `gh auth setup-git failed` (the wrapped error from `NewGhAuthSetupGit`)
-- [ ] No vault task changes are made (agent never reached the processing phase)
+## Notes — uncovered failure modes
+
+- **gh binary missing**: This failure mode (pod image missing `github-cli`) is exercised by unit tests in `pkg/githubauth/setup_test.go`, not by this scenario. Manual reproduction via `cmd/run-task` is not viable because the local tool injects a no-op auth setup (the real `NewGhAuthSetupGit` runs only inside the cluster pod startup path). Manual cluster reproduction would require a custom Docker image with `gh` removed, which is out of scope for an operator-runnable scenario.
 
 ## Cleanup
 - [ ] Remove temp files: `rm -rf /tmp/scenario-015`
-- [ ] Confirm the agent deployment is healthy with `GH_TOKEN` restored:
+- [ ] Confirm the agent Config CRD is healthy with `GH_TOKEN` restored:
       ```bash
-      kubectl get pods -n code-reviewer | grep agent-pr-reviewer
+      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+        -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
+      # Expected: 1
+      kubectl get pods -n $NAMESPACE -l app=agent-pr-reviewer
       ```
 
 ## Notes
