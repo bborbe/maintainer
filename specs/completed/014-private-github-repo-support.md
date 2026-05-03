@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-03T17:48:43Z"
 generating: "2026-05-03T17:48:43Z"
 prompted: "2026-05-03T17:56:12Z"
 verifying: "2026-05-03T18:33:54Z"
+completed: "2026-05-03T20:25:06Z"
 branch: dark-factory/private-github-repo-support
 ---
 
