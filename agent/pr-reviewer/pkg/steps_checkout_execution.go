@@ -11,6 +11,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prompts"
@@ -92,17 +93,43 @@ func (s *checkoutExecutionStep) Run(
 		}, nil
 	}
 
+	// Pre-parse clone_url to extract host/owner/repo for allowlist and
+	// auth-failure diagnostics. A parse failure is a hard error — the URL is
+	// malformed and no clone can proceed.
+	parts, parseErr := git.ParseCloneURLParts(ctx, cloneURL)
+	if parseErr != nil {
+		return &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: fmt.Sprintf("execution step: failed to parse clone_url: %v", parseErr),
+		}, nil
+	}
+	repoKey := parts.Host + "/" + parts.Owner + "/" + parts.Repo
+
 	if result := s.checkAllowlist(ctx, cloneURL); result != nil {
 		return result, nil
 	}
 
 	worktreePath, err := s.repoManager.EnsureWorktree(ctx, cloneURL, ref, taskID)
 	if err != nil {
+		if git.IsGitAuthFailure(err) {
+			// Underlying git error is intentionally NOT included in the diagnostic
+			// (it could in theory echo credential-bearing strings). Operators dig
+			// into pod logs at glog v(2) for the raw git stderr.
+			glog.V(2).
+				Infof("clone auth failure repo=%s ref=%s task_id=%s err=%v", repoKey, ref, taskID, err)
+			return &agentlib.Result{
+				Status: agentlib.AgentStatusNeedsInput,
+				Message: fmt.Sprintf(
+					"execution step: clone failed for %s: authentication required (set GH_TOKEN and re-trigger)",
+					repoKey,
+				),
+			}, nil
+		}
 		return nil, errors.Wrapf(
 			ctx,
 			err,
-			"ensure worktree clone_url=%s ref=%s task_id=%s",
-			cloneURL,
+			"ensure worktree repo=%s ref=%s task_id=%s",
+			repoKey,
 			ref,
 			taskID,
 		)

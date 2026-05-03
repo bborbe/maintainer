@@ -122,6 +122,123 @@ var _ = Describe("checkoutExecutionStep", func() {
 			})
 		})
 
+		Context("when EnsureWorktree fails with a git auth-failure error", func() {
+			BeforeEach(func() {
+				repoManager.EnsureWorktreeReturns(
+					"",
+					fmt.Errorf(
+						"git clone --bare: fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+					),
+				)
+			})
+
+			It("returns AgentStatusNeedsInput", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+			})
+
+			It("diagnostic names host/owner/repo", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, _ := step.Run(ctx, md)
+				Expect(result.Message).To(ContainSubstring("github.com/bborbe/trading"))
+			})
+
+			It("diagnostic contains GH_TOKEN hint", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, _ := step.Run(ctx, md)
+				Expect(result.Message).To(ContainSubstring("GH_TOKEN"))
+			})
+
+			It("diagnostic does NOT leak the underlying git error (token non-leakage)", func() {
+				// Inject a distinctive fake token into the underlying clone error.
+				// The diagnostic uses a fixed template and must not echo err.Error(),
+				// so the fake token must NOT appear in result.Message.
+				const fakeToken = "FAKE_TOKEN_DO_NOT_LEAK_xyz123" //nolint:gosec // G101: test-only sentinel value, not a real credential
+				repoManager.EnsureWorktreeReturns(
+					"",
+					fmt.Errorf(
+						"git clone --bare: fatal: could not read Username for 'https://%s@github.com': terminal prompts disabled",
+						fakeToken,
+					),
+				)
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, runErr := step.Run(ctx, md)
+				Expect(runErr).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+				Expect(result.Message).NotTo(ContainSubstring(fakeToken))
+			})
+		})
+
+		Context("when EnsureWorktree fails with 'Repository not found'", func() {
+			// GitHub returns this exact string for unauthenticated requests to private
+			// repos. Intentionally classified as auth failure; known false-positive on
+			// typo'd public repo URLs (operator can verify URL when re-triggering).
+			BeforeEach(func() {
+				repoManager.EnsureWorktreeReturns(
+					"",
+					fmt.Errorf(
+						"git clone --bare: remote: Repository not found.\nfatal: repository 'https://github.com/bborbe/private.git/' not found",
+					),
+				)
+			})
+
+			It("returns AgentStatusNeedsInput", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/private.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, runErr := step.Run(ctx, md)
+				Expect(runErr).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+				Expect(result.Message).To(ContainSubstring("github.com/bborbe/private"))
+				Expect(result.Message).To(ContainSubstring("GH_TOKEN"))
+			})
+		})
+
+		Context("when EnsureWorktree fails with a non-auth error", func() {
+			BeforeEach(func() {
+				repoManager.EnsureWorktreeReturns(
+					"",
+					fmt.Errorf(
+						"git clone --bare: unable to access 'https://github.com/bborbe/foo.git/': Could not resolve host: github.com",
+					),
+				)
+			})
+
+			It("propagates the error (not NeedsInput)", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nclone_url: https://github.com/bborbe/trading.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, runErr := step.Run(ctx, md)
+				Expect(runErr).To(HaveOccurred())
+				Expect(result).To(BeNil())
+			})
+		})
+
 		Context("allowlist checks", func() {
 			const taskMarkdown = "---\nclone_url: https://github.com/bborbe/code-reviewer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
