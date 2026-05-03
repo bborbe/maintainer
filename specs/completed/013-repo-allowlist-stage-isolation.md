@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-03T15:27:22Z"
 generating: "2026-05-03T16:23:22Z"
 prompted: "2026-05-03T16:33:27Z"
 verifying: "2026-05-03T17:12:54Z"
+completed: "2026-05-03T20:16:35Z"
 branch: dark-factory/repo-allowlist-stage-isolation
 ---
 

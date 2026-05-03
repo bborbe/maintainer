@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-02T09:54:00Z"
 generating: "2026-05-02T09:54:01Z"
 prompted: "2026-05-02T10:04:18Z"
 verifying: "2026-05-02T10:24:41Z"
+completed: "2026-05-03T20:13:28Z"
 branch: dark-factory/watcher-author-trust-filter
 ---
 
