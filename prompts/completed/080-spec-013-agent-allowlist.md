@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [013-repo-allowlist-stage-isolation]
 summary: Added REPO_ALLOWLIST env var to agent/pr-reviewer with ParseCloneURLParts refactor, allowlist helper, checkout step allowlist check, and full Ginkgo/Gomega test coverage across all new paths.
 container: code-reviewer-080-spec-013-agent-allowlist
@@ -7,6 +7,7 @@ dark-factory-version: v0.147.2-1-g30ba42f
 created: "2026-05-03T16:30:00Z"
 queued: "2026-05-03T16:58:25Z"
 started: "2026-05-03T17:04:22Z"
+completed: "2026-05-03T17:10:43Z"
 branch: dark-factory/repo-allowlist-stage-isolation
 ---
 
