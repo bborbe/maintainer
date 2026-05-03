@@ -4,11 +4,37 @@ Code-review agent pipeline — Pattern B Jobs consume PR tasks, post verdicts ba
 
 ## Dark Factory Workflow
 
-**Never code directly.** All code changes go through the dark-factory pipeline.
+The headline reason to use prompts/specs: **safe unattended execution** in a YOLO Claude container with permission checks disabled. Queue work, step away, no "approve this bash command?" interruptions. Documentation, decomposition (specs only), and token savings (Sonnet vs Opus) follow as side benefits.
+
+### Choose a Flow
+
+The decision is about **what artifact deserves to be committed alongside the change**, not size:
+
+| Kind of change | Flow | What gets committed |
+|----------------|------|---------------------|
+| Doc / config / yaml — no code | **Direct** — edit + commit yourself | Just the diff |
+| Code change of any size | **Prompt** — write a prompt, audit, approve, daemon executes | Prompt + diff (technical "how") |
+| Feature delivering business value | **Spec → prompts** — write spec, audit, approve, daemon auto-generates prompts, audit each, approve, daemon executes | Spec + prompts + diff (business "why" + technical "how") |
+
+Decide by: **Is code changing?** No → direct. Yes → prompt or spec. **Is there a business-level "why" that deserves its own document?** No → prompt. Yes → spec first.
+
+The prompt/spec split is **business-why vs technical-how**, not big vs small. A 50-prompt mechanical refactor stays prompts. A 1-prompt user-visible feature may still warrant a spec.
 
 ### Complete Flow
 
-**Spec-based (multi-prompt features):**
+**Direct (doc / config / yaml — no code):**
+
+1. Edit + commit + push yourself. No dark-factory ceremony.
+
+**Standalone prompts (code change of any size):**
+
+1. Create prompt → `/dark-factory:create-prompt`
+2. Audit prompt → `/dark-factory:audit-prompt`
+3. User confirms → `dark-factory prompt approve <name>`
+4. Start daemon → `dark-factory daemon` (use Bash `run_in_background: true`)
+5. dark-factory executes prompt automatically
+
+**Spec-based (feature delivering business value):**
 
 1. Create spec → `/dark-factory:create-spec`
 2. Audit spec → `/dark-factory:audit-spec`
@@ -18,21 +44,6 @@ Code-review agent pipeline — Pattern B Jobs consume PR tasks, post verdicts ba
 6. User confirms → `dark-factory prompt approve <name>`
 7. Start daemon → `dark-factory daemon` (use Bash `run_in_background: true`)
 8. dark-factory executes prompts automatically
-
-**Standalone prompts (simple changes):**
-
-1. Create prompt → `/dark-factory:create-prompt`
-2. Audit prompt → `/dark-factory:audit-prompt`
-3. User confirms → `dark-factory prompt approve <name>`
-4. Start daemon → `dark-factory daemon` (use Bash `run_in_background: true`)
-5. dark-factory executes prompt automatically
-
-### Assess the change size
-
-| Change | Action |
-|--------|--------|
-| Simple fix, config change, 1-2 files | Write a prompt → `/dark-factory:create-prompt` |
-| Multi-prompt feature, unclear edges, shared interfaces | Write a spec first → `/dark-factory:create-spec` |
 
 ### Read the relevant guide before starting — every time, not from memory
 
