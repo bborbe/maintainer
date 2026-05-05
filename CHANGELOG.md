@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.14
+
+- feat(watcher/github-build): implement GitHub Actions API client (`GitHubClient` interface with `GetWorkflowRuns` and `GetDefaultBranch`), task ID derivation (`DeriveTaskID` with build-watcher-specific UUID namespace), and Kafka publisher (`CommandPublisher.PublishCreate`) with counterfeiter mocks and Ginkgo/Gomega test coverage ≥80%
+
 ## v0.23.13
 
 - feat(watcher): scaffold `watcher/github-build/` module with Go module, Makefile, Dockerfile, pkg/doc.go, main.go (stub Run), and main_test.go; establishes env-var schema (GH_TOKEN, KAFKA_BROKERS, STAGE, POLL_INTERVAL, REPO_ALLOWLIST required) for the GitHub Actions build watcher service
