@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [015-github-build-watcher-mvp]
 summary: Created watcher/github-build/ module scaffold with go.mod, Makefile, Dockerfile, pkg/doc.go, main.go (stub Run), and main_test.go; make precommit passes clean.
 container: maintainer-085-spec-015-scaffold
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-05T21:00:00Z"
 queued: "2026-05-05T21:18:21Z"
 started: "2026-05-05T21:19:23Z"
+completed: "2026-05-05T21:22:32Z"
 ---
 
 <summary>
