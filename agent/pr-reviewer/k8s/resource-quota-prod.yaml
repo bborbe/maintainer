@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: agent-pr-reviewer
+  name: maintainer-agent-pr-reviewer
   namespace: prod
 spec:
   hard:
@@ -10,4 +10,4 @@ spec:
     matchExpressions:
       - scopeName: PriorityClass
         operator: In
-        values: ["agent-pr-reviewer"]
+        values: ["maintainer-agent-pr-reviewer"]

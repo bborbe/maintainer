@@ -1,14 +1,14 @@
 apiVersion: agent.benjamin-borbe.de/v1
 kind: Config
 metadata:
-  name: agent-pr-reviewer
+  name: maintainer-agent-pr-reviewer
   namespace: '{{ "NAMESPACE" | env }}'
 spec:
   assignee: pr-reviewer-agent
-  priorityClassName: agent-pr-reviewer
-  image: '{{"DOCKER_REGISTRY" | env}}/agent-pr-reviewer'
+  priorityClassName: maintainer-agent-pr-reviewer
+  image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
   heartbeat: 5m
-  secretName: agent-pr-reviewer
+  secretName: maintainer-agent-pr-reviewer
   volumeClaim: agent-pr-reviewer
   volumeMountPath: /home/claude/.claude
   env:

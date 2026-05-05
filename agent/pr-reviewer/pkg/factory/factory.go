@@ -26,7 +26,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
-const serviceName = "agent-pr-reviewer"
+const serviceName = "maintainer-agent-pr-reviewer"
 
 // AgentRunner is the minimal interface satisfied by *agentlib.Agent.
 type AgentRunner interface {

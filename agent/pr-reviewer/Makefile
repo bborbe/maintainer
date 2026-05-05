@@ -4,7 +4,7 @@ include ../../Makefile.docker
 include ../../Makefile.env
 include ../../common.env
 
-SERVICE = agent-pr-reviewer
+SERVICE = maintainer-agent-pr-reviewer
 
 TOKEN ?= $(shell teamvault-password --teamvault-config ~/.teamvault.json --teamvault-key=$(PR_REVIEWER_GITHUB_TOKEN_KEY))
 
