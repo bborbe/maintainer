@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Updated splitRepoKey to accept three-segment host/owner/repo allowlist entries (stripping host for GitHub API calls while preserving host in cursor key), added regression tests covering API args, cursor key shape, and task body content, added internal table test for splitRepoKey with all edge cases, and updated CHANGELOG.md.
 container: maintainer-090-fix-split-repo-key-host-prefix
 dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T00:00:00Z"
 queued: "2026-05-05T22:05:59Z"
 started: "2026-05-05T22:06:01Z"
+completed: "2026-05-05T22:09:39Z"
 ---
 
 <summary>
