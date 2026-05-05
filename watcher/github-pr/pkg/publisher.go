@@ -11,7 +11,6 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
-	cqrsiam "github.com/bborbe/cqrs/iam"
 	"github.com/bborbe/errors"
 )
 
@@ -82,7 +81,7 @@ func (p *kafkaPublisher) buildCommandObject(
 	return cdb.CommandObject{
 		Command: p.commandCreator.NewCommand(
 			op,
-			cqrsiam.Initiator("github-pr-watcher"),
+			"github-pr-watcher",
 			"",
 			event,
 		),
