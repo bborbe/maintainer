@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [015-github-build-watcher-mvp]
 summary: Implemented GitHub Actions API client, task ID derivation, and Kafka publisher for watcher/github-build with full test coverage (86.4%), counterfeiter mocks at pkg/mocks/, and make precommit passing.
 container: maintainer-086-spec-015-github-client
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-05T21:00:00Z"
 queued: "2026-05-05T21:18:21Z"
 started: "2026-05-05T21:22:35Z"
+completed: "2026-05-05T21:30:13Z"
 ---
 
 <summary>
