@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Replaced 2-segment owner/repo regex with 3-segment host/owner/repo regex in watcher/github-build allowlist parser, created comprehensive test file mirroring PR watcher, updated stale references in filter.go/main.go/run-once/main.go, and added CHANGELOG entry.
 container: maintainer-091-fix-allowlist-regex-host-prefix
 dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T00:15:00Z"
 queued: "2026-05-05T22:26:01Z"
 started: "2026-05-05T22:26:02Z"
+completed: "2026-05-05T22:30:36Z"
 ---
 
 <summary>
