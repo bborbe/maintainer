@@ -18,7 +18,7 @@ branch: dark-factory/repo-allowlist-stage-isolation
 - A malformed allowlist entry (missing slash, wrong shape) causes a startup failure with a clear operator-facing log naming the offending entry
 - Whitespace-only and empty entries (e.g. trailing comma) are silently stripped during parse; remaining valid entries are used
 - The configured allowlist size is logged at startup (count only, not contents)
-- `dev.env` and `prod.env` are updated from the current non-host-qualified `bborbe/code-reviewer` to the host-qualified `github.com/bborbe/code-reviewer`
+- `dev.env` and `prod.env` are updated from the current non-host-qualified `bborbe/code-reviewer` to the host-qualified `github.com/bborbe/maintainer`
 - `filter.PR` gains a `RepoKey` field (`"github.com/owner/repo"`) that is populated by the watcher before calling `taskCreationFilter.Skip()`; existing filters are unaffected since the new field defaults to empty string
 - A new `RepoAllowlistFilter` leaf joins the existing `TaskCreationFilter` chain in `main.go`; it is the last filter so all other existing filters run first
 - Full Ginkgo/Gomega test coverage for the new filter leaf and parse function
@@ -52,7 +52,7 @@ Key facts (verified against the codebase):
 - `pkg.PullRequest.Owner` and `pkg.PullRequest.Repo` are populated by `SearchPRs` from the repo URL
 - The GitHub watcher always talks to `github.com`; hardcoding `"github.com"` as the host in `RepoKey` is correct and intentional for this module
 - `taskCreationFilter` is a `filter.TaskCreationFilters` slice assembled in `main.go` at ~line 118
-- Both `dev.env` and `prod.env` currently have `REPO_ALLOWLIST=bborbe/code-reviewer` (non-host-qualified); both must be updated to `REPO_ALLOWLIST=github.com/bborbe/code-reviewer`
+- Both `dev.env` and `prod.env` currently have `REPO_ALLOWLIST=bborbe/code-reviewer` (non-host-qualified); both must be updated to `REPO_ALLOWLIST=github.com/bborbe/maintainer`
 - This prompt touches ONLY `watcher/github/`. The agent side (`agent/pr-reviewer/`) is handled by the sibling prompt 2.
 </context>
 
@@ -190,7 +190,7 @@ Key facts (verified against the codebase):
        . "github.com/onsi/ginkgo/v2"
        . "github.com/onsi/gomega"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
    )
 
    var _ = Describe("ParseRepoAllowlist", func() {
@@ -204,9 +204,9 @@ Key facts (verified against the codebase):
        })
 
        It("parses a single valid entry", func() {
-           result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/code-reviewer")
+           result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/maintainer")
            Expect(err).NotTo(HaveOccurred())
-           Expect(result).To(Equal([]string{"github.com/bborbe/code-reviewer"}))
+           Expect(result).To(Equal([]string{"github.com/bborbe/maintainer"}))
        })
 
        It("parses multiple valid entries", func() {
@@ -265,23 +265,23 @@ Key facts (verified against the codebase):
        })
 
        It("does not skip a PR whose RepoKey is on the allowlist", func() {
-           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
-           Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/code-reviewer"})).To(BeFalse())
+           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
+           Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeFalse())
        })
 
        It("skips a PR whose RepoKey is NOT on the allowlist", func() {
-           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
+           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
            Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/other-repo"})).To(BeTrue())
        })
 
        It("skips a PR with an empty RepoKey when the allowlist is non-empty", func() {
-           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
+           f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
            Expect(f.Skip(filter.PR{RepoKey: ""})).To(BeTrue())
        })
 
        It("matches exactly — prefix match is not a match", func() {
            f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code"})
-           Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/code-reviewer"})).To(BeTrue())
+           Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeTrue())
        })
    })
    ```
@@ -340,18 +340,18 @@ Key facts (verified against the codebase):
    ```
    to:
    ```
-   export REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+   export REPO_ALLOWLIST=github.com/bborbe/maintainer
    ```
 
 9. **Update `prod.env`** — same change:
    ```
-   export REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+   export REPO_ALLOWLIST=github.com/bborbe/maintainer
    ```
 
 10. **Update `CHANGELOG.md`** — add to the `## Unreleased` section (or create it above the most recent `## vX.Y.Z`):
 
     ```markdown
-    - feat(watcher): add `REPO_ALLOWLIST` env var (comma-separated `host/owner/repo` entries) that restricts task creation to configured repos. Empty allowlist is allow-all (preserves today's behavior). Malformed entries cause startup failure with a clear log. Adds `RepoAllowlistFilter` leaf to the `TaskCreationFilter` chain. Updated `dev.env` and `prod.env` to host-qualified form (`github.com/bborbe/code-reviewer`).
+    - feat(watcher): add `REPO_ALLOWLIST` env var (comma-separated `host/owner/repo` entries) that restricts task creation to configured repos. Empty allowlist is allow-all (preserves today's behavior). Malformed entries cause startup failure with a clear log. Adds `RepoAllowlistFilter` leaf to the `TaskCreationFilter` chain. Updated `dev.env` and `prod.env` to host-qualified form (`github.com/bborbe/maintainer`).
     ```
 
 11. **Run `make precommit`** in `watcher/github/`:
@@ -394,7 +394,7 @@ grep -n "REPO_ALLOWLIST\|RepoAllowlist\|ParseRepoAllowlist\|NewRepoAllowlistFilt
 
 # Confirm env files updated to host-qualified form:
 grep "REPO_ALLOWLIST" dev.env prod.env
-# Expected: both show github.com/bborbe/code-reviewer
+# Expected: both show github.com/bborbe/maintainer
 
 # Confirm CHANGELOG updated:
 grep -n "REPO_ALLOWLIST\|repo-allowlist\|RepoAllowlist" CHANGELOG.md

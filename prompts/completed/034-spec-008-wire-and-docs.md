@@ -61,7 +61,7 @@ Detection: substring match of `Name` against lines of `claude plugin list` stdou
 
    a. Add import for the plugins package:
       ```go
-      "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/plugins"
+      "github.com/bborbe/maintainer/agent/pr-reviewer/pkg/plugins"
       ```
 
    b. At the top of the `Run(ctx context.Context, _ libsentry.Client) error` method, before the `deliverer` creation, add:

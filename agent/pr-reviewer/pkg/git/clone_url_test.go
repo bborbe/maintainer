@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 )
 
 var _ = Describe("ParseCloneURL", func() {
@@ -29,23 +29,23 @@ var _ = Describe("ParseCloneURL", func() {
 		},
 		Entry(
 			"URL with .git suffix",
-			"https://github.com/bborbe/code-reviewer.git",
-			"github.com/bborbe/code-reviewer.git",
+			"https://github.com/bborbe/maintainer.git",
+			"github.com/bborbe/maintainer.git",
 		),
 		Entry(
 			"URL without .git suffix",
-			"https://github.com/bborbe/code-reviewer",
-			"github.com/bborbe/code-reviewer.git",
+			"https://github.com/bborbe/maintainer",
+			"github.com/bborbe/maintainer.git",
 		),
 		Entry(
 			"SCP-style SSH URL",
-			"git@github.com:bborbe/code-reviewer.git",
-			"github.com/bborbe/code-reviewer.git",
+			"git@github.com:bborbe/maintainer.git",
+			"github.com/bborbe/maintainer.git",
 		),
 		Entry(
 			"SCP-style SSH URL without .git suffix",
-			"git@github.com:bborbe/code-reviewer",
-			"github.com/bborbe/code-reviewer.git",
+			"git@github.com:bborbe/maintainer",
+			"github.com/bborbe/maintainer.git",
 		),
 		Entry(
 			"SCP-style SSH URL on non-GitHub host",
@@ -91,13 +91,13 @@ var _ = Describe("ParseCloneURLParts", func() {
 		},
 		Entry(
 			"HTTPS URL with .git suffix",
-			"https://github.com/bborbe/code-reviewer.git",
-			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"},
+			"https://github.com/bborbe/maintainer.git",
+			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "maintainer"},
 		),
 		Entry(
 			"SCP SSH URL with .git suffix",
-			"git@github.com:bborbe/code-reviewer.git",
-			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"},
+			"git@github.com:bborbe/maintainer.git",
+			git.CloneURLParts{Host: "github.com", Owner: "bborbe", Repo: "maintainer"},
 		),
 	)
 

@@ -20,7 +20,7 @@ Validates that the pr-reviewer agent clones, checks out, and reviews a real PR u
   ```bash
   cd $REPO/agent/pr-reviewer/cmd/run-task
   make generate-dummy-task TASK_FILE=test1-https.md \
-    CLONE_URL=https://github.com/bborbe/code-reviewer.git
+    CLONE_URL=https://github.com/bborbe/maintainer.git
   ```
 - [ ] Run agent against the task file:
   ```bash

@@ -38,7 +38,7 @@ Key facts:
 - Scenario 013 = agent clone-refusal (verifiable locally via `cmd/run-task`)
 - The watcher's `REPO_ALLOWLIST` env var holds comma-separated `host/owner/repo` entries; the watcher skips PRs not on the list (does NOT publish to Kafka)
 - The agent's `REPO_ALLOWLIST` env var holds the same format; the agent returns `NeedsInput` when the task's `clone_url` parses to a repo not on the list
-- After spec-013's changes: `dev.env` contains `REPO_ALLOWLIST=github.com/bborbe/code-reviewer`; verify this in the watcher scenario prerequisites
+- After spec-013's changes: `dev.env` contains `REPO_ALLOWLIST=github.com/bborbe/maintainer`; verify this in the watcher scenario prerequisites
 - The agent's local test runner is `agent/pr-reviewer/cmd/run-task/main.go`; it reads a task markdown file from disk via `TASK_FILE` or `--task-file`, runs the agent, and writes the result back; the `REPO_ALLOWLIST` env var controls the allowlist
 - A task file for the agent scenario can be created manually in a temp dir; `clone_url`, `ref`, and `base_ref` must appear in the frontmatter
 - The `make run-dummy-task` target in `agent/pr-reviewer/` may also work — check with `grep -n "run-dummy-task\|run-task" agent/pr-reviewer/Makefile` before writing the scenario
@@ -71,7 +71,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 
 ## Prerequisites
 - [ ] Dev cluster is running and healthy (`kubectl get pods -n code-reviewer`)
-- [ ] Watcher is deployed to dev with `REPO_ALLOWLIST=github.com/bborbe/code-reviewer`
+- [ ] Watcher is deployed to dev with `REPO_ALLOWLIST=github.com/bborbe/maintainer`
       (already set in `dev.env`). Confirm:
       ```bash
       kubectl get deployment github-pr-watcher -n code-reviewer \
@@ -173,7 +173,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Restore the correct allowlist:
       ```bash
       kubectl set env deployment/github-pr-watcher -n code-reviewer \
-        REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+        REPO_ALLOWLIST=github.com/bborbe/maintainer
       kubectl rollout status deployment/github-pr-watcher -n code-reviewer --timeout=60s
       ```
 
@@ -195,7 +195,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Restore the allowlist:
       ```bash
       kubectl set env deployment/github-pr-watcher -n code-reviewer \
-        REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+        REPO_ALLOWLIST=github.com/bborbe/maintainer
       ```
 
 ## Cleanup
@@ -257,7 +257,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
 - [ ] Run the agent against this task with the allowlist restricted to a different repo, AND pin REPOS_PATH/WORK_PATH to scenario-local temp dirs so the no-clone assertion is hermetic:
       ```bash
       mkdir -p /tmp/scenario-013/repos /tmp/scenario-013/work
-      REPO_ALLOWLIST=github.com/bborbe/code-reviewer \
+      REPO_ALLOWLIST=github.com/bborbe/maintainer \
       REPOS_PATH=/tmp/scenario-013/repos \
       WORK_PATH=/tmp/scenario-013/work \
       BRANCH=dev \
@@ -287,7 +287,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
       ```bash
       cat > /tmp/scenario-013/in-scope-task.md << 'EOF'
       ---
-      clone_url: https://github.com/bborbe/code-reviewer.git
+      clone_url: https://github.com/bborbe/maintainer.git
       ref: master
       base_ref: master
       task_identifier: scenario-013-test-002
@@ -303,7 +303,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
 - [ ] Run the agent against this task with the matching allowlist (no GH token needed —
       the test will fail at clone or Claude, but must NOT fail at the allowlist check):
       ```bash
-      REPO_ALLOWLIST=github.com/bborbe/code-reviewer \
+      REPO_ALLOWLIST=github.com/bborbe/maintainer \
       BRANCH=dev \
       TASK_FILE=/tmp/scenario-013/in-scope-task.md \
       ./agent/pr-reviewer/cmd/run-task/run-task 2>&1 | head -20

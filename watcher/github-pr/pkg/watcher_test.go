@@ -16,10 +16,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/mocks"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 func newTestWatcher(
@@ -110,7 +110,7 @@ var _ = Describe("pkg.Watcher", func() {
 				Owner:       "bborbe",
 				Repo:        "code-reviewer",
 				Title:       "feat: new feature",
-				HTMLURL:     "https://github.com/bborbe/code-reviewer/pull/42",
+				HTMLURL:     "https://github.com/bborbe/maintainer/pull/42",
 				AuthorLogin: "alice",
 				IsDraft:     false,
 				UpdatedAt:   libtime.DateTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)),

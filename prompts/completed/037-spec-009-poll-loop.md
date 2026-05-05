@@ -370,11 +370,11 @@ Read these files fully before implementing:
 
    import (
        "time"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/config"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/githubclient"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/publisher"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/watcher"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/cursor"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/config"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/githubclient"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/publisher"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/watcher"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/cursor"
    )
 
    // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.

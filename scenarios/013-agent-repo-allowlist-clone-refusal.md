@@ -46,7 +46,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
       is hermetic:
       ```bash
       mkdir -p /tmp/scenario-013/repos /tmp/scenario-013/work
-      REPO_ALLOWLIST=github.com/bborbe/code-reviewer \
+      REPO_ALLOWLIST=github.com/bborbe/maintainer \
       REPOS_PATH=/tmp/scenario-013/repos \
       WORK_PATH=/tmp/scenario-013/work \
       BRANCH=dev \
@@ -76,7 +76,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
       ```bash
       cat > /tmp/scenario-013/in-scope-task.md << 'EOF'
       ---
-      clone_url: https://github.com/bborbe/code-reviewer.git
+      clone_url: https://github.com/bborbe/maintainer.git
       ref: master
       base_ref: master
       task_identifier: scenario-013-test-002
@@ -92,7 +92,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
 - [ ] Run the agent against this task with the matching allowlist (no GH token needed —
       the test will fail at clone or Claude, but must NOT fail at the allowlist check):
       ```bash
-      REPO_ALLOWLIST=github.com/bborbe/code-reviewer \
+      REPO_ALLOWLIST=github.com/bborbe/maintainer \
       BRANCH=dev \
       TASK_FILE=/tmp/scenario-013/in-scope-task.md \
       ./agent/pr-reviewer/run-task 2>&1 | head -20

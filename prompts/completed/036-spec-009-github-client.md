@@ -192,7 +192,7 @@ Read these files fully before implementing:
    ```go
    package filter
 
-   import "github.com/bborbe/code-reviewer/watcher/github/pkg/githubclient"
+   import "github.com/bborbe/maintainer/watcher/github-pr/pkg/githubclient"
 
    // IsBotAuthor returns true if the PR author is in the allowlist.
    func IsBotAuthor(pr githubclient.PullRequest, allowlist []string) bool

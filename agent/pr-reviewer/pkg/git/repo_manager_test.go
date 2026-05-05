@@ -14,7 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 )
 
 var _ = Describe("RepoManager", func() {

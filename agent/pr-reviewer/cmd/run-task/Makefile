@@ -9,11 +9,11 @@ MODEL ?= sonnet
 
 # Test PR for git-checkout execution.
 # Override CLONE_URL / REF / BASE_REF / TASK_ID to target a different PR.
-CLONE_URL ?= https://github.com/bborbe/code-reviewer.git
+CLONE_URL ?= https://github.com/bborbe/maintainer.git
 REF       ?= $(shell gh pr view 2 --repo bborbe/code-reviewer --json headRefOid -q .headRefOid)
 BASE_REF  ?= master
 TASK_ID   ?= 22222222-aaaa-bbbb-cccc-333333333333
-PR_URL    ?= https://github.com/bborbe/code-reviewer/pull/2
+PR_URL    ?= https://github.com/bborbe/maintainer/pull/2
 
 generate-dummy-task:
 	@echo '---' > $(TASK_FILE)

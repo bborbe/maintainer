@@ -47,7 +47,7 @@ Files to read before making changes (read ALL first):
 /repos/<host>/<owner>/<repo>.git/   # bare clone
 /work/<task-id>/                    # worktree per task
 ```
-`ParseCloneURL("https://github.com/bborbe/code-reviewer.git")` → `"github.com/bborbe/code-reviewer.git"`
+`ParseCloneURL("https://github.com/bborbe/maintainer.git")` → `"github.com/bborbe/maintainer.git"`
 
 **Acceptance criteria test matrix (must cover all):**
 - Clone path: fresh `reposPath`, no `.git` dir → `git clone --bare` executed
@@ -85,8 +85,8 @@ Files to read before making changes (read ALL first):
    The `ctx` parameter is required because `errors.Errorf` takes `ctx` as its first argument (see `pkg/prurl/prurl.go` and `pkg/git/git.go` for the convention).
 
    Add unit tests in a new file `agent/pr-reviewer/pkg/git/clone_url_test.go` (package `git_test`):
-   - Valid: `https://github.com/bborbe/code-reviewer.git` → `"github.com/bborbe/code-reviewer.git"`
-   - Valid: `https://github.com/bborbe/code-reviewer` (no `.git`) → `"github.com/bborbe/code-reviewer.git"`
+   - Valid: `https://github.com/bborbe/maintainer.git` → `"github.com/bborbe/maintainer.git"`
+   - Valid: `https://github.com/bborbe/maintainer` (no `.git`) → `"github.com/bborbe/maintainer.git"`
    - Reject: empty string
    - Reject: `https://github.com/../foo/bar.git` (path traversal in owner)
    - Reject: `https://github.com/owner` (only one segment — missing repo)

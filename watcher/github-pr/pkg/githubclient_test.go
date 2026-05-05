@@ -18,7 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 )
 
 var fixedNow = time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)

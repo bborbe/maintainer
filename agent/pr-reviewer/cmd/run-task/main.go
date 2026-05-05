@@ -23,9 +23,9 @@ import (
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
-	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/factory"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
 )
 
 func main() {

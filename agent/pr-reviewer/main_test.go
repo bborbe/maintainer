@@ -17,7 +17,7 @@ import (
 var _ = Describe("Main", func() {
 	It("Compiles", func() {
 		var err error
-		_, err = gexec.Build("github.com/bborbe/code-reviewer/agent/pr-reviewer", "-mod=mod")
+		_, err = gexec.Build("github.com/bborbe/maintainer/agent/pr-reviewer", "-mod=mod")
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

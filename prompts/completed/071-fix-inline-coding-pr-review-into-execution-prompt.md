@@ -195,7 +195,7 @@ Key precondition (verified): `base_ref` is in the task markdown frontmatter and 
           return nil, errors.Wrapf(ctx, err, "build execution instructions base_ref=%s mode=%s", baseRef, s.reviewMode)
       }
       ```
-      Use the import alias `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prompts"`.
+      Use the import alias `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"`.
 
    e. Replace `s.instructions.String()` with `instructions.String()` in the `BuildPrompt` call.
 

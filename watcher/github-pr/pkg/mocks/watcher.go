@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 )
 
 type Watcher struct {

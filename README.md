@@ -15,7 +15,7 @@ Repo follows the multi-module layout of [bborbe/agent](https://github.com/bborbe
 Takes a GitHub or Bitbucket Server PR URL, runs Claude Code review in a `claude-yolo` container against a local checkout, and posts the review back with a verdict (approve / request-changes / comment).
 
 ```bash
-go install github.com/bborbe/code-reviewer/agent/pr-reviewer/cmd/cli@latest
+go install github.com/bborbe/maintainer/agent/pr-reviewer/cmd/cli@latest
 
 code-reviewer [-v] [--comment-only] <pr-url>
 ```
@@ -28,7 +28,7 @@ github:
 model: sonnet                          # sonnet | opus | haiku
 autoApprove: false                     # only post comments unless true
 repos:
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: ~/Documents/workspaces/code-reviewer
     reviewCommand: /code-review        # optional
 ```

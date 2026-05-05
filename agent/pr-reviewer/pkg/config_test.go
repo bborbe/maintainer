@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	pkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 var _ = Describe("Config", func() {
@@ -43,7 +43,7 @@ var _ = Describe("Config", func() {
 				validYAML := `repos:
   - url: https://github.com/bborbe/teamvault-docker
     path: /home/user/teamvault-docker
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: /home/user/code-reviewer
 `
 				err := os.WriteFile(configPath, []byte(validYAML), 0600)
@@ -59,7 +59,7 @@ var _ = Describe("Config", func() {
 				Expect(cfg.Repos).To(HaveLen(2))
 				Expect(cfg.Repos[0].URL).To(Equal("https://github.com/bborbe/teamvault-docker"))
 				Expect(cfg.Repos[0].Path).To(Equal("/home/user/teamvault-docker"))
-				Expect(cfg.Repos[1].URL).To(Equal("https://github.com/bborbe/code-reviewer"))
+				Expect(cfg.Repos[1].URL).To(Equal("https://github.com/bborbe/maintainer"))
 				Expect(cfg.Repos[1].Path).To(Equal("/home/user/code-reviewer"))
 			})
 		})
@@ -71,7 +71,7 @@ var _ = Describe("Config", func() {
   - url: https://github.com/bborbe/teamvault-docker
     path: /home/user/teamvault-docker
     reviewCommand: /custom-review
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: /home/user/code-reviewer
 `
 				err := os.WriteFile(configPath, []byte(yamlWithReviewCmd), 0600)
@@ -425,7 +425,7 @@ repos:
 			BeforeEach(func() {
 				configPath = filepath.Join(tmpDir, "config.yaml")
 				yamlWithoutAutoApprove := `repos:
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: /home/user/code-reviewer
 `
 				err := os.WriteFile(configPath, []byte(yamlWithoutAutoApprove), 0600)
@@ -446,7 +446,7 @@ repos:
 				configPath = filepath.Join(tmpDir, "config.yaml")
 				yamlWithAutoApprove := `autoApprove: true
 repos:
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: /home/user/code-reviewer
 `
 				err := os.WriteFile(configPath, []byte(yamlWithAutoApprove), 0600)
@@ -467,7 +467,7 @@ repos:
 				configPath = filepath.Join(tmpDir, "config.yaml")
 				yamlWithAutoApproveFalse := `autoApprove: false
 repos:
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: /home/user/code-reviewer
 `
 				err := os.WriteFile(configPath, []byte(yamlWithAutoApproveFalse), 0600)
@@ -499,7 +499,7 @@ repos:
 						ReviewCommand: "/custom-review",
 					},
 					{
-						URL:  "https://github.com/bborbe/code-reviewer",
+						URL:  "https://github.com/bborbe/maintainer",
 						Path: "/home/user/code-reviewer",
 						// ReviewCommand not set - remains empty, main.go builds dynamically
 					},
@@ -531,7 +531,7 @@ repos:
 
 		Context("with matching URL and empty reviewCommand", func() {
 			BeforeEach(func() {
-				repoURL = "https://github.com/bborbe/code-reviewer"
+				repoURL = "https://github.com/bborbe/maintainer"
 			})
 
 			It("returns no error", func() {

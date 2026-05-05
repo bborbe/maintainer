@@ -29,7 +29,7 @@ Create the `agent/pr-reviewer/pkg/plugins/` package implementing the plugin inst
 </objective>
 
 <context>
-Read `CLAUDE.md` for project conventions (Pattern B Job, no vendor, module at `github.com/bborbe/code-reviewer/agent/pr-reviewer`).
+Read `CLAUDE.md` for project conventions (Pattern B Job, no vendor, module at `github.com/bborbe/maintainer/agent/pr-reviewer`).
 
 Read the following guides from `~/.claude/plugins/marketplaces/coding/docs/`:
 - `go-patterns.md` — Interface → Constructor → Struct pattern, counterfeiter annotations

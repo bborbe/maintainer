@@ -1,4 +1,4 @@
-module github.com/bborbe/code-reviewer/watcher/github
+module github.com/bborbe/maintainer/watcher/github-pr
 
 go 1.26.2
 

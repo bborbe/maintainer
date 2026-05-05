@@ -69,7 +69,7 @@ Key facts (verified):
    // See docs/watcher-decision-chains.md for the full split rationale.
    package filter
 
-   import "github.com/bborbe/code-reviewer/watcher/github/pkg"
+   import "github.com/bborbe/maintainer/watcher/github-pr/pkg"
 
    //counterfeiter:generate -o ../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
 
@@ -115,7 +115,7 @@ Key facts (verified):
 
    package filter
 
-   import "github.com/bborbe/code-reviewer/watcher/github/pkg"
+   import "github.com/bborbe/maintainer/watcher/github-pr/pkg"
 
    // NewDraftFilter returns a filter that skips draft PRs (the author
    // is signaling "not ready for review"). GitHub's draft state is the
@@ -141,7 +141,7 @@ Key facts (verified):
 
    package filter
 
-   import "github.com/bborbe/code-reviewer/watcher/github/pkg"
+   import "github.com/bborbe/maintainer/watcher/github-pr/pkg"
 
    // NewBotAuthorFilter returns a filter that skips PRs whose author
    // matches any entry in the configured allowlist (exact match).
@@ -199,8 +199,8 @@ Key facts (verified):
        . "github.com/onsi/ginkgo/v2"
        . "github.com/onsi/gomega"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg"
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
    )
 
    var _ = Describe("DraftFilter", func() {
@@ -290,7 +290,7 @@ Key facts (verified):
    - Add parameter to `NewWatcher`: `taskCreationFilter filter.TaskCreationFilter`
    - Replace the existing `ShouldSkipPR(pr, w.botAllowlist)` call with `w.taskCreationFilter.Skip(pr)`
    - Remove the `botAllowlist` field and parameter from `watcher` / `NewWatcher` (now lives inside the filter)
-   - Add the import `"github.com/bborbe/code-reviewer/watcher/github/pkg/filter"`
+   - Add the import `"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"`
 
 8. **Update `watcher/github/pkg/factory/factory.go`** — `CreateWatcher` signature:
 

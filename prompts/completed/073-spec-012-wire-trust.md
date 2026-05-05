@@ -76,7 +76,7 @@ To dismiss, set `status: aborted`.
 
    a. Add import for the trust package:
    ```go
-   "github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+   "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
    ```
 
    b. Add `trustDecision trust.Trust` field to the `watcher` struct:
@@ -263,7 +263,7 @@ To dismiss, set `status: aborted`.
 
    a. Add import for the trust package:
    ```go
-   "github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+   "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
    ```
 
    b. Add `trustedAuthors []string` as the last parameter to `CreateWatcher`:
@@ -333,8 +333,8 @@ To dismiss, set `status: aborted`.
 
    a. Import the trust package:
    ```go
-   "github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
-   "github.com/bborbe/code-reviewer/watcher/github/pkg/mocks"
+   "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+   "github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
    ```
    (the trust mock `mocks.Trust` is generated in step 1)
 

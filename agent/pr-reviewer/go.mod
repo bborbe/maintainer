@@ -1,4 +1,4 @@
-module github.com/bborbe/code-reviewer/agent/pr-reviewer
+module github.com/bborbe/maintainer/agent/pr-reviewer
 
 go 1.26.2
 

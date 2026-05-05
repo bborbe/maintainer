@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 )
 
 var _ = Describe("ParseRepoAllowlist", func() {
@@ -24,9 +24,9 @@ var _ = Describe("ParseRepoAllowlist", func() {
 	})
 
 	It("parses a single valid entry", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/code-reviewer")
+		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/maintainer")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal([]string{"github.com/bborbe/code-reviewer"}))
+		Expect(result).To(Equal([]string{"github.com/bborbe/maintainer"}))
 	})
 
 	It("parses multiple valid entries", func() {
@@ -91,22 +91,22 @@ var _ = Describe("RepoAllowlistFilter", func() {
 	})
 
 	It("does not skip a PR whose RepoKey is on the allowlist", func() {
-		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
-		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/code-reviewer"})).To(BeFalse())
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
+		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeFalse())
 	})
 
 	It("skips a PR whose RepoKey is NOT on the allowlist", func() {
-		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
 		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/other-repo"})).To(BeTrue())
 	})
 
 	It("skips a PR with an empty RepoKey when the allowlist is non-empty", func() {
-		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code-reviewer"})
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/maintainer"})
 		Expect(f.Skip(filter.PR{RepoKey: ""})).To(BeTrue())
 	})
 
 	It("matches exactly — prefix match is not a match", func() {
 		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code"})
-		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/code-reviewer"})).To(BeTrue())
+		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeTrue())
 	})
 })

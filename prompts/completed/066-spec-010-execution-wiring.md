@@ -189,7 +189,7 @@ Files to read before making changes (read ALL first):
 
    Planning and reviewStep lines remain **unchanged**.
 
-   Add import for `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"` if not already present.
+   Add import for `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"` if not already present.
 
 3.5. **Update `agent/pr-reviewer/pkg/factory/factory_test.go`**:
 
@@ -226,7 +226,7 @@ Files to read before making changes (read ALL first):
    agent := factory.CreateAgent(a.ClaudeConfigDir, a.AgentDir, a.Model, a.GHToken, env, repoManager)
    ```
 
-   Add import `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"`.
+   Add import `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"`.
 
 5. **Update `agent/pr-reviewer/cmd/run-task/main.go`**:
 
@@ -264,7 +264,7 @@ Files to read before making changes (read ALL first):
    agent := factory.CreateAgent(a.ClaudeConfigDir, a.AgentDir, a.Model, a.GHToken, env, repoManager)
    ```
 
-   Add imports: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"`, `"path/filepath"`, and `"os"` if not already imported (`os.UserHomeDir` is in `os`).
+   Add imports: `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"`, `"path/filepath"`, and `"os"` if not already imported (`os.UserHomeDir` is in `os`).
 
 6. **Update `agent/pr-reviewer/pkg/prompts/execution_workflow.md`** — replace the entire file:
 

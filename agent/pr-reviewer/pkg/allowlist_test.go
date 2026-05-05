@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	pkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 var _ = Describe("ParseRepoAllowlist", func() {
@@ -27,37 +27,37 @@ var _ = Describe("ParseRepoAllowlist", func() {
 	})
 
 	It("parses a single valid entry", func() {
-		result, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/code-reviewer")
+		result, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/maintainer")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal([]string{"github.com/bborbe/code-reviewer"}))
+		Expect(result).To(Equal([]string{"github.com/bborbe/maintainer"}))
 	})
 
 	It("parses multiple valid entries", func() {
 		result, err := pkg.ParseRepoAllowlist(
 			ctx,
-			"github.com/bborbe/code-reviewer,github.com/bborbe/agent",
+			"github.com/bborbe/maintainer,github.com/bborbe/agent",
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(
 			result,
-		).To(Equal([]string{"github.com/bborbe/code-reviewer", "github.com/bborbe/agent"}))
+		).To(Equal([]string{"github.com/bborbe/maintainer", "github.com/bborbe/agent"}))
 	})
 
 	It("strips whitespace around entries", func() {
 		result, err := pkg.ParseRepoAllowlist(
 			ctx,
-			" github.com/bborbe/code-reviewer , github.com/bborbe/agent ",
+			" github.com/bborbe/maintainer , github.com/bborbe/agent ",
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(
 			result,
-		).To(Equal([]string{"github.com/bborbe/code-reviewer", "github.com/bborbe/agent"}))
+		).To(Equal([]string{"github.com/bborbe/maintainer", "github.com/bborbe/agent"}))
 	})
 
 	It("silently drops trailing comma (empty entry)", func() {
-		result, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/code-reviewer,")
+		result, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/maintainer,")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal([]string{"github.com/bborbe/code-reviewer"}))
+		Expect(result).To(Equal([]string{"github.com/bborbe/maintainer"}))
 	})
 
 	It("returns error for non-host-qualified entry (two segments)", func() {
@@ -73,8 +73,8 @@ var _ = Describe("ParseRepoAllowlist", func() {
 	})
 
 	It("returns error for four-segment entry", func() {
-		_, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/code-reviewer/extra")
+		_, err := pkg.ParseRepoAllowlist(ctx, "github.com/bborbe/maintainer/extra")
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("github.com/bborbe/code-reviewer/extra"))
+		Expect(err.Error()).To(ContainSubstring("github.com/bborbe/maintainer/extra"))
 	})
 })

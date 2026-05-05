@@ -146,7 +146,7 @@ Key facts (verified against the codebase):
 3. **Add tests for `ParseCloneURLParts`** in `agent/pr-reviewer/pkg/git/clone_url_test.go`.
 
    Do NOT remove existing `ParseCloneURL` tests. Append a new `Describe("ParseCloneURLParts", ...)` block covering:
-   - HTTPS URL: `https://github.com/bborbe/code-reviewer.git` → `{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"}`
+   - HTTPS URL: `https://github.com/bborbe/maintainer.git` → `{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"}`
    - SCP SSH URL: `git@github.com:bborbe/code-reviewer.git` → `{Host: "github.com", Owner: "bborbe", Repo: "code-reviewer"}`
    - Empty string → error
    - Single-segment path → error
@@ -206,7 +206,7 @@ Key facts (verified against the codebase):
 
 5. **Create `agent/pr-reviewer/pkg/allowlist_test.go`** with Ginkgo v2 + Gomega tests. Use package `pkg_test`. Cover:
    - Empty string → nil, no error
-   - Single valid entry → `[]string{"github.com/bborbe/code-reviewer"}`
+   - Single valid entry → `[]string{"github.com/bborbe/maintainer"}`
    - Multiple valid entries → expected slice
    - Whitespace stripping
    - Trailing comma (empty entry) → silently dropped
@@ -298,7 +298,7 @@ Key facts (verified against the codebase):
    - **Allowlist non-empty, clone_url does NOT match → returns NeedsInput, EnsureWorktree not called** (negative path — key security invariant)
    - **Allowlist non-empty, clone_url unparseable (e.g. `not-a-url`) → returns Status: Failed (NOT NeedsInput), EnsureWorktree not called** (parse-fail path — preserves existing hard-failure behavior, distinct from soft allowlist-miss; closes the spec's parse-fail-vs-allowlist-miss-distinct-paths invariant)
 
-   Use a task markdown with `clone_url: https://github.com/bborbe/code-reviewer.git` for the positive case, `https://github.com/bborbe/other-repo.git` for the negative case, and `not-a-url` for the parse-fail case.
+   Use a task markdown with `clone_url: https://github.com/bborbe/maintainer.git` for the positive case, `https://github.com/bborbe/other-repo.git` for the negative case, and `not-a-url` for the parse-fail case.
 
    Verify: `fakeRepoManager.EnsureWorktreeCallCount()` is 0 in BOTH the negative-path and parse-fail tests.
 
@@ -383,7 +383,7 @@ Key facts (verified against the codebase):
 
     Check the existing imports — `main.go` does NOT currently import `agent/pr-reviewer/pkg` directly; you will need to add:
     ```go
-    prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
+    prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
     ```
 
     Step 10c — wire `repoAllowlist` into `RunConfig`:
@@ -405,7 +405,7 @@ Key facts (verified against the codebase):
 
 11. **Add `REPO_ALLOWLIST` to `agent/pr-reviewer/cmd/run-task/main.go`** — mirror the same changes as main.go:
     - Add `RepoAllowlist string` field with the same struct tag
-    - Import `prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"`
+    - Import `prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"`
     - Parse and log at startup (same code)
     - Wire into `RunConfig` (same field)
 

@@ -13,8 +13,8 @@ import (
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prompts"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
 // checkoutExecutionStep is the execution phase step that checks out the

@@ -5,8 +5,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/github"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/github"
 )
 
 type GitHubClient struct {

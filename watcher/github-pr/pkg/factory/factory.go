@@ -16,9 +16,9 @@ import (
 	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 // CreateKafkaPublisher constructs a CommandPublisher backed by a Kafka sync producer.

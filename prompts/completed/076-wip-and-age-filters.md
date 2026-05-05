@@ -71,7 +71,7 @@ Key facts (verified against the codebase):
    import (
        "regexp"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg"
    )
 
    // wipTitleRegexp matches titles whose first three characters are "WIP"
@@ -109,7 +109,7 @@ Key facts (verified against the codebase):
    import (
        libtime "github.com/bborbe/time"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg"
    )
 
    // NewAgeFilter returns a filter that skips PRs whose UpdatedAt is older

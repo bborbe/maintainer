@@ -17,7 +17,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 
 ## Prerequisites
 - [ ] Dev cluster is running and healthy (`kubectl get pods -n code-reviewer`)
-- [ ] Watcher is deployed to dev with `REPO_ALLOWLIST=github.com/bborbe/code-reviewer`
+- [ ] Watcher is deployed to dev with `REPO_ALLOWLIST=github.com/bborbe/maintainer`
       (already set in `dev.env`). Confirm:
       ```bash
       kubectl get deployment github-pr-watcher -n code-reviewer \
@@ -119,7 +119,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Restore the correct allowlist:
       ```bash
       kubectl set env deployment/github-pr-watcher -n code-reviewer \
-        REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+        REPO_ALLOWLIST=github.com/bborbe/maintainer
       kubectl rollout status deployment/github-pr-watcher -n code-reviewer --timeout=60s
       ```
 
@@ -141,7 +141,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Restore the allowlist:
       ```bash
       kubectl set env deployment/github-pr-watcher -n code-reviewer \
-        REPO_ALLOWLIST=github.com/bborbe/code-reviewer
+        REPO_ALLOWLIST=github.com/bborbe/maintainer
       ```
 
 ## Cleanup

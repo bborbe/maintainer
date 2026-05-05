@@ -14,10 +14,10 @@ import (
 
 	"github.com/bborbe/errors"
 
-	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/bitbucket"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/github"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/bitbucket"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/github"
 )
 
 func main() {

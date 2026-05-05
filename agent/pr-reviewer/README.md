@@ -30,7 +30,7 @@ Minimum:
 
 ```yaml
 repos:
-  - url: https://github.com/bborbe/code-reviewer
+  - url: https://github.com/bborbe/maintainer
     path: ~/Documents/workspaces/code-reviewer
 ```
 
@@ -55,7 +55,7 @@ Environment variables:
 
 ## Smoke Test PR
 
-**https://github.com/bborbe/code-reviewer/pull/2** — `test: delete-this-pr-never`
+**https://github.com/bborbe/maintainer/pull/2** — `test: delete-this-pr-never`
 
 Permanent test fixture. Trivial diff (HTML comment added to `README.md`,
 3 additions / 0 deletions). Use this PR for any local or k8s smoke test.
@@ -71,7 +71,7 @@ phase: planning
 status: in_progress
 ---
 
-Review https://github.com/bborbe/code-reviewer/pull/2 and return a verdict.
+Review https://github.com/bborbe/maintainer/pull/2 and return a verdict.
 EOF
 
 # Walk the 3 phases — task file is mutated in place between runs

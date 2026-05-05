@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
 )
 
 type GitHubAuthSetup struct {

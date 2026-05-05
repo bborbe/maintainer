@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	pkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 var _ = Describe("Parse", func() {
@@ -95,7 +95,7 @@ var _ = Describe("Parse", func() {
 
 		Context("with GitHub URL but not a PR (issue)", func() {
 			BeforeEach(func() {
-				rawURL = "https://github.com/bborbe/code-reviewer/issues/123"
+				rawURL = "https://github.com/bborbe/maintainer/issues/123"
 			})
 
 			It("returns error", func() {
@@ -109,7 +109,7 @@ var _ = Describe("Parse", func() {
 
 		Context("with GitHub PR URL with non-numeric number", func() {
 			BeforeEach(func() {
-				rawURL = "https://github.com/bborbe/code-reviewer/pull/abc"
+				rawURL = "https://github.com/bborbe/maintainer/pull/abc"
 			})
 
 			It("returns error", func() {
@@ -313,7 +313,7 @@ var _ = Describe("Parse", func() {
 
 		Context("with HTTP URL (not HTTPS)", func() {
 			BeforeEach(func() {
-				rawURL = "http://github.com/bborbe/code-reviewer/pull/4"
+				rawURL = "http://github.com/bborbe/maintainer/pull/4"
 			})
 
 			It("returns error", func() {
@@ -327,7 +327,7 @@ var _ = Describe("Parse", func() {
 
 		Context("with URL without scheme", func() {
 			BeforeEach(func() {
-				rawURL = "github.com/bborbe/code-reviewer/pull/4"
+				rawURL = "github.com/bborbe/maintainer/pull/4"
 			})
 
 			It("returns error", func() {

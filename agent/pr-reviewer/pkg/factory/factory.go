@@ -21,9 +21,9 @@ import (
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
-	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prompts"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
 const serviceName = "agent-pr-reviewer"

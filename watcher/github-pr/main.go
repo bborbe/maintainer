@@ -24,9 +24,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/factory"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 )
 
 var repoScopePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)

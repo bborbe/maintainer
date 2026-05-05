@@ -85,7 +85,7 @@ Files to read before making changes (read ALL first):
    - Delete the now-empty `pkg/prompts/execution/`, `pkg/prompts/planning/`, `pkg/prompts/review/`.
    - Inside each moved file, also rename the package-level vars `workflow` and `outputFormat` to `executionWorkflow` / `executionOutputFormat` etc., since all three files now share a package and would otherwise collide.
 
-3. **Update all importers**. Replace every `github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/<moved-name>` import (for `config`, `prurl`, `review`, `verdict`, `version`, `steps`) with `github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg`. Update call sites: `config.Config` → `pkg.Config`, `verdict.Verdict` → `pkg.Verdict`, etc. For prompts, replace each `pkg/prompts/<phase>` import with the single `pkg/prompts`, and update `<phase>.BuildInstructions()` to `prompts.Build<Phase>Instructions()`. Files to edit:
+3. **Update all importers**. Replace every `github.com/bborbe/maintainer/agent/pr-reviewer/pkg/<moved-name>` import (for `config`, `prurl`, `review`, `verdict`, `version`, `steps`) with `github.com/bborbe/maintainer/agent/pr-reviewer/pkg`. Update call sites: `config.Config` → `pkg.Config`, `verdict.Verdict` → `pkg.Verdict`, etc. For prompts, replace each `pkg/prompts/<phase>` import with the single `pkg/prompts`, and update `<phase>.BuildInstructions()` to `prompts.Build<Phase>Instructions()`. Files to edit:
    - `agent/pr-reviewer/main.go`
    - `agent/pr-reviewer/cmd/cli/main.go`
    - `agent/pr-reviewer/cmd/run-task/main.go`

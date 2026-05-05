@@ -75,7 +75,7 @@ The agent is intentionally **provider-agnostic** and **ref-agnostic**. Its input
 
 | Field | Example | Notes |
 |---|---|---|
-| `clone_url` | `https://github.com/bborbe/code-reviewer.git` | Any git server reachable with available credentials |
+| `clone_url` | `https://github.com/bborbe/maintainer.git` | Any git server reachable with available credentials |
 | `ref` | `feature/foo`, `v1.2.3`, `abc123…` | Branch, tag, or SHA — checked out as the review target |
 | `base_ref` | `master` | Used to compute the diff (`origin/<base>...HEAD`) |
 | `task_id` | `bd4d883b-…` | Stable key for workdir, dedup, observability |
@@ -181,12 +181,12 @@ The agent contract is set in step 1 and does not change in later steps — only 
   "assignee": "pr-reviewer-agent",
   "stage": "dev|prod",
   "task_id": "<uuid>",
-  "clone_url": "https://github.com/bborbe/code-reviewer.git",
+  "clone_url": "https://github.com/bborbe/maintainer.git",
   "ref": "<head_sha>",
   "base_ref": "master",
   "source": {
     "provider": "github",
-    "pr_url": "https://github.com/bborbe/code-reviewer/pull/42",
+    "pr_url": "https://github.com/bborbe/maintainer/pull/42",
     "pr_number": 42
   }
 }
@@ -204,12 +204,12 @@ assignee: pr-reviewer-agent
 status: in_progress
 stage: dev
 task_identifier: <uuid>
-clone_url: https://github.com/bborbe/code-reviewer.git
+clone_url: https://github.com/bborbe/maintainer.git
 ref: <head_sha>
 base_ref: master
 source:
   provider: github
-  pr_url: https://github.com/bborbe/code-reviewer/pull/42
+  pr_url: https://github.com/bborbe/maintainer/pull/42
 ---
 Review the pull request.
 ```

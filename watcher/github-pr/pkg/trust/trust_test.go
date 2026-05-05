@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 // alwaysTrust returns a Trust that always succeeds with the given label.

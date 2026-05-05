@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/github"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/github"
 )
 
 var _ = Describe("Client", func() {

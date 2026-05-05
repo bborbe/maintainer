@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prompts"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
 var _ = Describe("BuildExecutionInstructions", func() {

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- chore: rename repo `code-reviewer` → `maintainer`; module paths `github.com/bborbe/code-reviewer/...` → `github.com/bborbe/maintainer/...`; rename `watcher/github/` → `watcher/github-pr/` to disambiguate from upcoming `watcher/github-build/`. User-facing strings (`~/.code-reviewer.yaml`, `/tmp/code-reviewer-*` temp dirs, CLI usage prints) deferred to follow-up commit.
+
 ## v0.23.12
 
 - feat(k8s): wire `REPO_ALLOWLIST` env var through both `agent/pr-reviewer` Config CRD and `watcher/github` StatefulSet manifests so the value flows from `dev.env` / `prod.env` into pod env at deploy time. Without these manifest entries the watcher and agent never saw the host-qualified allowlist their code already reads.

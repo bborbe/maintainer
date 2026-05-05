@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/bborbe/agent/lib"
-	"github.com/bborbe/code-reviewer/watcher/github/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 )
 
 type CommandPublisher struct {

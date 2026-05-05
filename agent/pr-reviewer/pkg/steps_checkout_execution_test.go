@@ -13,8 +13,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/mocks"
-	pkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/mocks"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 var _ = Describe("checkoutExecutionStep", func() {
@@ -240,7 +240,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 		})
 
 		Context("allowlist checks", func() {
-			const taskMarkdown = "---\nclone_url: https://github.com/bborbe/code-reviewer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
+			const taskMarkdown = "---\nclone_url: https://github.com/bborbe/maintainer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
 			Context("when allowlist is empty", func() {
 				It("proceeds to EnsureWorktree (allow-all behavior)", func() {
@@ -274,7 +274,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						map[string]string{},
 						claudelib.AllowedTools{"Read"},
 						"standard",
-						[]string{"github.com/bborbe/code-reviewer"},
+						[]string{"github.com/bborbe/maintainer"},
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -298,7 +298,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						[]string{"github.com/bborbe/other-repo"},
 					)
-					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/code-reviewer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
+					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/maintainer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
 					md, err := agentlib.ParseMarkdown(ctx, nonMatchingTask)
 					Expect(err).NotTo(HaveOccurred())
@@ -306,7 +306,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 					Expect(runErr).NotTo(HaveOccurred())
 					Expect(result).NotTo(BeNil())
 					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
-					Expect(result.Message).To(ContainSubstring("github.com/bborbe/code-reviewer"))
+					Expect(result.Message).To(ContainSubstring("github.com/bborbe/maintainer"))
 					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(0))
 				})
 			})
@@ -321,7 +321,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						map[string]string{},
 						claudelib.AllowedTools{"Read"},
 						"standard",
-						[]string{"github.com/bborbe/code-reviewer"},
+						[]string{"github.com/bborbe/maintainer"},
 					)
 					const badURLTask = "---\nclone_url: not-a-url\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 

@@ -40,7 +40,7 @@ Files to read before making any changes (read ALL before writing any code):
 - `watcher/github/pkg/suite_test.go` — Ginkgo suite file pattern (counterfeiter go:generate line)
 - `watcher/github/pkg/githubclient.go` — `PullRequest.AuthorLogin` field (the only field needed from a PR)
 
-Module path (from `go.mod`): `github.com/bborbe/code-reviewer/watcher/github`
+Module path (from `go.mod`): `github.com/bborbe/maintainer/watcher/github-pr`
 </context>
 
 <requirements>
@@ -254,7 +254,7 @@ Module path (from `go.mod`): `github.com/bborbe/code-reviewer/watcher/github`
        . "github.com/onsi/ginkgo/v2"
        . "github.com/onsi/gomega"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
    )
 
    // alwaysTrust returns a Trust that always succeeds with the given label.
@@ -443,7 +443,7 @@ Module path (from `go.mod`): `github.com/bborbe/code-reviewer/watcher/github`
        . "github.com/onsi/ginkgo/v2"
        . "github.com/onsi/gomega"
 
-       "github.com/bborbe/code-reviewer/watcher/github/pkg/trust"
+       "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
    )
 
    var _ = Describe("trust.NewAuthorAllowlist", func() {
@@ -594,7 +594,7 @@ cd watcher/github && go build ./...
 cd watcher/github && make test
 
 # Confirm trust package compiles standalone
-go build github.com/bborbe/code-reviewer/watcher/github/pkg/trust
+go build github.com/bborbe/maintainer/watcher/github-pr/pkg/trust
 
 # Confirm ParseTrustedAuthors exists in filter.go
 grep -n "ParseTrustedAuthors" watcher/github/pkg/filter.go

@@ -47,9 +47,9 @@ Files to read before making any changes:
 Key facts (verified against the codebase):
 - `factory/runner.go` `RunConfig` currently has no `AuthSetup` field — you are adding it
 - `RunAgent` calls `installer.EnsureInstalled(...)` at ~line 54; the new `cfg.AuthSetup.Setup(ctx)` call goes immediately after (still before `CreateAgent` at ~line 65)
-- Both `main.go` and `cmd/run-task/main.go` already import `prpkg "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg"`
+- Both `main.go` and `cmd/run-task/main.go` already import `prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"`
 - Both entry points already have `GHToken string` with `required:"false"` and `display:"length"` — add a comment to the usage string: `"GitHub token for gh CLI auth and git credential helper at pod startup"`
-- The new package lives at `agent/pr-reviewer/pkg/githubauth/` — import path: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
+- The new package lives at `agent/pr-reviewer/pkg/githubauth/` — import path: `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"`
 - The counterfeiter annotation in the new package's interface file must point to `../../mocks/` relative to `agent/pr-reviewer/pkg/githubauth/`; the correct annotation is: `//counterfeiter:generate -o ../../mocks/github-auth-setup.go --fake-name GitHubAuthSetup . GitHubAuthSetup`
 - `gh auth setup-git` writes a git credential helper entry for `github.com` into the pod's local git config (`/home/claude/.gitconfig`); it reads `GH_TOKEN` from the process environment, NOT from its argument list — the arg list `["auth", "setup-git"]` contains no secrets
 - The `exec.CommandContext` call for `gh auth setup-git` must have gosec G204 suppressed with a comment: `// #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input`
@@ -168,7 +168,7 @@ Key facts (verified against the codebase):
        . "github.com/onsi/ginkgo/v2"
        . "github.com/onsi/gomega"
 
-       "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
+       "github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
    )
 
    func TestGitHubAuth(t *testing.T) {
@@ -278,7 +278,7 @@ Key facts (verified against the codebase):
 
    Add the import:
    ```go
-   "github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"
+   "github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
    ```
 
 6. **Call `cfg.AuthSetup.Setup(ctx)` in `RunAgent`** in `agent/pr-reviewer/pkg/factory/runner.go`:
@@ -311,7 +311,7 @@ Key facts (verified against the codebase):
 
 8. **Update `agent/pr-reviewer/main.go`** — inject the real implementation:
 
-   Step 8a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
+   Step 8a — add import: `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"`
 
    Step 8b — update the `GHToken` field comment in `application` struct:
    ```go
@@ -336,7 +336,7 @@ Key facts (verified against the codebase):
 
 9. **Update `agent/pr-reviewer/cmd/run-task/main.go`** — inject the noop:
 
-    Step 9a — add import: `"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/githubauth"`
+    Step 9a — add import: `"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"`
 
     Step 9b — update the `GHToken` field comment (same style as step 8b but note this is the noop path):
     ```go
