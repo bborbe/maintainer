@@ -8,8 +8,8 @@ spec: 010-git-checkout-review-workdir
 Validates that the pr-reviewer agent reviews any git ref — not just PR heads. Confirms the spec's "any ref on any git server" capability: a SHA, branch, or tag without a corresponding pull request.
 
 ## Setup
-- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the code-reviewer checkout root
-- [ ] code-reviewer at v0.20.0 or higher (`cd $REPO && git describe --tags` — output starts with `v0.20.` or higher)
+- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the maintainer checkout root
+- [ ] maintainer at v0.20.0 or higher (`cd $REPO && git describe --tags` — output starts with `v0.20.` or higher)
 - [ ] Local Claude config dir authenticated: `CLAUDE_CONFIG_DIR=~/.claude-agent claude /login`
 - [ ] `gh auth status` shows authenticated GitHub session
 - [ ] At least 2 commits exist on `master` (`cd $REPO && [ $(git rev-list --count master) -ge 2 ]`)
@@ -43,7 +43,7 @@ Validates that the pr-reviewer agent reviews any git ref — not just PR heads. 
 
 ## Cleanup
 - [ ] `rm test3-branch.md /tmp/agent-003.log`
-- [ ] `rm -rf ~/.cache/code-reviewer/work/44444444-aaaa-bbbb-cccc-555555555555`
+- [ ] `rm -rf ~/.cache/maintainer/pr-reviewer/work/44444444-aaaa-bbbb-cccc-555555555555`
 
 ## Notes
 Last run: 2026-05-01 — passed in ~80s reviewing v0.20.0 release commit. Verdict: approve, 3 nuanced comments on tools.env migration details.

@@ -14,7 +14,7 @@ Specs 004-005 post reviews as a single PR-level comment. Bitbucket Server suppor
 
 ## Goal
 
-After completion, `code-reviewer` parses the Claude review output into individual findings and posts them as Bitbucket inline comments on the relevant file and line. Critical findings are additionally posted as Bitbucket tasks (which block merge until resolved).
+After completion, `maintainer` parses the Claude review output into individual findings and posts them as Bitbucket inline comments on the relevant file and line. Critical findings are additionally posted as Bitbucket tasks (which block merge until resolved).
 
 ## Non-goals
 

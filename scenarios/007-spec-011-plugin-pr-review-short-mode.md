@@ -8,15 +8,15 @@ spec: 011-swap-execution-to-coding-pr-review
 Validates that `REVIEW_MODE=short` invokes `/coding:pr-review <base> short`, skips specialist sub-agents (by design), and still produces a valid verdict JSON. Companion to scenario 005 which covers standard mode with sub-agent dispatch.
 
 ## Setup
-- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the code-reviewer checkout root
-- [ ] code-reviewer at v0.21.3 or higher (`cd $REPO && git describe --tags` — output starts with `v0.21.` or higher)
+- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the maintainer checkout root
+- [ ] maintainer at v0.21.3 or higher (`cd $REPO && git describe --tags` — output starts with `v0.21.` or higher)
 - [ ] `bborbe/coding` plugin installed: `claude plugin list | grep coding`
 - [ ] Local Claude config dir authenticated: `CLAUDE_CONFIG_DIR=~/.claude-agent claude /login`
 - [ ] `gh auth status` shows authenticated GitHub session
-- [ ] `PR_NUMBER` set to any OPEN PR on `bborbe/code-reviewer` (short mode does not require substantive changes):
+- [ ] `PR_NUMBER` set to any OPEN PR on `bborbe/maintainer` (short mode does not require substantive changes):
   ```bash
   export PR_NUMBER=<any-open-pr>
-  gh pr view $PR_NUMBER --repo bborbe/code-reviewer | grep -i state
+  gh pr view $PR_NUMBER --repo bborbe/maintainer | grep -i state
   ```
 
 ## Action

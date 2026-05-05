@@ -15,38 +15,38 @@ frontmatter value is new — it cannot be verified by watcher unit tests alone b
 the controller is the component that materializes the vault task.
 
 ## Prerequisites
-- [ ] Dev cluster is running and healthy (`kubectl get pods -n code-reviewer`)
+- [ ] Dev cluster is running and healthy (`kubectl get pods -n dev`)
 - [ ] Watcher is deployed to dev with `TRUSTED_AUTHORS` set to a known GitHub login
       (e.g. `TRUSTED_AUTHORS=bborbe`); confirm via:
       ```bash
-      kubectl get deployment github-pr-watcher -n code-reviewer -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool | grep TRUSTED_AUTHORS
+      kubectl get deployment github-pr-watcher -n dev -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool | grep TRUSTED_AUTHORS
       ```
 - [ ] A second GitHub account (not in `TRUSTED_AUTHORS`) is available for the
       untrusted-author test; call this account `untrusted-user` below
-- [ ] You can open PRs from both accounts on `bborbe/code-reviewer` (fork or branch)
-- [ ] Vault CLI is available: `vault kv list secret/code-reviewer/tasks/` returns results
+- [ ] You can open PRs from both accounts on `bborbe/maintainer` (fork or branch)
+- [ ] Vault CLI is available: `vault kv list secret/maintainer/tasks/` returns results
 
 ## Sub-scenario A: untrusted-author PR → human_review vault task
 
 ### Action
-- [ ] Open a PR on `bborbe/code-reviewer` from the `untrusted-user` account
+- [ ] Open a PR on `bborbe/maintainer` from the `untrusted-user` account
       (a fork PR or a branch in a fork)
 - [ ] Wait up to one poll cycle (default 5 min) for the watcher to process it
 
 ### Expected
 - [ ] A vault task appears for the PR:
       ```bash
-      vault kv list secret/code-reviewer/tasks/ | grep <pr-number>
+      vault kv list secret/maintainer/tasks/ | grep <pr-number>
       ```
 - [ ] The vault task frontmatter has `phase: human_review` and `status: todo`:
       ```bash
-      vault kv get -format=json secret/code-reviewer/tasks/<task-id> \
+      vault kv get -format=json secret/maintainer/tasks/<task-id> \
         | python3 -c "import sys,json; t=json.load(sys.stdin)['data']['data']; print(t.get('phase'), t.get('status'))"
       # Expected: human_review todo
       ```
 - [ ] The vault task body contains `## Untrusted author`:
       ```bash
-      vault kv get -format=json secret/code-reviewer/tasks/<task-id> \
+      vault kv get -format=json secret/maintainer/tasks/<task-id> \
         | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['data'].get('body',''))" \
         | grep "Untrusted author"
       ```
@@ -55,7 +55,7 @@ the controller is the component that materializes the vault task.
       `phase: in_progress` and `status: in_progress`
 - [ ] No agent pod was spawned for this task (controller does not promote `human_review` tasks):
       ```bash
-      kubectl get pods -n code-reviewer | grep <task-id>
+      kubectl get pods -n dev | grep <task-id>
       # Expected: no matching pod
       ```
 
@@ -66,30 +66,30 @@ the controller is the component that materializes the vault task.
 ### Action
 - [ ] Manually update the vault task frontmatter to promote it for agent processing:
       ```bash
-      vault kv patch secret/code-reviewer/tasks/<task-id> phase=in_progress status=in_progress
+      vault kv patch secret/maintainer/tasks/<task-id> phase=in_progress status=in_progress
       ```
 
 ### Expected
 - [ ] On the next controller cycle (≤ 60 s), a K8s Job is spawned:
       ```bash
-      kubectl get pods -n code-reviewer | grep <task-id>
+      kubectl get pods -n dev | grep <task-id>
       # Expected: pod appears with status Running or Completed
       ```
 - [ ] The agent processes the task and writes a verdict back (check pod logs):
       ```bash
-      kubectl logs -n code-reviewer <pod-name> | tail -20
+      kubectl logs -n dev <pod-name> | tail -20
       ```
 
 ## Sub-scenario C: trusted-author PR → fast-path unchanged
 
 ### Action
-- [ ] Open a PR on `bborbe/code-reviewer` from the trusted account (the login in `TRUSTED_AUTHORS`)
+- [ ] Open a PR on `bborbe/maintainer` from the trusted account (the login in `TRUSTED_AUTHORS`)
 - [ ] Wait up to one poll cycle for the watcher to process it
 
 ### Expected
 - [ ] A vault task appears for the PR with `phase: planning` and `status: in_progress`:
       ```bash
-      vault kv get -format=json secret/code-reviewer/tasks/<task-id> \
+      vault kv get -format=json secret/maintainer/tasks/<task-id> \
         | python3 -c "import sys,json; t=json.load(sys.stdin)['data']['data']; print(t.get('phase'), t.get('status'))"
       # Expected: planning in_progress
       ```
@@ -101,11 +101,11 @@ the controller is the component that materializes the vault task.
 ### Action
 - [ ] Temporarily patch the watcher deployment to unset `TRUSTED_AUTHORS`:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n code-reviewer TRUSTED_AUTHORS-
+      kubectl set env deployment/github-pr-watcher -n dev TRUSTED_AUTHORS-
       ```
 - [ ] Wait for the pod to restart and check logs:
       ```bash
-      kubectl logs -n code-reviewer deployment/github-pr-watcher | grep "trusted authors"
+      kubectl logs -n dev deployment/github-pr-watcher | grep "trusted authors"
       ```
 
 ### Expected
@@ -116,7 +116,7 @@ the controller is the component that materializes the vault task.
 ### Cleanup
 - [ ] Restore the deployment to its previous `TRUSTED_AUTHORS` value:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n code-reviewer TRUSTED_AUTHORS=<original-value>
+      kubectl set env deployment/github-pr-watcher -n dev TRUSTED_AUTHORS=<original-value>
       ```
 
 ## Sub-scenario E: force-push on untrusted PR → trust re-evaluated, stays human_review
@@ -141,7 +141,7 @@ on synchronize must NOT flip the task back into auto-processing).
 - [ ] The vault task for this PR is updated (frontmatter `head_sha` reflects the new SHA), but
       `phase` and `status` remain `human_review` / `todo`:
       ```bash
-      vault kv get -format=json secret/code-reviewer/tasks/<task-id> \
+      vault kv get -format=json secret/maintainer/tasks/<task-id> \
         | python3 -c "import sys,json; t=json.load(sys.stdin)['data']['data']; print(t.get('phase'), t.get('status'), t.get('head_sha'))"
       # Expected: human_review todo <new-sha>
       ```
@@ -153,7 +153,7 @@ on synchronize must NOT flip the task back into auto-processing).
 - [ ] Close or merge the test PRs opened in sub-scenarios A, C, and E
 - [ ] Confirm the watcher is healthy after restore:
       ```bash
-      kubectl get pods -n code-reviewer | grep github-pr-watcher
+      kubectl get pods -n dev | grep github-pr-watcher
       ```
 
 ## Notes — uncovered failure mode

@@ -71,20 +71,20 @@ This sub-scenario is verifiable locally without a cluster.
 ## Sub-scenario B (cluster): no-token pod reviews public repo normally
 
 Requires dev cluster with `GH_TOKEN` temporarily removed from the agent's Config CRD.
-Note: `agent-pr-reviewer` is a `Config` CRD (`agent.benjamin-borbe.de/v1`), not a Deployment.
+Note: `maintainer-agent-pr-reviewer` is a `Config` CRD (`agent.benjamin-borbe.de/v1`), not a Deployment.
 Future Jobs spawned by the task-controller pick up the edited spec; existing in-flight Jobs are unaffected.
 
 ### Action
 - [ ] Temporarily remove the `GH_TOKEN` env entry from the Config CRD:
       ```bash
-      kubectl edit config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE
+      kubectl edit config.agent.benjamin-borbe.de/maintainer-agent-pr-reviewer -n $NAMESPACE
       # In the editor: delete the env entry whose `name: GH_TOKEN` (with valueFrom secretKeyRef)
       # Save and exit. Verify:
-      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+      kubectl get config.agent.benjamin-borbe.de/maintainer-agent-pr-reviewer -n $NAMESPACE \
         -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
       # Expected: 0
       ```
-- [ ] Open a PR on `bborbe/code-reviewer` (public repo) from the trusted author account
+- [ ] Open a PR on `bborbe/maintainer` (public repo) from the trusted author account
 - [ ] Wait for the next agent Job to be spawned and process it (≤ one full pipeline cycle)
 
 ### Expected
@@ -94,14 +94,14 @@ Future Jobs spawned by the task-controller pick up the edited spec; existing in-
 ### Cleanup
 - [ ] Restore the `GH_TOKEN` env entry in the Config CRD by re-editing it:
       ```bash
-      kubectl edit config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE
+      kubectl edit config.agent.benjamin-borbe.de/maintainer-agent-pr-reviewer -n $NAMESPACE
       # Re-add the env entry:
       #   - name: GH_TOKEN
       #     valueFrom:
       #       secretKeyRef:
-      #         name: agent-pr-reviewer
+      #         name: maintainer-agent-pr-reviewer
       #         key: GH_TOKEN
-      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+      kubectl get config.agent.benjamin-borbe.de/maintainer-agent-pr-reviewer -n $NAMESPACE \
         -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
       # Expected: 1
       ```
@@ -115,14 +115,14 @@ Continues from Sub-scenario B (Config CRD has `GH_TOKEN` env entry removed).
       ```bash
       # Force the watcher to re-trigger the private PR task:
       # Either open a new PR on bborbe/trading, or re-promote an existing task:
-      vault kv patch secret/code-reviewer/tasks/<trading-task-id> phase=in_progress status=in_progress
+      vault kv patch secret/maintainer/tasks/<trading-task-id> phase=in_progress status=in_progress
       ```
 - [ ] Wait for the next agent Job to be spawned, process and complete
 
 ### Expected
 - [ ] The vault task for the private PR is updated to `phase: human_review`:
       ```bash
-      vault kv get -format=json secret/code-reviewer/tasks/<trading-task-id> \
+      vault kv get -format=json secret/maintainer/tasks/<trading-task-id> \
         | python3 -c "import sys,json; t=json.load(sys.stdin)['data']['data']; print(t.get('phase'), t.get('status'))"
       # Expected: human_review (or needs_input depending on controller mapping)
       ```
@@ -142,21 +142,21 @@ diagnostic similar to the empty-token case.
 - [ ] Restore the `GH_TOKEN` env entry in the Config CRD if currently removed (see Sub-scenario B cleanup), then patch the underlying secret to a known-bad value:
       ```bash
       # Capture the original token first (for restoration):
-      ORIG_GH_TOKEN=$(kubectl get secret agent-pr-reviewer -n $NAMESPACE \
+      ORIG_GH_TOKEN=$(kubectl get secret maintainer-agent-pr-reviewer -n $NAMESPACE \
         -o jsonpath='{.data.GH_TOKEN}' | base64 -d)
       echo "$ORIG_GH_TOKEN" > /tmp/scenario-015/orig-gh-token  # save for cleanup; chmod 600
       chmod 600 /tmp/scenario-015/orig-gh-token
 
       # Patch the secret to a known-bad token:
       BAD=$(printf 'gho_invalid_token_for_test' | base64)
-      kubectl patch secret agent-pr-reviewer -n $NAMESPACE \
+      kubectl patch secret maintainer-agent-pr-reviewer -n $NAMESPACE \
         -p "{\"data\":{\"GH_TOKEN\":\"$BAD\"}}"
       ```
 
 ### Action
 - [ ] Trigger a private-repo PR (e.g., `bborbe/trading` PR #110) while the Config CRD has the invalid `GH_TOKEN`:
       ```bash
-      vault kv patch secret/code-reviewer/tasks/<trading-task-id> phase=in_progress status=in_progress
+      vault kv patch secret/maintainer/tasks/<trading-task-id> phase=in_progress status=in_progress
       ```
 - [ ] Wait for the next agent Job to be spawned, process and complete
 
@@ -173,7 +173,7 @@ diagnostic similar to the empty-token case.
 - [ ] Restore the original `GH_TOKEN` secret value:
       ```bash
       ORIG=$(base64 < /tmp/scenario-015/orig-gh-token)
-      kubectl patch secret agent-pr-reviewer -n $NAMESPACE \
+      kubectl patch secret maintainer-agent-pr-reviewer -n $NAMESPACE \
         -p "{\"data\":{\"GH_TOKEN\":\"$ORIG\"}}"
       shred -u /tmp/scenario-015/orig-gh-token 2>/dev/null || rm -f /tmp/scenario-015/orig-gh-token
       ```
@@ -187,10 +187,10 @@ diagnostic similar to the empty-token case.
 - [ ] Remove temp files: `rm -rf /tmp/scenario-015`
 - [ ] Confirm the agent Config CRD is healthy with `GH_TOKEN` restored:
       ```bash
-      kubectl get config.agent.benjamin-borbe.de/agent-pr-reviewer -n $NAMESPACE \
+      kubectl get config.agent.benjamin-borbe.de/maintainer-agent-pr-reviewer -n $NAMESPACE \
         -o jsonpath='{.spec.env}' | grep -c GH_TOKEN
       # Expected: 1
-      kubectl get pods -n $NAMESPACE -l app=agent-pr-reviewer
+      kubectl get pods -n $NAMESPACE -l app=maintainer-agent-pr-reviewer
       ```
 
 ## Notes

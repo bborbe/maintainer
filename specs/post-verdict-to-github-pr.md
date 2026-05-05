@@ -110,7 +110,7 @@ After this work, completing a pr-review task results in a real GitHub PR review 
 cd agent/pr-reviewer && make precommit
 ```
 
-Local smoke test against PR #2 (will post a real review to bborbe/code-reviewer PR #2):
+Local smoke test against PR #2 (will post a real review to bborbe/maintainer PR #2):
 
 ```
 cd agent/pr-reviewer/cmd/run-task && make run-dummy-task
@@ -123,7 +123,7 @@ After deploy to dev:
 ```
 # Trigger one PR via the watcher; observe controller materialize the vault task,
 # then confirm the review event appears on GitHub.
-kubectlquant -n dev logs <agent-pr-reviewer-job-pod> | grep -E "gh pr review|gh api /user"
+kubectlquant -n dev logs <pr-reviewer-agent-job-pod> | grep -E "gh pr review|gh api /user"
 
 # Manually verify in GitHub UI: PR's "Reviews" panel shows a review by the bot
 # account with the expected verdict type and summary body.

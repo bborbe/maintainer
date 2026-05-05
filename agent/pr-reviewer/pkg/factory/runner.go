@@ -34,7 +34,7 @@ type RunConfig struct {
 	Deliverer       agentlib.ResultDeliverer
 }
 
-// RunAgent performs the shared startup + execution flow for the agent-pr-reviewer binary.
+// RunAgent performs the shared startup + execution flow for the maintainer-agent-pr-reviewer binary.
 // Both entry points (Kafka pod main.go and local CLI cmd/run-task) call this after
 // resolving their I/O specifics — task content source and result deliverer.
 //

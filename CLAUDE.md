@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Code-review agent pipeline — Pattern B Jobs consume PR tasks, post verdicts back.
+Maintainer agent pipeline — Pattern B Jobs consume PR tasks, post verdicts back. PR-reviewer is the first agent; build-fixer / dep-updater / sentry-triager are planned siblings.
 
 ## Dark Factory Workflow
 
@@ -135,21 +135,22 @@ This project follows the [coding-guidelines](https://github.com/bborbe/coding-gu
 Multi-module layout (one `go.mod` per service), modeled after `bborbe/agent`. Repo root has **no** `go.mod`.
 
 ```
-code-reviewer/
+maintainer/
 ├── .golangci.yml, .osv-scanner.toml, .trivyignore   shared tooling
 ├── Makefile, Makefile.folder, Makefile.*            root delegation
 ├── common.env, default.env, dev.env, prod.env       branch-based config
 ├── CHANGELOG.md                                     single global changelog
-├── agent/pr-reviewer/                               Pattern B Job (current)
+├── watcher/github-pr/                               PR watcher (existing)
+├── agent/pr-reviewer/                               Pattern B Job (existing)
 │   ├── go.mod
 │   ├── main.go, main_test.go                       k8s job entry (TASK_CONTENT)
 │   ├── pkg/factory/                                TaskRunner + Kafka deliverer
 │   ├── pkg/prompts/                                embedded workflow + output-format
 │   ├── agent/.claude/CLAUDE.md                     headless agent guardrails
 │   ├── cmd/run-task/                               local test runner (task file)
-│   ├── cmd/cli/                                    legacy direct-CLI reviewer
+│   ├── cmd/cli/                                    pr-reviewer CLI (binary `pr-reviewer`)
 │   └── k8s/                                        Config CRD + secret + PVC + priority + quota
-└── (future) watcher/github/, watcher/bitbucket/, agent/repo-review/
+└── (future) watcher/github-build/, watcher/sentry/, watcher/deps/, agent/build-fixer/, agent/sentry-triager/, agent/dep-updater/, agent/repo-reviewer/
 ```
 
 ### Entry points

@@ -49,4 +49,4 @@ With `clone-pr-repo-into-workdir` naively implemented, every review task re-clon
 ## Related
 
 - Builds on: `clone-pr-repo-into-workdir`
-- Touches: `agent/pr-reviewer/k8s/agent-pr-reviewer-pvc.yaml` (size bump), `docker-entrypoint.sh` or `pkg/prompts/workflow.md`
+- Touches: `agent/pr-reviewer/k8s/maintainer-agent-pr-reviewer-pvc.yaml` (size bump), `docker-entrypoint.sh` or `pkg/prompts/workflow.md`

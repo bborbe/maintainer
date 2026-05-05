@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package factory wires concrete dependencies for the agent-pr-reviewer binary.
+// Package factory wires concrete dependencies for the maintainer-agent-pr-reviewer binary.
 //
 // All factory functions follow the Create* prefix convention and contain
 // zero business logic — they compose constructors with config.

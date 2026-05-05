@@ -24,14 +24,14 @@ make install   # builds ./cmd/run-task → $GOPATH/bin/run-task
 
 ## Configuration
 
-`~/.code-reviewer.yaml` — see repo root [README.md](../../README.md) for the full schema.
+`~/.config/maintainer/pr-reviewer.yaml` — see repo root [README.md](../../README.md) for the full schema.
 
 Minimum:
 
 ```yaml
 repos:
   - url: https://github.com/bborbe/maintainer
-    path: ~/Documents/workspaces/code-reviewer
+    path: ~/Documents/workspaces/maintainer
 ```
 
 Environment variables:
@@ -44,7 +44,7 @@ Environment variables:
 ## How It Works
 
 1. Parse PR URL → platform (GitHub / Bitbucket), owner/project, repo, PR number
-2. Load `~/.code-reviewer.yaml`, find repo path
+2. Load `~/.config/maintainer/pr-reviewer.yaml`, find repo path
 3. Fetch PR metadata (source + target branch) via GitHub / Bitbucket REST API
 4. `git fetch` the local clone, then `git clone --local --branch <src>` into `/tmp/<pr-N>`
 5. Pull the `claude-yolo` container image, mount the clone + `~/.claude-yolo` config
@@ -115,4 +115,5 @@ agent/pr-reviewer/
 
 - Repo root [README.md](../../README.md) — top-level project overview
 - Goal [[Build Code Review Agent Pipeline]]
-- Task [[Transform code-reviewer to multi-module layout]] (v0.9.0, this migration)
+- Task [[Transform code-reviewer to multi-module layout]] (v0.9.0, original migration)
+- Task [[Rename code-reviewer to maintainer]] (v0.24.0, current rename)

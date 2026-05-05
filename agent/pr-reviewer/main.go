@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command agent-pr-reviewer is the Kafka entry point for the PR-review
+// Command maintainer-agent-pr-reviewer is the Kafka entry point for the PR-review
 // agent — spawned as a K8s Job by task/executor with TASK_CONTENT +
 // TASK_ID + PHASE + KAFKA_BROKERS env. For local CLI mode (file-based),
 // see cmd/run-task/main.go.
@@ -76,7 +76,7 @@ type application struct {
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
-	glog.V(2).Infof("agent-pr-reviewer started phase=%s", a.Phase)
+	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
 
 	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {

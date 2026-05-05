@@ -109,7 +109,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
 ### Action
 - [ ] Run `cmd/run-task` with a malformed (two-segment) allowlist:
       ```bash
-      REPO_ALLOWLIST=bborbe/code-reviewer \
+      REPO_ALLOWLIST=bborbe/maintainer \
       BRANCH=dev \
       TASK_FILE=/tmp/scenario-013/out-of-scope-task.md \
       ./agent/pr-reviewer/run-task 2>&1 | head -10
@@ -117,7 +117,7 @@ This scenario is verifiable **locally** using `cmd/run-task` — no live cluster
 
 ### Expected
 - [ ] Agent exits non-zero immediately (startup failure before any PR processing)
-- [ ] Output contains a message naming the malformed entry `bborbe/code-reviewer`
+- [ ] Output contains a message naming the malformed entry `bborbe/maintainer`
       and mentioning the required `host/owner/repo` format
 
 ## Sub-scenario D: empty REPO_ALLOWLIST → allow-all (backwards-compatibility)

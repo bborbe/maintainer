@@ -1,6 +1,12 @@
-# Code Reviewer
+# Maintainer
 
-PR review tooling backed by Claude Code. Ships in three modes:
+Autonomous repo-maintenance agents backed by Claude Code. Watchers detect signals (PRs, failed builds, alerts), Pattern B Job agents act on them.
+
+Ships today: PR reviewer + GitHub PR watcher. Planned siblings: build-fixer, dep-updater, sentry-triager, repo-reviewer.
+
+## pr-reviewer (current)
+
+Three modes:
 
 | Mode | Entry | Use case |
 |---|---|---|
@@ -8,7 +14,7 @@ PR review tooling backed by Claude Code. Ships in three modes:
 | **Local task runner** | `agent/pr-reviewer/cmd/run-task/main.go` | Dev loop for the agent — reads a task markdown file, writes result back |
 | **Kubernetes Job agent** | `agent/pr-reviewer/main.go` | Autonomous PR review triggered by the [agent task controller](https://github.com/bborbe/agent); deployed to dev + prod |
 
-Repo follows the multi-module layout of [bborbe/agent](https://github.com/bborbe/agent): root has no `go.mod`, the service lives at `agent/pr-reviewer/` with its own module.
+Multi-module layout: root has no `go.mod`; each service (`agent/pr-reviewer/`, `watcher/github-pr/`) has its own.
 
 ## Standalone CLI
 
@@ -17,10 +23,10 @@ Takes a GitHub or Bitbucket Server PR URL, runs Claude Code review in a `claude-
 ```bash
 go install github.com/bborbe/maintainer/agent/pr-reviewer/cmd/cli@latest
 
-code-reviewer [-v] [--comment-only] <pr-url>
+pr-reviewer [-v] [--comment-only] <pr-url>
 ```
 
-Config `~/.code-reviewer.yaml`:
+Config `~/.config/maintainer/pr-reviewer.yaml`:
 
 ```yaml
 github:
@@ -29,7 +35,7 @@ model: sonnet                          # sonnet | opus | haiku
 autoApprove: false                     # only post comments unless true
 repos:
   - url: https://github.com/bborbe/maintainer
-    path: ~/Documents/workspaces/code-reviewer
+    path: ~/Documents/workspaces/maintainer
     reviewCommand: /code-review        # optional
 ```
 
@@ -47,15 +53,15 @@ make buca BRANCH=dev     # build + push + apply in dev
 make buca BRANCH=prod    # same for prod
 ```
 
-`make buca` runs image build → `docker push docker.quant.benjamin-borbe.de/agent-pr-reviewer:<branch>` → `kubectlquant apply` of rendered manifests in `k8s/`.
+`make buca` runs image build → `docker push docker.quant.benjamin-borbe.de/maintainer-agent-pr-reviewer:<branch>` → `kubectlquant apply` of rendered manifests in `k8s/`.
 
 ### Prerequisites
 
 - Teamvault entries:
   - `SENTRY_DSN_KEY` — Sentry DSN (URL field)
   - `PR_REVIEWER_GITHUB_TOKEN_KEY` — GitHub PAT (Password field) with `repo` + `read:org` scopes
-- PVC `agent-pr-reviewer` seeded with a valid `.claude/` config (copy from `agent-claude` PVC or run one-time `claude login` in a temp pod; see [claude-oauth-setup.md](https://github.com/bborbe/agent/blob/master/agent/claude/docs/claude-oauth-setup.md))
-- Config CR registered with the task controller (handled by `k8s/agent-pr-reviewer.yaml`)
+- PVC `agent-pr-reviewer` seeded with a valid `.claude/` config (copy from `agent-claude` PVC or run one-time `claude login` in a temp pod; see [claude-oauth-setup.md](https://github.com/bborbe/agent/blob/master/agent/claude/docs/claude-oauth-setup.md)). PVC name preserved across the `code-reviewer` → `maintainer` rename to avoid OAuth re-seed.
+- Config CR registered with the task controller (handled by `k8s/maintainer-agent-pr-reviewer.yaml`)
 
 ### Trigger a review
 
@@ -84,11 +90,11 @@ Useful for iterating on prompts (`pkg/prompts/workflow.md`, `pkg/prompts/output-
 ## Layout
 
 ```
-code-reviewer/
+maintainer/
 ├── agent/pr-reviewer/          service module (own go.mod)
 │   ├── main.go                 k8s Job entry
 │   ├── cmd/
-│   │   ├── cli/                standalone CLI
+│   │   ├── cli/                standalone pr-reviewer CLI
 │   │   └── run-task/           local file-driven runner
 │   ├── pkg/
 │   │   ├── bitbucket/          Bitbucket Data Center REST client (CLI only)
@@ -104,7 +110,7 @@ code-reviewer/
 │   ├── k8s/                    Config CRD, Secret, PVC, PriorityClass, ResourceQuota, Makefile
 │   ├── Dockerfile              multi-stage build (Go + claude-code + gh + git)
 │   └── agent/.claude/CLAUDE.md headless-review guardrails
-├── watcher/github/             GitHub PR watcher service (own go.mod)
+├── watcher/github-pr/          GitHub PR watcher service (own go.mod)
 │   └── pkg/                    poll loop, GitHub client, cursor, Kafka publisher
 ├── Makefile.*                  shared includes (variables, env, docker, k8s, folder, precommit)
 ├── common.env / dev.env / prod.env
@@ -126,3 +132,4 @@ Fallback: heuristic section-header scan (`## Must Fix`, `## Blocking`). See [`pk
 BSD 2-Clause License. See [LICENSE](LICENSE).
 
 <!-- 2026-05-03: prod e2e validation marker — first usable code reviewer agent shipped -->
+<!-- 2026-05-05: renamed code-reviewer → maintainer; multi-agent suite -->

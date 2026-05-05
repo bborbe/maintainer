@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command run-task is the local-CLI entry point for agent-pr-reviewer.
+// Command run-task is the local-CLI entry point for maintainer-agent-pr-reviewer.
 //
 // Reads a markdown task file from disk, runs the agent against it, and
 // writes the updated content back to the same file. Mirrors the Kafka

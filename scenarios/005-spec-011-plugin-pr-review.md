@@ -8,15 +8,15 @@ spec: 011-swap-execution-to-coding-pr-review
 Validates that the execution phase invokes the `/coding:pr-review` slash command inside the prepared worktree, dispatches at least one specialist sub-agent, translates the report into the verdict JSON schema, and cleans up the worktree. Standard mode (default `REVIEW_MODE`) is the path that fans out to specialists — required by spec-011 acceptance criterion #102.
 
 ## Setup
-- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the code-reviewer checkout root
-- [ ] code-reviewer at v0.21.3 or higher (`cd $REPO && git describe --tags` — output starts with `v0.21.` or higher)
+- [ ] `REPO=$(git rev-parse --show-toplevel)` resolves to the maintainer checkout root
+- [ ] maintainer at v0.21.3 or higher (`cd $REPO && git describe --tags` — output starts with `v0.21.` or higher)
 - [ ] `bborbe/coding` plugin installed: `claude plugin list | grep coding`
 - [ ] Local Claude config dir authenticated: `CLAUDE_CONFIG_DIR=~/.claude-agent claude /login`
 - [ ] `gh auth status` shows authenticated GitHub session
-- [ ] `PR_NUMBER` set to an OPEN PR on `bborbe/code-reviewer` with **substantive Go code changes** (not a trivial README change — `/coding:pr-review` skips specialists for trivial diffs):
+- [ ] `PR_NUMBER` set to an OPEN PR on `bborbe/maintainer` with **substantive Go code changes** (not a trivial README change — `/coding:pr-review` skips specialists for trivial diffs):
   ```bash
   export PR_NUMBER=<pr-with-go-changes>
-  gh pr diff $PR_NUMBER --repo bborbe/code-reviewer | grep -c '^[+-].*\.go' # expect > 5
+  gh pr diff $PR_NUMBER --repo bborbe/maintainer | grep -c '^[+-].*\.go' # expect > 5
   ```
 
 ## Action
@@ -40,7 +40,7 @@ Validates that the execution phase invokes the `/coding:pr-review` slash command
   ```
 - [ ] `summary` field is a non-empty string
 - [ ] `concerns_addressed` is a non-empty list AND at least one entry references a sub-agent name (`go-quality-*`, `go-security-*`, etc.) or a Must-Fix/Should-Fix/Nice-to-Have bucket label
-- [ ] Workdir cleaned up (no stale worktree under `~/.cache/code-reviewer/work/` for this task UUID)
+- [ ] Workdir cleaned up (no stale worktree under `~/.cache/maintainer/pr-reviewer/work/` for this task UUID)
 - [ ] `echo $?` is `0` after the run
 
 ## Cleanup
