@@ -1,8 +1,10 @@
 ---
+status: approved
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-05-05T20:40:29Z"
+branch: dark-factory/github-build-watcher-mvp
 ---
 
 ## Summary
