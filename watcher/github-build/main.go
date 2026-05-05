@@ -58,7 +58,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if len(repoAllowlist) == 0 {
 		return errors.Errorf(
 			ctx,
-			"REPO_ALLOWLIST must be non-empty: set at least one owner/repo entry",
+			"REPO_ALLOWLIST must be non-empty: set at least one host/owner/repo entry",
 		)
 	}
 	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))

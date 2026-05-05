@@ -14,7 +14,7 @@ package filter
 // RepoFilter decides whether to skip a repo in a poll cycle.
 // Skip returns true if the repo should be excluded.
 type RepoFilter interface {
-	Skip(repoKey string) bool // repoKey = "owner/repo"
+	Skip(repoKey string) bool // repoKey = "host/owner/repo"
 }
 
 // RepoFilters is an OR-composite: skip if ANY filter votes to skip.

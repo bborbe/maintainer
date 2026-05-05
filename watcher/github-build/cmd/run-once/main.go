@@ -29,10 +29,10 @@ type application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	GHToken       string           `required:"true" arg:"gh-token"       env:"GH_TOKEN"       usage:"GitHub token (read scope sufficient)"                    display:"length"`
+	GHToken       string           `required:"true" arg:"gh-token"       env:"GH_TOKEN"       usage:"GitHub token (read scope sufficient)"                                               display:"length"`
 	KafkaBrokers  libkafka.Brokers `required:"true" arg:"kafka-brokers"  env:"KAFKA_BROKERS"  usage:"Comma-separated Kafka broker list"`
 	Stage         string           `required:"true" arg:"stage"          env:"STAGE"          usage:"Deployment stage (dev|prod)"`
-	RepoAllowlist string           `required:"true" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated owner/repo allowlist; MUST be non-empty"`
+	RepoAllowlist string           `required:"true" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -43,7 +43,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if len(repoAllowlist) == 0 {
 		return errors.Errorf(
 			ctx,
-			"REPO_ALLOWLIST must be non-empty: set at least one owner/repo entry",
+			"REPO_ALLOWLIST must be non-empty: set at least one host/owner/repo entry",
 		)
 	}
 

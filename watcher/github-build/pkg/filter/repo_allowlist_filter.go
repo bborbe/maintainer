@@ -12,12 +12,18 @@ import (
 	"github.com/bborbe/errors"
 )
 
-// repoAllowlistEntryPattern validates a single repo entry: owner/repo (two slash-delimited segments).
-var repoAllowlistEntryPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`)
+// repoAllowlistEntryPattern validates a single host-qualified repo entry.
+// Required shape: host/owner/repo (three slash-delimited segments, no trailing .git).
+var repoAllowlistEntryPattern = regexp.MustCompile(
+	`^[a-zA-Z0-9.-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$`,
+)
 
-// ParseRepoAllowlist parses a comma-separated allowlist string into a slice of validated
-// "owner/repo" keys. Empty string returns (nil, nil). Whitespace-only entries and trailing
-// commas are silently dropped. Any entry not matching the required shape causes an error.
+// ParseRepoAllowlist parses a comma-separated allowlist string into a slice
+// of validated host-qualified repo keys ("host/owner/repo").
+//
+// Empty string and unset env var both return (nil, nil) — allow-all.
+// Whitespace-only entries and entries produced by trailing commas are silently
+// dropped. Any entry that does not match the required shape causes an error.
 func ParseRepoAllowlist(ctx context.Context, raw string) ([]string, error) {
 	if raw == "" {
 		return nil, nil
@@ -31,7 +37,7 @@ func ParseRepoAllowlist(ctx context.Context, raw string) ([]string, error) {
 		if !repoAllowlistEntryPattern.MatchString(entry) {
 			return nil, errors.Errorf(
 				ctx,
-				"repo allowlist entry %q does not match required format owner/repo (pattern: ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$)",
+				"repo allowlist entry %q does not match required format host/owner/repo (pattern: ^[a-zA-Z0-9.-]+/[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$)",
 				entry,
 			)
 		}

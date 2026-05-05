@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.19
+
+- fix(watcher/github-build): allowlist parser accepts host-qualified `host/owner/repo` entries (matches PR watcher; build watcher would previously refuse startup against the shared `REPO_ALLOWLIST` env value)
+
 ## v0.23.18
 
 - fix(watcher/github-build): splitRepoKey now strips the host prefix from `host/owner/repo` allowlist entries so GitHub API calls use the correct `owner` and `repo` (regression from spec-015)
