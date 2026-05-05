@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.15
+
+- feat(watcher/github-build): implement core state machine, cursor persistence, filter chain, and Prometheus metrics — `Poll()` converts GitHub Actions state into `CreateTaskCommand` Kafka messages with green/red episode tracking, idempotent publish, and atomic cursor writes
+
 ## v0.23.14
 
 - feat(watcher/github-build): implement GitHub Actions API client (`GitHubClient` interface with `GetWorkflowRuns` and `GetDefaultBranch`), task ID derivation (`DeriveTaskID` with build-watcher-specific UUID namespace), and Kafka publisher (`CommandPublisher.PublishCreate`) with counterfeiter mocks and Ginkgo/Gomega test coverage ≥80%

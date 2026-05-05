@@ -1,0 +1,460 @@
+// Copyright (c) 2026 Benjamin Borbe All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package pkg_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"time"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/bborbe/maintainer/watcher/github-build/pkg"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/mocks"
+)
+
+var _ = Describe("Watcher", func() {
+	var ctx context.Context
+	var ghClient *mocks.GitHubClient
+	var publisher *mocks.CommandPublisher
+	var metrics *mocks.Metrics
+	var tmpDir string
+	var cursorPath string
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		tmpDir = GinkgoT().TempDir()
+		cursorPath = filepath.Join(tmpDir, "cursor.json")
+		ghClient = new(mocks.GitHubClient)
+		publisher = new(mocks.CommandPublisher)
+		metrics = new(mocks.Metrics)
+	})
+
+	makeWatcher := func(allowlist []string) pkg.Watcher {
+		return pkg.NewWatcher(
+			ghClient,
+			publisher,
+			metrics,
+			filter.RepoFilters{},
+			allowlist,
+			cursorPath,
+		)
+	}
+
+	Describe("Poll", func() {
+		Context("cold start (empty cursor) + repo currently red", func() {
+			It("treats cold start as green and publishes on first red", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "CI",
+						HeadSHA:    "sha-abc",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+						CreatedAt:  time.Now(),
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, cmd := publisher.PublishCreateArgsForCall(0)
+				Expect(string(cmd.TaskIdentifier)).NotTo(BeEmpty())
+				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-abc"))
+
+				// verify cursor updated to red
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(loaded.Repos["owner/repo"].LastKnownState).To(Equal("red"))
+				Expect(loaded.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal("sha-abc"))
+			})
+		})
+
+		Context("green → green", func() {
+			It("does not publish", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "success", CreatedAt: time.Now()},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+
+				// second poll still green
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("green → red", func() {
+			It("publishes task and updates cursor", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// first poll: green
+				ghClient.GetWorkflowRunsReturnsOnCall(0, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "success", CreatedAt: time.Now()},
+				}, nil)
+				// second poll: red
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "CI",
+						HeadSHA:    "sha-b",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/2",
+						CreatedAt:  time.Now(),
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, cmd := publisher.PublishCreateArgsForCall(0)
+				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-b"))
+				Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
+			})
+		})
+
+		Context("red → red (same SHA)", func() {
+			It("does not re-publish and keeps episode SHA", func() {
+				sha := "sha-abc"
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						HeadSHA:    sha,
+						Conclusion: "failure",
+						CreatedAt:  time.Now(),
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				// second poll: same SHA still failing
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1)) // no new publish
+			})
+		})
+
+		Context("red → red (different SHA from layered commit)", func() {
+			It("does not re-publish and keeps the original episode SHA", func() {
+				t1 := time.Now()
+				t2 := t1.Add(time.Minute)
+
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// first poll: red with sha-a
+				ghClient.GetWorkflowRunsReturnsOnCall(0, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "failure", CreatedAt: t1},
+				}, nil)
+				// second poll: red with sha-b (new commit, still failing)
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-b", Conclusion: "failure", CreatedAt: t2},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				_, firstCmd := publisher.PublishCreateArgsForCall(0)
+				Expect(firstCmd.Frontmatter["episode_sha"]).To(Equal("sha-a"))
+
+				Expect(w.Poll(ctx)).To(Succeed())
+				// no new publish — episode is locked on first red SHA
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				// cursor still holds original episode SHA
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(loaded.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal("sha-a"))
+			})
+		})
+
+		Context("red → green", func() {
+			It("clears episode SHA and does not publish", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// first poll: red
+				ghClient.GetWorkflowRunsReturnsOnCall(0, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "failure", CreatedAt: time.Now()},
+				}, nil)
+				// second poll: green
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-b", Conclusion: "success", CreatedAt: time.Now()},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1)) // no new publish
+
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(loaded.Repos["owner/repo"].LastKnownState).To(Equal("green"))
+				Expect(loaded.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal(""))
+			})
+		})
+
+		Context("undefined state (zero qualifying runs)", func() {
+			It("skips the repo without updating cursor or publishing", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// only cancelled runs — all filtered out
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						HeadSHA:    "sha-a",
+						Conclusion: "cancelled",
+						CreatedAt:  time.Now(),
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				// repo entry is created but state stays at zero-value ""
+				Expect(loaded.Repos["owner/repo"].LastKnownState).To(Equal(""))
+			})
+		})
+
+		Context("Kafka failure", func() {
+			It("does not update cursor so next poll retries", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "failure", CreatedAt: time.Now()},
+				}, nil)
+				publisher.PublishCreateReturns(os.ErrProcessDone)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed()) // poll succeeds; kafka error is logged
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				// cursor must NOT have been updated to red
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(loaded.Repos["owner/repo"].LastKnownState).To(Equal(""))
+				Expect(loaded.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal(""))
+			})
+		})
+
+		Context("GitHub API error for one repo", func() {
+			It("skips that repo and continues polling remaining repos", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// repo-a: API error
+				ghClient.GetWorkflowRunsReturnsOnCall(0, nil, os.ErrNotExist)
+				// repo-b: success (red)
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-b", Conclusion: "failure", CreatedAt: time.Now()},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo-a", "owner/repo-b"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				// repo-b must still have been processed
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			})
+		})
+
+		Context("rate-limit error", func() {
+			It("terminates poll loop early for remaining repos", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// repo-a: rate limited
+				ghClient.GetWorkflowRunsReturnsOnCall(0, nil, pkg.ErrRateLimited)
+				// repo-b: would succeed, but should not be reached
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-b", Conclusion: "failure", CreatedAt: time.Now()},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo-a", "owner/repo-b"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				// repo-b was not reached due to rate-limit break
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+				// rate_limited error metric incremented once
+				Expect(metrics.IncPollErrorCallCount()).To(Equal(1))
+				Expect(metrics.IncPollErrorArgsForCall(0)).To(Equal("rate_limited"))
+			})
+		})
+
+		Context("corrupt cursor", func() {
+			It("returns error and does not publish", func() {
+				Expect(os.WriteFile(cursorPath, []byte("{invalid-json"), 0600)).To(Succeed())
+
+				w := makeWatcher([]string{"owner/repo"})
+				err := w.Poll(ctx)
+				Expect(err).To(HaveOccurred())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("worked example: green → red → red(layered) → green → red (new episode)", func() {
+			It("correctly tracks episode boundaries and task IDs", func() {
+				t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+				t1 := t0.Add(time.Hour)
+				t2 := t1.Add(time.Hour)
+				t3 := t2.Add(time.Hour)
+				t4 := t3.Add(time.Hour)
+
+				ghClient.GetDefaultBranchReturns("main", nil)
+
+				// t0: green (success)
+				ghClient.GetWorkflowRunsReturnsOnCall(0, []pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "CI",
+						HeadSHA:    "sha-green",
+						Conclusion: "success",
+						CreatedAt:  t0,
+					},
+				}, nil)
+				// t1: commit A breaks build
+				ghClient.GetWorkflowRunsReturnsOnCall(1, []pkg.WorkflowRun{
+					{WorkflowID: 1, Name: "CI", HeadSHA: "sha-a", Conclusion: "failure",
+						HTMLURL: "https://github.com/owner/repo/actions/runs/1", CreatedAt: t1},
+				}, nil)
+				// t2: commit B layered, still red with different SHA
+				ghClient.GetWorkflowRunsReturnsOnCall(2, []pkg.WorkflowRun{
+					{WorkflowID: 1, Name: "CI", HeadSHA: "sha-b", Conclusion: "failure",
+						HTMLURL: "https://github.com/owner/repo/actions/runs/2", CreatedAt: t2},
+				}, nil)
+				// t3: fixed → green
+				ghClient.GetWorkflowRunsReturnsOnCall(3, []pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "CI",
+						HeadSHA:    "sha-b",
+						Conclusion: "success",
+						CreatedAt:  t3,
+					},
+				}, nil)
+				// t4: commit C breaks build — new episode
+				ghClient.GetWorkflowRunsReturnsOnCall(4, []pkg.WorkflowRun{
+					{WorkflowID: 1, Name: "CI", HeadSHA: "sha-c", Conclusion: "failure",
+						HTMLURL: "https://github.com/owner/repo/actions/runs/3", CreatedAt: t4},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+
+				// t0: green → no publish
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+
+				// t1: green → red → publish with episode sha-a
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, cmd1 := publisher.PublishCreateArgsForCall(0)
+				Expect(cmd1.Frontmatter["episode_sha"]).To(Equal("sha-a"))
+
+				// t2: red → red (sha-b) → no publish, episode SHA stays sha-a
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+
+				cursor, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cursor.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal("sha-a"))
+
+				// t3: red → green → no publish
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				cursor, err = pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cursor.Repos["owner/repo"].LastKnownState).To(Equal("green"))
+				Expect(cursor.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal(""))
+
+				// t4: green → red with sha-c → new publish, new episode
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(publisher.PublishCreateCallCount()).To(Equal(2))
+				_, cmd4 := publisher.PublishCreateArgsForCall(1)
+				Expect(cmd4.Frontmatter["episode_sha"]).To(Equal("sha-c"))
+
+				// Task IDs must differ (different episodes)
+				Expect(cmd1.TaskIdentifier).NotTo(Equal(cmd4.TaskIdentifier))
+			})
+		})
+
+		Context("episode SHA: earliest failing run chosen", func() {
+			It("picks the HeadSHA of the earliest failing run across workflows", func() {
+				early := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+				late := early.Add(time.Hour)
+
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "CI",
+						HeadSHA:    "sha-late",
+						Conclusion: "failure",
+						CreatedAt:  late,
+					},
+					{
+						WorkflowID: 2,
+						Name:       "Deploy",
+						HeadSHA:    "sha-early",
+						Conclusion: "failure",
+						CreatedAt:  early,
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, cmd := publisher.PublishCreateArgsForCall(0)
+				// earliest failing run is sha-early (smaller CreatedAt)
+				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-early"))
+			})
+		})
+
+		Context("deduplication: latest run per workflow kept", func() {
+			It("considers only the latest run per WorkflowID", func() {
+				t1 := time.Now()
+				t2 := t1.Add(time.Minute)
+
+				ghClient.GetDefaultBranchReturns("main", nil)
+				// Workflow 1 had a failure, then a success — latest is success
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-old", Conclusion: "failure", CreatedAt: t1},
+					{WorkflowID: 1, HeadSHA: "sha-new", Conclusion: "success", CreatedAt: t2},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				// latest run is success → state is green → no publish
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("assignee contract", func() {
+			It("sets assignee to build-fixer-agent in the task command", func() {
+				ghClient.GetDefaultBranchReturns("main", nil)
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{WorkflowID: 1, HeadSHA: "sha-a", Conclusion: "failure", CreatedAt: time.Now()},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, cmd := publisher.PublishCreateArgsForCall(0)
+				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+			})
+		})
+	})
+})

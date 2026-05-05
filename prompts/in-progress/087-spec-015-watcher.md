@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [015-github-build-watcher-mvp]
+summary: Implemented core state machine (cursor, filter, metrics, watcher) for watcher/github-build with all state transitions, Kafka failure idempotency, rate-limit early exit, and ≥80% test coverage
+container: maintainer-087-spec-015-watcher
+dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-05T21:00:00Z"
 queued: "2026-05-05T21:18:21Z"
+started: "2026-05-05T21:30:15Z"
 ---
 
 <summary>
