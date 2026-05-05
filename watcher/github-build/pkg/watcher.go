@@ -209,13 +209,20 @@ func deriveState(runs []WorkflowRun) (state string, episodeSHA string, failingRu
 	return "red", episodeSHA, failingRuns
 }
 
-// splitRepoKey splits "owner/repo" into owner and repo.
+// splitRepoKey extracts owner and repo from an allowlist entry.
+// Accepts both "host/owner/repo" (3 segments — the host is dropped, matches
+// ParseRepoAllowlist output) and "owner/repo" (2 segments). Anything else
+// returns the original key with an empty repo so the caller can skip it.
 func splitRepoKey(key string) (owner, repo string) {
-	parts := strings.SplitN(key, "/", 2)
-	if len(parts) != 2 {
+	parts := strings.Split(key, "/")
+	switch len(parts) {
+	case 3:
+		return parts[1], parts[2]
+	case 2:
+		return parts[0], parts[1]
+	default:
 		return key, ""
 	}
-	return parts[0], parts[1]
 }
 
 // buildCreateTaskCommand constructs a CreateTaskCommand for a build failure episode.

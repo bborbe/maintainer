@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.18
+
+- fix(watcher/github-build): splitRepoKey now strips the host prefix from `host/owner/repo` allowlist entries so GitHub API calls use the correct `owner` and `repo` (regression from spec-015)
+
 ## v0.23.17
 
 - feat(watcher/github-build): add k8s manifests (StatefulSet, Secret, Service, Makefile) for `maintainer-watcher-github-build` mirroring the PR watcher layout with inline PVC for cursor persistence

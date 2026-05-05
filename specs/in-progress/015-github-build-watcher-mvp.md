@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-05T20:40:29Z"
 generating: "2026-05-05T20:46:35Z"
 prompted: "2026-05-05T20:59:44Z"
+verifying: "2026-05-05T21:48:50Z"
 branch: dark-factory/github-build-watcher-mvp
 ---
 

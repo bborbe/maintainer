@@ -456,5 +456,46 @@ var _ = Describe("Watcher", func() {
 				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
 			})
 		})
+
+		Context("host-prefixed allowlist entry (github.com/owner/repo)", func() {
+			It(
+				"strips host for GitHub API calls, keeps host in cursor key, strips host in task body",
+				func() {
+					ghClient.GetDefaultBranchReturns("main", nil)
+					ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+						{
+							WorkflowID: 1,
+							Name:       "CI",
+							HeadSHA:    "sha-abc",
+							Conclusion: "failure",
+							HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+							CreatedAt:  time.Now(),
+						},
+					}, nil)
+
+					w := makeWatcher([]string{"github.com/owner/repo"})
+					Expect(w.Poll(ctx)).To(Succeed())
+
+					// GitHub API must receive the stripped owner and repo — not the host
+					Expect(ghClient.GetDefaultBranchCallCount()).To(Equal(1))
+					_, gotOwner, gotRepo := ghClient.GetDefaultBranchArgsForCall(0)
+					Expect(gotOwner).To(Equal("owner"))
+					Expect(gotRepo).To(Equal("repo"))
+
+					// task published with stripped form in frontmatter and body
+					Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+					_, cmd := publisher.PublishCreateArgsForCall(0)
+					Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
+					Expect(cmd.Body).To(ContainSubstring("# Build Failure: owner/repo"))
+
+					// cursor key keeps the host prefix
+					loaded, err := pkg.LoadCursor(ctx, cursorPath)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(loaded.Repos).To(HaveKey("github.com/owner/repo"))
+					Expect(loaded.Repos).NotTo(HaveKey("owner/repo"))
+					Expect(loaded.Repos["github.com/owner/repo"].LastKnownState).To(Equal("red"))
+				},
+			)
+		})
 	})
 })
