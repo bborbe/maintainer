@@ -11,7 +11,7 @@ Validates that a PR opened by an account in `TRUSTED_AUTHORS` bypasses the trust
 - [ ] Dev cluster running and healthy: `kubectl get pods -n dev`
 - [ ] Watcher deployed with `TRUSTED_AUTHORS` set; export `TRUSTED_USER` to one of the configured logins:
   ```bash
-  export TRUSTED_USER=$(kubectl get deployment github-pr-watcher -n dev \
+  export TRUSTED_USER=$(kubectl get deployment maintainer-watcher-github-pr -n dev \
     -o jsonpath='{.spec.template.spec.containers[0].env}' \
     | python3 -c "import sys,json; e=[x for x in json.load(sys.stdin) if x['name']=='TRUSTED_AUTHORS'][0]; print(e['value'].split(',')[0])")
   ```

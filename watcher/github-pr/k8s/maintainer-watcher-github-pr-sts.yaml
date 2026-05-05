@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: github-pr-watcher
+  name: maintainer-watcher-github-pr
   namespace: '{{ "NAMESPACE" | env }}'
   annotations:
     keel.sh/policy: force
@@ -13,8 +13,8 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: github-pr-watcher
-  serviceName: github-pr-watcher
+      app: maintainer-watcher-github-pr
+  serviceName: maintainer-watcher-github-pr
   template:
     metadata:
       annotations:
@@ -24,7 +24,7 @@ spec:
         prometheus.io/scrape: "true"
         random: '{{ "RANDOM" | env }}'
       labels:
-        app: github-pr-watcher
+        app: maintainer-watcher-github-pr
     spec:
       affinity:
         nodeAffinity:
@@ -47,7 +47,7 @@ spec:
             - name: GH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: github-pr-watcher
+                  name: maintainer-watcher-github-pr
                   key: GH_TOKEN
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
@@ -59,7 +59,7 @@ spec:
               value: '{{"TRUSTED_AUTHORS" | env}}'
             - name: REPO_ALLOWLIST
               value: '{{"REPO_ALLOWLIST" | env}}'
-          image: '{{"DOCKER_REGISTRY" | env}}/github-pr-watcher:{{"BRANCH" | env}}'
+          image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-pr:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true

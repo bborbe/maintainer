@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package factory wires concrete dependencies for the github-pr-watcher binary.
+// Package factory wires concrete dependencies for the maintainer-watcher-github-pr binary.
 package factory
 
 import (
@@ -28,7 +28,7 @@ func CreateKafkaPublisher(
 	brokers libkafka.Brokers,
 	branch base.Branch,
 ) (pkg.CommandPublisher, func(), error) {
-	syncProducer, err := libkafka.NewSyncProducerWithName(ctx, brokers, "github-pr-watcher")
+	syncProducer, err := libkafka.NewSyncProducerWithName(ctx, brokers, "maintainer-watcher-github-pr")
 	if err != nil {
 		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}

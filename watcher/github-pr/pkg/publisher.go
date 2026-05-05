@@ -81,7 +81,7 @@ func (p *kafkaPublisher) buildCommandObject(
 	return cdb.CommandObject{
 		Command: p.commandCreator.NewCommand(
 			op,
-			"github-pr-watcher",
+			"maintainer-watcher-github-pr",
 			"",
 			event,
 		),

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command github-pr-watcher polls GitHub for open pull requests in
+// Command maintainer-watcher-github-pr polls GitHub for open pull requests in
 // configured repos and publishes a CreateTaskCommand to Kafka per new
 // PR so the existing pr-reviewer agent picks it up automatically.
 package main
@@ -169,7 +169,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	defer cleanup()
 
 	glog.V(2).
-		Infof("github-pr-watcher starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
+		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
 
 	pollOnce := a.pollOnce(w)
 

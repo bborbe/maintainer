@@ -20,7 +20,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Watcher is deployed to dev with `REPO_ALLOWLIST=github.com/bborbe/maintainer`
       (already set in `dev.env`). Confirm:
       ```bash
-      kubectl get deployment github-pr-watcher -n dev \
+      kubectl get deployment maintainer-watcher-github-pr -n dev \
         -o jsonpath='{.spec.template.spec.containers[0].env}' \
         | python3 -m json.tool | grep REPO_ALLOWLIST
       ```
@@ -30,7 +30,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Vault CLI is available: `vault kv list secret/maintainer/tasks/` returns results
 - [ ] Watcher Prometheus metrics are accessible at its `/metrics` endpoint or via:
       ```bash
-      kubectl port-forward svc/github-pr-watcher -n dev 9090:9090 &
+      kubectl port-forward svc/maintainer-watcher-github-pr -n dev 9090:9090 &
       ```
 
 ## Sub-scenario A: allowlisted repo PR → vault task created
@@ -59,7 +59,7 @@ cannot be covered by unit tests alone because the vault-materialization step
       ```
 - [ ] The watcher log shows a publish event for this PR (NOT a skip):
       ```bash
-      kubectl logs -n dev deployment/github-pr-watcher | grep "published CreateTaskCommand" | grep "maintainer"
+      kubectl logs -n dev deployment/maintainer-watcher-github-pr | grep "published CreateTaskCommand" | grep "maintainer"
       ```
 
 ## Sub-scenario B: non-allowlisted repo PR → no vault task
@@ -82,7 +82,7 @@ cannot be covered by unit tests alone because the vault-materialization step
       ```
 - [ ] The watcher log shows a skip event for this PR:
       ```bash
-      kubectl logs -n dev deployment/github-pr-watcher \
+      kubectl logs -n dev deployment/maintainer-watcher-github-pr \
         | grep "skipping" | grep "<non-allowlisted-repo>"
       # Expected: line containing "reason=filtered"
       ```
@@ -97,17 +97,17 @@ cannot be covered by unit tests alone because the vault-materialization step
 ### Action
 - [ ] Temporarily patch the watcher deployment to set a malformed allowlist:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev \
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev \
         REPO_ALLOWLIST=bborbe/maintainer
       # (two segments, no host — deliberately malformed)
       ```
 - [ ] Wait for the pod to restart:
       ```bash
-      kubectl rollout status deployment/github-pr-watcher -n dev --timeout=60s
+      kubectl rollout status deployment/maintainer-watcher-github-pr -n dev --timeout=60s
       ```
 - [ ] Check logs:
       ```bash
-      kubectl logs -n dev deployment/github-pr-watcher | tail -20
+      kubectl logs -n dev deployment/maintainer-watcher-github-pr | tail -20
       ```
 
 ### Expected
@@ -118,9 +118,9 @@ cannot be covered by unit tests alone because the vault-materialization step
 ### Cleanup
 - [ ] Restore the correct allowlist:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev \
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev \
         REPO_ALLOWLIST=github.com/bborbe/maintainer
-      kubectl rollout status deployment/github-pr-watcher -n dev --timeout=60s
+      kubectl rollout status deployment/maintainer-watcher-github-pr -n dev --timeout=60s
       ```
 
 ## Sub-scenario D: empty REPO_ALLOWLIST → allow-all (backwards-compatibility)
@@ -128,7 +128,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 ### Action
 - [ ] Temporarily clear the allowlist on the watcher:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev REPO_ALLOWLIST=
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev REPO_ALLOWLIST=
       ```
 - [ ] Open a PR on `bborbe/<non-allowlisted-repo>` (any repo in scope via `REPO_SCOPE`)
 - [ ] Wait one poll cycle
@@ -140,7 +140,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 ### Cleanup
 - [ ] Restore the allowlist:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev \
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev \
         REPO_ALLOWLIST=github.com/bborbe/maintainer
       ```
 
@@ -148,7 +148,7 @@ cannot be covered by unit tests alone because the vault-materialization step
 - [ ] Close or merge the test PRs opened in sub-scenarios A and B
 - [ ] Confirm the watcher is healthy after all restores:
       ```bash
-      kubectl get pods -n dev | grep github-pr-watcher
+      kubectl get pods -n dev | grep maintainer-watcher-github-pr
       ```
 
 ## Notes

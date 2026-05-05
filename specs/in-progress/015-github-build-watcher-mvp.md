@@ -1,9 +1,10 @@
 ---
-status: approved
+status: generating
 tags:
     - dark-factory
     - spec
 approved: "2026-05-05T20:40:29Z"
+generating: "2026-05-05T20:46:35Z"
 branch: dark-factory/github-build-watcher-mvp
 ---
 

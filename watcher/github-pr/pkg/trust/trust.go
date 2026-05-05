@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package trust provides the boolean-combinator trust-decision framework
-// for the github-pr-watcher. Callers compose leaves with And, Or, and Not
+// for the maintainer-watcher-github-pr. Callers compose leaves with And, Or, and Not
 // to express compound trust policies without modifying the watcher core.
 package trust
 

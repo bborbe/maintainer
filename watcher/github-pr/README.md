@@ -1,4 +1,4 @@
-# github-pr-watcher
+# maintainer-watcher-github-pr
 
 Polls the GitHub Search API for open pull requests and publishes a `CreateTaskCommand` to Kafka
 for each new PR so the `agent/pr-reviewer` picks it up automatically.

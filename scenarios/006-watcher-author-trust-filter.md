@@ -19,7 +19,7 @@ the controller is the component that materializes the vault task.
 - [ ] Watcher is deployed to dev with `TRUSTED_AUTHORS` set to a known GitHub login
       (e.g. `TRUSTED_AUTHORS=bborbe`); confirm via:
       ```bash
-      kubectl get deployment github-pr-watcher -n dev -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool | grep TRUSTED_AUTHORS
+      kubectl get deployment maintainer-watcher-github-pr -n dev -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -m json.tool | grep TRUSTED_AUTHORS
       ```
 - [ ] A second GitHub account (not in `TRUSTED_AUTHORS`) is available for the
       untrusted-author test; call this account `untrusted-user` below
@@ -101,11 +101,11 @@ the controller is the component that materializes the vault task.
 ### Action
 - [ ] Temporarily patch the watcher deployment to unset `TRUSTED_AUTHORS`:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev TRUSTED_AUTHORS-
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev TRUSTED_AUTHORS-
       ```
 - [ ] Wait for the pod to restart and check logs:
       ```bash
-      kubectl logs -n dev deployment/github-pr-watcher | grep "trusted authors"
+      kubectl logs -n dev deployment/maintainer-watcher-github-pr | grep "trusted authors"
       ```
 
 ### Expected
@@ -116,7 +116,7 @@ the controller is the component that materializes the vault task.
 ### Cleanup
 - [ ] Restore the deployment to its previous `TRUSTED_AUTHORS` value:
       ```bash
-      kubectl set env deployment/github-pr-watcher -n dev TRUSTED_AUTHORS=<original-value>
+      kubectl set env deployment/maintainer-watcher-github-pr -n dev TRUSTED_AUTHORS=<original-value>
       ```
 
 ## Sub-scenario E: force-push on untrusted PR → trust re-evaluated, stays human_review
@@ -153,7 +153,7 @@ on synchronize must NOT flip the task back into auto-processing).
 - [ ] Close or merge the test PRs opened in sub-scenarios A, C, and E
 - [ ] Confirm the watcher is healthy after restore:
       ```bash
-      kubectl get pods -n dev | grep github-pr-watcher
+      kubectl get pods -n dev | grep maintainer-watcher-github-pr
       ```
 
 ## Notes — uncovered failure mode
