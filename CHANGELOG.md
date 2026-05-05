@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.17
+
+- feat(watcher/github-build): add k8s manifests (StatefulSet, Secret, Service, Makefile) for `maintainer-watcher-github-build` mirroring the PR watcher layout with inline PVC for cursor persistence
+- docs(build-watcher): add `docs/build-watcher.md` documenting episode-SHA semantics, state machine, per-repo granularity rationale, red/green derivation rules, cold-start flood behavior, and v1 deviation from spec-015
+- test(scenarios): add scenario 016 covering build watcher end-to-end — detect, idempotency, recover, and new episode on distinct SHA
+
 ## v0.23.16
 
 - feat(watcher/github-build): new service polls GitHub Actions API for failed CI workflow runs on default branches; publishes `CreateTaskCommand` to Kafka on `green → red` transitions with deterministic UUID5 task ID (`assignee: build-fixer-agent`); re-polls are idempotent (same episode SHA = same task ID); `red → green` clears state without publishing closure (follow-up spec)

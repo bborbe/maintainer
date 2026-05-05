@@ -1,0 +1,94 @@
+# Build Watcher
+
+The `watcher/github-build` service polls the GitHub Actions API for CI failures
+on default branches and emits vault tasks for automated remediation.
+
+## Episode-SHA Semantics and State Machine
+
+The watcher tracks a per-repo state: `green` or `red`. When a repo transitions
+from green to red, an *episode* begins. The episode is anchored to the SHA of
+the **earliest failing commit** in the current red set — the `episode_sha`.
+
+This design ensures:
+- The same broken commit always produces the same task ID (`UUID5(namespace, "owner/repo#build-SHA")`)
+- Re-polls while the build is still broken do not generate duplicate tasks
+- Layered failures (a second bad commit on top of an unfixed first) stay within the same episode
+
+### State Machine Table
+
+| prev state | curr state | action |
+|---|---|---|
+| `green` (or cold start) | `red` | publish `CreateTaskCommand`, set episode SHA |
+| `red` | `red` (any SHA) | skip — episode locked on first red SHA |
+| `red` | `green` | clear episode SHA, set green; no closure published (see follow-up spec) |
+| `green` | `green` | nothing |
+| any | undefined (zero runs) | skip |
+
+### Worked Example
+
+| Time | Event | State | Episode SHA | Action |
+|---|---|---|---|---|
+| t0 | repo is green | `green` | — | none |
+| t1 | commit A breaks build | `red` | `A` | publish task `UUID5(repo#build-A)` |
+| t2 | commit B layered, both A+B red | `red` | `A` (unchanged) | no publish |
+| t3 | PR fixes both A+B → green | `green` | — | clear state, no closure |
+| t4 | commit C breaks build | `red` | `C` | publish task `UUID5(repo#build-C)` — distinct from t1 |
+
+Note: t1 and t4 produce **different** task IDs because the episode SHAs differ.
+The controller deduplicates by `task_id`, so re-deploying the watcher on a red
+repo publishes the same task ID (safe re-play).
+
+## Why Per-Repo Granularity (Not Per-Workflow)
+
+The watcher creates **one task per repo**, not one per failing workflow. Rationale:
+
+- A repo's build is either "green enough to merge" or "broken" — the fix agent
+  targets the repo, not individual workflows.
+- Multiple failing workflows on the same commit are usually caused by the same
+  root issue (a breaking API change, a missing dep update). A single fix PR
+  addresses all of them.
+- Per-workflow granularity would require the fix agent to coordinate across
+  multiple tasks for the same repo — unnecessary complexity for v1.
+
+Per-workflow granularity is a future refinement once the fix agent matures.
+
+## Red/Green Derivation Rules
+
+Given the latest completed workflow runs for a repo's default branch:
+
+1. Group runs by `workflow_id`; keep only the **most recent run** per workflow
+   (by `created_at` descending).
+2. Filter: only count runs with `conclusion` in `{"failure", "success"}`.
+   Skip `cancelled`, `timed_out`, `action_required`, `skipped`, `neutral`,
+   `stale`, and runs still in progress (empty conclusion).
+3. **Red**: any surviving run has `conclusion = failure`.
+4. **Green**: all surviving runs have `conclusion = success`.
+5. **Undefined**: zero surviving runs → repo skipped (not red, not green).
+
+The episode SHA is the `head_sha` of the **earliest** (smallest `created_at`)
+failing run in the current red set — anchoring the episode to the first commit
+that broke anything.
+
+## Cold-Start Flood Behavior
+
+On first deploy (or after a cursor is lost), the watcher has no persisted state.
+It treats every repo as `green`. On the first poll cycle, repos that are currently
+red trigger a `green → red` transition and publish tasks.
+
+If N repos are currently red on first deploy, N tasks are published in one cycle.
+This **initial burst is expected and acceptable** because:
+- Task IDs are deterministic (UUID5) — re-deploying the watcher republishes the
+  same task IDs, which the controller deduplicates.
+- The alternative (assume `red` on cold start and skip the first cycle) would
+  lose all currently-red signal until a `red → green → red` transition, defeating
+  the purpose of the detector.
+
+Operators should not be surprised by an initial burst of tasks on first deploy.
+
+## Known Deviations from Spec 015
+
+**Per-watcher REPO_ALLOWLIST scoping (deferred).** Spec 015 calls for separate
+per-watcher repo allowlists ("no shared ConfigMap"). v1 ships with both watchers
+sharing the existing `REPO_ALLOWLIST` env var injected from `dev.env`/`prod.env`.
+Splitting per-watcher requires a new env naming convention (`BUILD_REPO_ALLOWLIST`,
+`PR_REPO_ALLOWLIST`) and corresponding code wiring; tracked as a follow-up.

@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [015-github-build-watcher-mvp]
+summary: Created watcher/github-build/k8s/ manifests (StatefulSet, Secret, Service, Makefile), docs/build-watcher.md with episode-SHA semantics and state machine, and scenarios/016-build-watcher-end-to-end.md covering detect/idempotency/recover/new-episode sub-scenarios; CHANGELOG.md updated with Unreleased section.
+container: maintainer-089-spec-015-k8s-docs
+dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-05T21:00:00Z"
 queued: "2026-05-05T21:18:21Z"
+started: "2026-05-05T21:46:42Z"
 ---
 
 <summary>
