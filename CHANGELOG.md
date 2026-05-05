@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.16
+
+- feat(watcher/github-build): new service polls GitHub Actions API for failed CI workflow runs on default branches; publishes `CreateTaskCommand` to Kafka on `green → red` transitions with deterministic UUID5 task ID (`assignee: build-fixer-agent`); re-polls are idempotent (same episode SHA = same task ID); `red → green` clears state without publishing closure (follow-up spec)
+
 ## v0.23.15
 
 - feat(watcher/github-build): implement core state machine, cursor persistence, filter chain, and Prometheus metrics — `Poll()` converts GitHub Actions state into `CreateTaskCommand` Kafka messages with green/red episode tracking, idempotent publish, and atomic cursor writes

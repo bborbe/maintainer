@@ -1,0 +1,71 @@
+// Copyright (c) 2026 Benjamin Borbe All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package factory wires concrete dependencies for the maintainer-watcher-github-build binary.
+package factory
+
+import (
+	"context"
+
+	"github.com/bborbe/cqrs/base"
+	"github.com/bborbe/cqrs/cdb"
+	"github.com/bborbe/errors"
+	libkafka "github.com/bborbe/kafka"
+	"github.com/bborbe/log"
+	"github.com/golang/glog"
+
+	"github.com/bborbe/maintainer/watcher/github-build/pkg"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+)
+
+// CreateKafkaPublisher constructs a CommandPublisher backed by a Kafka sync producer.
+// The cleanup function closes the underlying sync producer on shutdown.
+func CreateKafkaPublisher(
+	ctx context.Context,
+	brokers libkafka.Brokers,
+	branch base.Branch,
+) (pkg.CommandPublisher, func(), error) {
+	syncProducer, err := libkafka.NewSyncProducerWithName(
+		ctx,
+		brokers,
+		"maintainer-watcher-github-build",
+	)
+	if err != nil {
+		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
+	}
+	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	cleanup := func() {
+		if err := syncProducer.Close(); err != nil {
+			glog.Warningf("close kafka sync producer: %v", err)
+		}
+	}
+	return pkg.NewCommandPublisher(ctx, sender), cleanup, nil
+}
+
+// CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
+func CreateWatcher(
+	ctx context.Context,
+	ghToken string,
+	brokers libkafka.Brokers,
+	stage string,
+	allowlist []string,
+	cursorPath string,
+) (pkg.Watcher, func(), error) {
+	branch := base.Branch(stage)
+	pub, cleanup, err := CreateKafkaPublisher(ctx, brokers, branch)
+	if err != nil {
+		return nil, nil, errors.Wrap(ctx, err, "create kafka publisher")
+	}
+	ghClient := pkg.NewGitHubClient(ghToken)
+	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(allowlist)}
+	w := pkg.NewWatcher(
+		ghClient,
+		pub,
+		pkg.NewMetrics(),
+		repoFilter,
+		allowlist,
+		cursorPath,
+	)
+	return w, cleanup, nil
+}

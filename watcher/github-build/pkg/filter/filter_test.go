@@ -5,6 +5,8 @@
 package filter_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -32,6 +34,53 @@ var _ = Describe("RepoAllowlistFilter", func() {
 			Expect(f.Skip("owner/allowed")).To(BeFalse())
 			Expect(f.Skip("owner/also-allowed")).To(BeFalse())
 		})
+	})
+})
+
+var _ = Describe("ParseRepoAllowlist", func() {
+	var ctx context.Context
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	It("returns nil for empty string (allow-all)", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(BeNil())
+	})
+
+	It("parses a single valid entry", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "owner/repo")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(ConsistOf("owner/repo"))
+	})
+
+	It("parses multiple comma-separated entries", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "owner/repo,owner/other")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(ConsistOf("owner/repo", "owner/other"))
+	})
+
+	It("trims whitespace around entries", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, " owner/repo , owner/other ")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(ConsistOf("owner/repo", "owner/other"))
+	})
+
+	It("drops empty entries from trailing commas", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "owner/repo,")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(ConsistOf("owner/repo"))
+	})
+
+	It("returns error for entry without slash", func() {
+		_, err := filter.ParseRepoAllowlist(ctx, "invalid")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("returns error for entry with too many segments", func() {
+		_, err := filter.ParseRepoAllowlist(ctx, "host/owner/repo")
+		Expect(err).To(HaveOccurred())
 	})
 })
 
