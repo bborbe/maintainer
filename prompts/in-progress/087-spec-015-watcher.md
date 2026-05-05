@@ -1,7 +1,8 @@
 ---
-spec: ["015"]
-status: draft
+status: approved
+spec: [015-github-build-watcher-mvp]
 created: "2026-05-05T21:00:00Z"
+queued: "2026-05-05T21:18:21Z"
 ---
 
 <summary>
@@ -36,8 +37,8 @@ Files to read before making any changes:
 - `watcher/github-pr/pkg/filter/filter.go` — full file; mirror TaskCreationFilter interface + composite
 - `watcher/github-pr/pkg/filter/repo_allowlist_filter.go` — full file; mirror allowlist filter pattern
 - `watcher/github-build/pkg/githubclient.go` — understand WorkflowRun fields available
-- `watcher/github-build/pkg/taskid.go` — understand DeriveTaskID signature
-- `watcher/github-build/pkg/publisher.go` — understand CommandPublisher + BuildTaskParams
+- `watcher/github-build/pkg/taskid.go` — understand DeriveTaskID returns `uuid.UUID`
+- `watcher/github-build/pkg/publisher.go` — `CommandPublisher.PublishCreate(ctx, cmd agentlib.CreateTaskCommand) error`. The watcher constructs the `agentlib.CreateTaskCommand` (TaskIdentifier + Frontmatter + Body) and passes it in. The publisher is domain-agnostic.
 
 **State machine rules (lock these before writing any code):**
 
@@ -113,7 +114,7 @@ Files to read before making any changes:
    // RepoFilter decides whether to skip a repo in a poll cycle.
    // Skip returns true if the repo should be excluded.
    //
-   //counterfeiter:generate -o ../../mocks/repo_filter.go --fake-name RepoFilter . RepoFilter
+   //counterfeiter:generate -o mocks/repo_filter.go --fake-name RepoFilter . RepoFilter
    type RepoFilter interface {
        Skip(repoKey string) bool // repoKey = "owner/repo"
    }
@@ -147,7 +148,7 @@ Files to read before making any changes:
    ```go
    // Metrics defines Prometheus counters and gauges for the build watcher.
    //
-   //counterfeiter:generate -o ../mocks/metrics.go --fake-name Metrics . Metrics
+   //counterfeiter:generate -o mocks/metrics.go --fake-name Metrics . Metrics
    type Metrics interface {
        IncPollCycle(result string)                   // result: "success" | "error"
        IncReposChecked()
@@ -175,7 +176,7 @@ Files to read before making any changes:
    ```go
    // Watcher polls GitHub Actions for build status changes.
    //
-   //counterfeiter:generate -o ../mocks/watcher.go --fake-name Watcher . Watcher
+   //counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
    type Watcher interface {
        Poll(ctx context.Context) error
    }
@@ -218,8 +219,9 @@ Files to read before making any changes:
        prevState = repoState.LastKnownState // "" treated as "green"
        switch:
        case (prevState == "" || prevState == "green") && currState == "red":
-           taskID = DeriveTaskID(owner, repo, episodeSHA)
-           err = publisher.PublishCreate(ctx, BuildTaskParams{...failingRuns...})
+           taskID = DeriveTaskID(owner, repo, episodeSHA)  // uuid.UUID
+           cmd = buildCreateTaskCommand(taskID, owner, repo, episodeSHA, failingRuns)
+           err = publisher.PublishCreate(ctx, cmd)
            if err → log, increment poll_errors_total{reason="kafka_error"}, continue (skip cursor update for this repo)
            metrics.IncTaskPublished()
            metrics.IncStateTransition("green_to_red")
@@ -261,6 +263,12 @@ Files to read before making any changes:
 
    **`splitRepoKey(key string) (owner, repo string)`**: splits `"owner/repo"` on `/`.
 
+   **`buildCreateTaskCommand(taskID uuid.UUID, owner, repo, episodeSHA string, failingRuns []WorkflowRun) agentlib.CreateTaskCommand`** constructs the command:
+   - `TaskIdentifier`: `agentlib.TaskIdentifier(taskID.String())`
+   - `Frontmatter`: map containing at minimum `assignee: "build-fixer-agent"`, `repo: "<owner>/<repo>"`, `episode_sha: "<sha>"`, `status: "todo"`
+   - `Body`: markdown — title `# Build Failure: <owner>/<repo>`, the episode SHA, and a list of failing workflows with `- [<name>](<html-url>)` lines
+   - Verify the exact `agentlib.CreateTaskCommand` field names by re-reading agent/lib before coding (already grep-verified in prompt 2)
+
    **Constructor signature:**
    ```go
    func NewWatcher(
@@ -289,7 +297,7 @@ Files to read before making any changes:
    - GitHub API error for one repo: that repo skipped, polling continues for remaining repos
    - Rate-limit error: poll loop terminates early for remaining repos; `IncPollError("rate_limited")` called
    - Zero runs (undefined state): repo skipped; `PublishCreate` NOT called; cursor unchanged
-   - Corrupt cursor at startup: `LoadCursor` returns error → watcher constructor returns error → `Poll` is never called
+   - Corrupt cursor on first `Poll`: `Poll(ctx)` returns the load error and never calls `PublishCreate` (cursor is loaded inside `Poll`, not in the constructor — mirrors PR watcher)
 
    **Worked example verification (from spec Desired Behavior #6):**
    ```
@@ -301,16 +309,14 @@ Files to read before making any changes:
    ```
    Assert that task ID at t1 ≠ task ID at t4 (different episode SHAs).
 
-7. **Generate counterfeiter mocks for new interfaces:**
+7. **Generate counterfeiter mocks for new interfaces** — prefer `make generate` if PR watcher's Makefile has the target; otherwise:
    ```bash
-   cd watcher/github-build
-   go run github.com/maxbrunsfeld/counterfeiter/v6 \
-     -o pkg/mocks/watcher.go --fake-name Watcher ./pkg Watcher
-   go run github.com/maxbrunsfeld/counterfeiter/v6 \
-     -o pkg/mocks/metrics.go --fake-name Metrics ./pkg Metrics
-   go run github.com/maxbrunsfeld/counterfeiter/v6 \
-     -o pkg/mocks/repo_filter.go --fake-name RepoFilter ./pkg/filter RepoFilter
+   cd watcher/github-build/pkg && go generate ./...
    ```
+   Mocks land at:
+   - `watcher/github-build/pkg/mocks/watcher.go`
+   - `watcher/github-build/pkg/mocks/metrics.go`
+   - `watcher/github-build/pkg/filter/mocks/repo_filter.go` (mocks dir relative to filter package)
 
 8. **Run `make precommit`** in `watcher/github-build/`:
    ```bash
@@ -326,7 +332,9 @@ Files to read before making any changes:
 - Episode SHA MUST be the `HeadSHA` of the *earliest* (smallest `CreatedAt`) failing run — not an arbitrary one
 - `red → red` with DIFFERENT SHA MUST skip publish and MUST keep the original episode SHA (not update to the new SHA)
 - `LoadCursor` on `os.ErrNotExist` MUST return a fresh empty cursor (not an error) — cold start is valid
-- `LoadCursor` on any other error MUST return an error (refuse to start on corrupt cursor)
+- `LoadCursor` on any other error MUST return an error; `Poll` MUST surface that error and skip publishing on this cycle (the binary stays alive — next cycle retries; this matches the PR watcher's lifecycle where the cursor is loaded inside `Poll`, not in `NewWatcher`)
+- All external calls (`ghClient.GetWorkflowRuns`, `ghClient.GetDefaultBranch`, `publisher.PublishCreate`) MUST receive the `ctx` passed into `Poll`; do NOT introduce `context.Background()` anywhere
+- The `agentlib.CreateTaskCommand` MUST set `Frontmatter["assignee"] = "build-fixer-agent"` — that string is the contract with the build-fixer agent
 - Context cancellation check MUST appear in the per-repo loop (non-blocking select)
 - Error wrapping uses `github.com/bborbe/errors`; never `fmt.Errorf`
 - Use `glog.Warningf` for repo-level skip events (not fatal errors)
@@ -364,4 +372,8 @@ ls watcher/github-build/pkg/mocks/
 
 # Confirm worked-example test exists:
 grep -n "commit A\|episodeSHA\|t1\|t4" watcher/github-build/pkg/watcher_test.go
+
+# Confirm assignee contract is wired in the watcher:
+grep -n "build-fixer-agent" watcher/github-build/pkg/watcher.go
+# Expected: at least one match — the watcher sets Frontmatter["assignee"]
 </verification>
