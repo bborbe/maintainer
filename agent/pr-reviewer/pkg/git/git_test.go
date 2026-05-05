@@ -79,7 +79,7 @@ var _ = Describe("WorktreeManager", func() {
 				repoName := filepath.Base(repoPath)
 				Expect(
 					clonePath,
-				).To(Equal(filepath.Join(os.TempDir(), "code-reviewer-"+repoName+"-pr-123")))
+				).To(Equal(filepath.Join(os.TempDir(), "pr-reviewer-"+repoName+"-pr-123")))
 
 				// Verify clone directory exists
 				info, err := os.Stat(clonePath)
@@ -100,7 +100,7 @@ var _ = Describe("WorktreeManager", func() {
 				repoName := filepath.Base(repoPath)
 				Expect(
 					clonePath,
-				).To(Equal(filepath.Join(os.TempDir(), "code-reviewer-"+repoName+"-pr-999")))
+				).To(Equal(filepath.Join(os.TempDir(), "pr-reviewer-"+repoName+"-pr-999")))
 
 				// Verify clone directory exists
 				info, err := os.Stat(clonePath)
@@ -127,7 +127,7 @@ var _ = Describe("WorktreeManager", func() {
 				repoName := filepath.Base(repoPath)
 				Expect(
 					clonePath,
-				).To(Equal(filepath.Join(os.TempDir(), "code-reviewer-"+repoName+"-pr-456")))
+				).To(Equal(filepath.Join(os.TempDir(), "pr-reviewer-"+repoName+"-pr-456")))
 
 				// Verify clone exists
 				_, err = os.Stat(clonePath)
@@ -162,7 +162,7 @@ var _ = Describe("WorktreeManager", func() {
 
 		Context("with non-existent clone", func() {
 			It("returns nil (idempotent)", func() {
-				nonExistentPath := filepath.Join(os.TempDir(), "code-reviewer-nonexistent")
+				nonExistentPath := filepath.Join(os.TempDir(), "pr-reviewer-nonexistent")
 				err := manager.RemoveClone(ctx, nonExistentPath)
 				Expect(err).To(BeNil())
 			})
@@ -212,7 +212,7 @@ var _ = Describe("WorktreeManager", func() {
 			repoName := filepath.Base(repoPath)
 			Expect(
 				clonePath,
-			).To(Equal(filepath.Join(os.TempDir(), "code-reviewer-"+repoName+"-pr-42")))
+			).To(Equal(filepath.Join(os.TempDir(), "pr-reviewer-"+repoName+"-pr-42")))
 
 			// Verify clone exists and has standalone git directory
 			gitDir := filepath.Join(clonePath, ".git")

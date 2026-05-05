@@ -26,13 +26,13 @@ func main() {
 	commentOnly := flag.Bool("comment-only", false, "skip verdict, post as plain comment")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: code-reviewer [--version] [-v] [--comment-only] <pr-url>\n")
+		fmt.Fprintf(os.Stderr, "usage: pr-reviewer [--version] [-v] [--comment-only] <pr-url>\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("code-reviewer %s\n", prpkg.Version)
+		fmt.Printf("pr-reviewer %s\n", prpkg.Version)
 		os.Exit(0)
 	}
 
@@ -52,12 +52,12 @@ func main() {
 func run(ctx context.Context, verbose bool, commentOnly bool) error {
 	// Parse args
 	if flag.NArg() < 1 {
-		return fmt.Errorf("usage: code-reviewer [-v] [--comment-only] <pr-url>")
+		return fmt.Errorf("usage: pr-reviewer [-v] [--comment-only] <pr-url>")
 	}
 	rawURL := flag.Arg(0)
 
 	// Log version
-	logVerbose(verbose, "code-reviewer %s", prpkg.Version)
+	logVerbose(verbose, "pr-reviewer %s", prpkg.Version)
 
 	// Parse PR URL
 	logVerbose(verbose, "parsing URL: %s", rawURL)
@@ -67,7 +67,7 @@ func run(ctx context.Context, verbose bool, commentOnly bool) error {
 	}
 
 	// Load config
-	configPath := "~/.code-reviewer.yaml"
+	configPath := "~/.config/maintainer/pr-reviewer.yaml"
 	logVerbose(verbose, "loading config: %s", configPath)
 	loader := prpkg.NewFileLoader(configPath)
 	cfg, err := loader.Load(ctx)

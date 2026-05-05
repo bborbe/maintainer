@@ -47,7 +47,7 @@ func (r *dockerReviewer) Review(
 	}
 
 	// Write prompt to temp file (same pattern as dark-factory)
-	promptFile, err := os.CreateTemp("", "code-reviewer-prompt-*.md")
+	promptFile, err := os.CreateTemp("", "pr-reviewer-prompt-*.md")
 	if err != nil {
 		return "", errors.Wrapf(ctx, err, "create prompt file")
 	}

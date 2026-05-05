@@ -46,9 +46,9 @@ type application struct {
 	// Model selection
 	Model claudelib.ClaudeModel `required:"false" arg:"model" env:"MODEL" usage:"Claude model to use (sonnet, opus)" default:"sonnet"`
 
-	// Workdir paths for bare-clone cache and per-task worktrees (default: ~/.cache/code-reviewer/*)
-	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache (default: ~/.cache/code-reviewer/repos)"`
-	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees (default: ~/.cache/code-reviewer/work)"`
+	// Workdir paths for bare-clone cache and per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/*)
+	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache (default: ~/.cache/maintainer/pr-reviewer/repos)"`
+	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/work)"`
 
 	// Review depth passed to /coding:pr-review (short | standard | full)
 	ReviewMode string `required:"false" arg:"review-mode" env:"REVIEW_MODE" usage:"Review depth: short | standard | full" default:"standard"`
@@ -113,8 +113,8 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 }
 
 // resolveCachePaths fills in defaults for ReposPath/WorkPath when unset
-// (~/.cache/code-reviewer/{repos,work}). The pod entry point requires explicit
-// /repos and /work mounts, but local CLI usage benefits from a sensible default.
+// (~/.cache/maintainer/pr-reviewer/{repos,work}). The pod entry point requires
+// explicit /repos and /work mounts, but local CLI usage benefits from a default.
 func (a *application) resolveCachePaths(ctx context.Context) (string, string, error) {
 	reposPath := a.ReposPath
 	workPath := a.WorkPath
@@ -126,10 +126,10 @@ func (a *application) resolveCachePaths(ctx context.Context) (string, string, er
 		return "", "", errors.Wrap(ctx, err, "resolve user home dir")
 	}
 	if reposPath == "" {
-		reposPath = filepath.Join(home, ".cache", "code-reviewer", "repos")
+		reposPath = filepath.Join(home, ".cache", "maintainer", "pr-reviewer", "repos")
 	}
 	if workPath == "" {
-		workPath = filepath.Join(home, ".cache", "code-reviewer", "work")
+		workPath = filepath.Join(home, ".cache", "maintainer", "pr-reviewer", "work")
 	}
 	return reposPath, workPath, nil
 }

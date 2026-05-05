@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 - chore: rename repo `code-reviewer` → `maintainer`; module paths `github.com/bborbe/code-reviewer/...` → `github.com/bborbe/maintainer/...`; rename `watcher/github/` → `watcher/github-pr/` to disambiguate from upcoming `watcher/github-build/`. User-facing strings (`~/.code-reviewer.yaml`, `/tmp/code-reviewer-*` temp dirs, CLI usage prints) deferred to follow-up commit.
 - chore(k8s): rename agent-pr-reviewer image, Config, Secret, PriorityClass, and ResourceQuota to `maintainer-agent-pr-reviewer`. Manifest filenames renamed to match. PVC `agent-pr-reviewer` and Config `volumeClaim` reference preserved (avoids `.claude/` OAuth re-seed). Config `assignee: pr-reviewer-agent` preserved (task contract). `Makefile.SERVICE` and `pkg/factory.serviceName` updated to match new image name.
+- chore(cli): rename CLI binary `code-reviewer` → `pr-reviewer`. Move config to `~/.config/maintainer/pr-reviewer.yaml` (was `~/.code-reviewer.yaml`); cache to `~/.cache/maintainer/pr-reviewer/{repos,work}` (was `~/.cache/code-reviewer/...`); temp clone dirs to `/tmp/pr-reviewer-<repo>-pr-N` and prompt temp files to `pr-reviewer-prompt-*.md`. Hard cutover — users must `mv ~/.code-reviewer.yaml ~/.config/maintainer/pr-reviewer.yaml`. Updates `cmd/run-task/Makefile` smoke-test default repo to `bborbe/maintainer`.
 
 ## v0.23.12
 

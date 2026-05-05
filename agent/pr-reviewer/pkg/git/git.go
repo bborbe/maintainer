@@ -52,7 +52,7 @@ func (m *worktreeManager) Fetch(ctx context.Context, repoPath string) error {
 }
 
 // CreateClone creates a local clone for the given branch.
-// Clone path is deterministic: /tmp/code-reviewer-<repoName>-pr-<number>
+// Clone path is deterministic: /tmp/pr-reviewer-<repoName>-pr-<number>
 // If a stale clone exists, it is removed first.
 func (m *worktreeManager) CreateClone(
 	ctx context.Context,
@@ -150,7 +150,7 @@ func (m *worktreeManager) validateRepoPath(ctx context.Context, repoPath string)
 // Uses repo basename to avoid collisions between different repos.
 func (m *worktreeManager) clonePath(repoPath string, prNumber int) string {
 	repoName := filepath.Base(repoPath)
-	return filepath.Join(os.TempDir(), fmt.Sprintf("code-reviewer-%s-pr-%d", repoName, prNumber))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("pr-reviewer-%s-pr-%d", repoName, prNumber))
 }
 
 // runGit executes a git command and returns an error with stderr.
