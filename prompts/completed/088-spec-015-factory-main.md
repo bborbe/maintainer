@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [015-github-build-watcher-mvp]
 summary: 'Wired all github-build watcher components: factory.go (CreateKafkaPublisher + CreateWatcher), full Run implementation in main.go (poll loop + HTTP server via gorilla/mux + libhttp), cmd/run-once single-cycle binary, ParseRepoAllowlist added to pkg/filter, CHANGELOG.md updated under Unreleased.'
 container: maintainer-088-spec-015-factory-main
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-05T21:00:00Z"
 queued: "2026-05-05T21:18:21Z"
 started: "2026-05-05T21:42:01Z"
+completed: "2026-05-05T21:46:40Z"
 ---
 
 <summary>
