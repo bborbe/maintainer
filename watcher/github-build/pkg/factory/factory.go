@@ -51,6 +51,9 @@ func CreateWatcher(
 	stage string,
 	allowlist []string,
 	cursorPath string,
+	assignee string,
+	taskStatus string,
+	taskPhase string,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
 	pub, cleanup, err := CreateKafkaPublisher(ctx, brokers, branch)
@@ -66,6 +69,9 @@ func CreateWatcher(
 		repoFilter,
 		allowlist,
 		cursorPath,
+		assignee,
+		taskStatus,
+		taskPhase,
 	)
 	return w, cleanup, nil
 }

@@ -1,7 +1,8 @@
 ---
-status: generating
+status: prompted
 approved: "2026-05-06T17:43:51Z"
 generating: "2026-05-06T17:43:52Z"
+prompted: "2026-05-06T17:48:00Z"
 branch: dark-factory/configurable-task-frontmatter
 ---
 

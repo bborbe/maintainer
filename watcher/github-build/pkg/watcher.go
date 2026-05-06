@@ -33,6 +33,9 @@ func NewWatcher(
 	repoFilter filter.RepoFilter,
 	allowlist []string,
 	cursorPath string,
+	assignee string,
+	taskStatus string,
+	taskPhase string,
 ) Watcher {
 	return &buildWatcher{
 		githubClient: githubClient,
@@ -41,6 +44,9 @@ func NewWatcher(
 		repoFilter:   repoFilter,
 		allowlist:    allowlist,
 		cursorPath:   cursorPath,
+		assignee:     assignee,
+		taskStatus:   taskStatus,
+		taskPhase:    taskPhase,
 	}
 }
 
@@ -51,6 +57,9 @@ type buildWatcher struct {
 	repoFilter   filter.RepoFilter
 	allowlist    []string
 	cursorPath   string
+	assignee     string
+	taskStatus   string
+	taskPhase    string
 }
 
 func (w *buildWatcher) Poll(ctx context.Context) error {
@@ -142,7 +151,7 @@ func (w *buildWatcher) applyStateMachine(
 	switch {
 	case (prevState == "" || prevState == "green") && currState == "red":
 		taskID := DeriveTaskID(owner, repo, episodeSHA)
-		cmd := buildCreateTaskCommand(taskID, owner, repo, episodeSHA, failingRuns)
+		cmd := w.buildCreateTaskCommand(taskID, owner, repo, episodeSHA, failingRuns)
 		if err := w.publisher.PublishCreate(ctx, cmd); err != nil {
 			glog.Errorf("publish create-task failed repo=%s err=%v", repoKey, err)
 			w.metrics.IncPollError("kafka_error")
@@ -226,7 +235,7 @@ func splitRepoKey(key string) (owner, repo string) {
 }
 
 // buildCreateTaskCommand constructs a CreateTaskCommand for a build failure episode.
-func buildCreateTaskCommand(
+func (w *buildWatcher) buildCreateTaskCommand(
 	taskID uuid.UUID,
 	owner, repo, episodeSHA string,
 	failingRuns []WorkflowRun,
@@ -245,14 +254,18 @@ func buildCreateTaskCommand(
 	}
 	body := strings.Join(lines, "\n") + "\n"
 
+	fm := agentlib.TaskFrontmatter{
+		"assignee":    w.assignee,
+		"repo":        owner + "/" + repo,
+		"episode_sha": episodeSHA,
+		"status":      w.taskStatus,
+	}
+	if w.taskPhase != "" {
+		fm["phase"] = w.taskPhase
+	}
 	return agentlib.CreateTaskCommand{
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
-		Frontmatter: agentlib.TaskFrontmatter{
-			"assignee":    "build-fixer-agent",
-			"repo":        owner + "/" + repo,
-			"episode_sha": episodeSHA,
-			"status":      "todo",
-		},
-		Body: body,
+		Frontmatter:    fm,
+		Body:           body,
 	}
 }

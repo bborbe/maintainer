@@ -43,6 +43,9 @@ var _ = Describe("Watcher", func() {
 			filter.RepoFilters{},
 			allowlist,
 			cursorPath,
+			"build-fixer-agent",
+			"todo",
+			"",
 		)
 	}
 
@@ -496,6 +499,73 @@ var _ = Describe("Watcher", func() {
 					Expect(loaded.Repos["github.com/owner/repo"].LastKnownState).To(Equal("red"))
 				},
 			)
+		})
+	})
+
+	Describe("configurable frontmatter", func() {
+		makeCustomWatcher := func(allowlist []string, assignee, taskStatus, taskPhase string) pkg.Watcher {
+			return pkg.NewWatcher(
+				ghClient,
+				publisher,
+				metrics,
+				filter.RepoFilters{},
+				allowlist,
+				cursorPath,
+				assignee,
+				taskStatus,
+				taskPhase,
+			)
+		}
+
+		singleFailingRun := func(workflowID int64, sha string) []pkg.WorkflowRun {
+			return []pkg.WorkflowRun{
+				{
+					WorkflowID: workflowID,
+					Name:       "CI",
+					HeadSHA:    sha,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/99",
+					CreatedAt:  time.Now(),
+				},
+			}
+		}
+
+		It("uses custom assignee and status when set", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRun(10, "sha-custom"), nil)
+
+			w := makeCustomWatcher([]string{"owner/repo"}, "other-agent", "backlog", "")
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("other-agent"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("backlog"))
+			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
+		})
+
+		It("includes phase key when BUILD_TASK_PHASE is non-empty", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRun(11, "sha-phase"), nil)
+
+			w := makeCustomWatcher([]string{"owner/repo"}, "build-fixer-agent", "todo", "planning")
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
+		})
+
+		It("omits phase key when BUILD_TASK_PHASE is empty string", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRun(12, "sha-nophase"), nil)
+
+			w := makeCustomWatcher([]string{"owner/repo"}, "build-fixer-agent", "todo", "")
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
 		})
 	})
 })

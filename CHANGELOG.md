@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.20
+
+- feat(watcher/github-build): add BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty BUILD_TASK_PHASE omits the phase key entirely
+
 ## v0.23.19
 
 - fix(watcher/github-build): allowlist parser accepts host-qualified `host/owner/repo` entries (matches PR watcher; build watcher would previously refuse startup against the shared `REPO_ALLOWLIST` env value)

@@ -33,6 +33,10 @@ type application struct {
 	KafkaBrokers  libkafka.Brokers `required:"true" arg:"kafka-brokers"  env:"KAFKA_BROKERS"  usage:"Comma-separated Kafka broker list"`
 	Stage         string           `required:"true" arg:"stage"          env:"STAGE"          usage:"Deployment stage (dev|prod)"`
 	RepoAllowlist string           `required:"true" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
+
+	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"BUILD_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                  default:"build-fixer-agent"`
+	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                    default:"todo"`
+	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -54,6 +58,9 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage,
 		repoAllowlist,
 		"/data/cursor.json",
+		a.BuildAssignee,
+		a.BuildTaskStatus,
+		a.BuildTaskPhase,
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
