@@ -5,16 +5,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/agent/lib"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 )
 
 type CommandPublisher struct {
-	PublishCreateStub        func(context.Context, lib.CreateTaskCommand) error
+	PublishCreateStub        func(context.Context, pkg.WatcherCreateTaskCommand) error
 	publishCreateMutex       sync.RWMutex
 	publishCreateArgsForCall []struct {
 		arg1 context.Context
-		arg2 lib.CreateTaskCommand
+		arg2 pkg.WatcherCreateTaskCommand
 	}
 	publishCreateReturns struct {
 		result1 error
@@ -26,12 +25,12 @@ type CommandPublisher struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *CommandPublisher) PublishCreate(arg1 context.Context, arg2 lib.CreateTaskCommand) error {
+func (fake *CommandPublisher) PublishCreate(arg1 context.Context, arg2 pkg.WatcherCreateTaskCommand) error {
 	fake.publishCreateMutex.Lock()
 	ret, specificReturn := fake.publishCreateReturnsOnCall[len(fake.publishCreateArgsForCall)]
 	fake.publishCreateArgsForCall = append(fake.publishCreateArgsForCall, struct {
 		arg1 context.Context
-		arg2 lib.CreateTaskCommand
+		arg2 pkg.WatcherCreateTaskCommand
 	}{arg1, arg2})
 	stub := fake.PublishCreateStub
 	fakeReturns := fake.publishCreateReturns
@@ -52,13 +51,13 @@ func (fake *CommandPublisher) PublishCreateCallCount() int {
 	return len(fake.publishCreateArgsForCall)
 }
 
-func (fake *CommandPublisher) PublishCreateCalls(stub func(context.Context, lib.CreateTaskCommand) error) {
+func (fake *CommandPublisher) PublishCreateCalls(stub func(context.Context, pkg.WatcherCreateTaskCommand) error) {
 	fake.publishCreateMutex.Lock()
 	defer fake.publishCreateMutex.Unlock()
 	fake.PublishCreateStub = stub
 }
 
-func (fake *CommandPublisher) PublishCreateArgsForCall(i int) (context.Context, lib.CreateTaskCommand) {
+func (fake *CommandPublisher) PublishCreateArgsForCall(i int) (context.Context, pkg.WatcherCreateTaskCommand) {
 	fake.publishCreateMutex.RLock()
 	defer fake.publishCreateMutex.RUnlock()
 	argsForCall := fake.publishCreateArgsForCall[i]

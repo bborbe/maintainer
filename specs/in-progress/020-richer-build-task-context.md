@@ -1,6 +1,7 @@
 ---
-status: approved
+status: generating
 approved: "2026-05-06T20:25:29Z"
+generating: "2026-05-06T20:31:00Z"
 branch: dark-factory/richer-build-task-context
 ---
 

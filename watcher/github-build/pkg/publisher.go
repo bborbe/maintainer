@@ -16,9 +16,19 @@ import (
 
 //counterfeiter:generate -o mocks/command_publisher.go --fake-name CommandPublisher . CommandPublisher
 
+// WatcherCreateTaskCommand extends CreateTaskCommand with an optional filename hint.
+// FilenameHint lets the task controller name the vault file with a human-readable stem
+// (e.g. "Build Failure github - bborbe-maintainer - 5886450") instead of a UUID.
+// MUST NOT include the .md extension — the controller appends it.
+// Absent controllers (encoding/json default) silently ignore the new field.
+type WatcherCreateTaskCommand struct {
+	agentlib.CreateTaskCommand
+	FilenameHint string `json:"filename_hint,omitempty"`
+}
+
 // CommandPublisher publishes task commands to Kafka.
 type CommandPublisher interface {
-	PublishCreate(ctx context.Context, cmd agentlib.CreateTaskCommand) error
+	PublishCreate(ctx context.Context, cmd WatcherCreateTaskCommand) error
 }
 
 // NewCommandPublisher returns a CommandPublisher backed by the given CommandObjectSender.
@@ -34,7 +44,7 @@ type kafkaPublisher struct {
 	commandCreator base.CommandCreator
 }
 
-func (p *kafkaPublisher) PublishCreate(ctx context.Context, cmd agentlib.CreateTaskCommand) error {
+func (p *kafkaPublisher) PublishCreate(ctx context.Context, cmd WatcherCreateTaskCommand) error {
 	event, err := marshalEvent(ctx, cmd)
 	if err != nil {
 		return errors.Wrap(ctx, err, "marshal create-task command")

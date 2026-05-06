@@ -257,7 +257,7 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	owner, repo, episodeSHA string,
 	failingRuns []WorkflowRun,
 	assignee, taskStatus, taskPhase string,
-) agentlib.CreateTaskCommand {
+) WatcherCreateTaskCommand {
 	lines := make([]string, 0, 6+len(failingRuns))
 	lines = append(lines,
 		fmt.Sprintf("# Build Failure: %s/%s", owner, repo),
@@ -281,10 +281,13 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	if taskPhase != "" {
 		fm["phase"] = taskPhase
 	}
-	return agentlib.CreateTaskCommand{
-		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
-		Frontmatter:    fm,
-		Body:           body,
+	return WatcherCreateTaskCommand{
+		CreateTaskCommand: agentlib.CreateTaskCommand{
+			TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
+			Frontmatter:    fm,
+			Body:           body,
+		},
+		FilenameHint: computeFilenameHint("github", owner, repo, episodeSHA),
 	}
 }
 

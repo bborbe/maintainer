@@ -76,6 +76,7 @@ var _ = Describe("Watcher", func() {
 				Expect(string(cmd.TaskIdentifier)).NotTo(BeEmpty())
 				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
 				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-abc"))
+				Expect(cmd.FilenameHint).To(Equal("Build Failure github - owner-repo - sha-abc"))
 
 				// verify cursor updated to red
 				loaded, err := pkg.LoadCursor(ctx, cursorPath)
@@ -130,6 +131,7 @@ var _ = Describe("Watcher", func() {
 				_, cmd := publisher.PublishCreateArgsForCall(0)
 				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-b"))
 				Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
+				Expect(cmd.FilenameHint).To(Equal("Build Failure github - owner-repo - sha-b"))
 			})
 		})
 
@@ -494,6 +496,9 @@ var _ = Describe("Watcher", func() {
 					_, cmd := publisher.PublishCreateArgsForCall(0)
 					Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
 					Expect(cmd.Body).To(ContainSubstring("# Build Failure: owner/repo"))
+					Expect(
+						cmd.FilenameHint,
+					).To(Equal("Build Failure github - owner-repo - sha-abc"))
 
 					// cursor key keeps the host prefix
 					loaded, err := pkg.LoadCursor(ctx, cursorPath)

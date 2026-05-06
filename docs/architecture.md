@@ -184,6 +184,7 @@ The agent contract is set in step 1 and does not change in later steps — only 
   "clone_url": "https://github.com/bborbe/maintainer.git",
   "ref": "<head_sha>",
   "base_ref": "master",
+  "filename_hint": "Build Failure github - bborbe-maintainer - 5886450",
   "source": {
     "provider": "github",
     "pr_url": "https://github.com/bborbe/maintainer/pull/42",
@@ -191,6 +192,9 @@ The agent contract is set in step 1 and does not change in later steps — only 
   }
 }
 ```
+
+`filename_hint` (optional) — human-readable filename stem for the vault task file;
+absent in messages from older watchers; controller falls back to UUID-based name.
 
 `source` is opaque to the agent — only used by the post-back step.
 

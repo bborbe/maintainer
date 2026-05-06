@@ -1,7 +1,8 @@
 ---
-status: generating
+status: prompted
 approved: "2026-05-06T20:18:23Z"
 generating: "2026-05-06T20:18:24Z"
+prompted: "2026-05-06T20:26:25Z"
 branch: dark-factory/human-readable-filenames-for-build-tasks
 ---
 

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.24
+
+- feat(watcher/github-build): emit filename_hint in CreateTaskCommand — build-failure vault tasks will land at "Build Failure github - {owner}-{repo} - {sha7}.md" once the companion bborbe/agent controller PR lands; existing controllers silently ignore the new field
+
 ## v0.23.23
 
 - chore(watcher/github-build): rename pod-side env vars from `WATCHER_GITHUB_BUILD_TASK_*` to short `TASK_ASSIGNEE` / `TASK_STATUS` / `TASK_PHASE` (the StatefulSet template now maps long deploy-side names → short pod-side names; long names remain in `dev.env`/`prod.env` so the cross-service file stays unambiguous)

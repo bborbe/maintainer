@@ -93,6 +93,34 @@ sharing the existing `REPO_ALLOWLIST` env var injected from `dev.env`/`prod.env`
 Splitting per-watcher requires a new env naming convention (`BUILD_REPO_ALLOWLIST`,
 `PR_REPO_ALLOWLIST`) and corresponding code wiring; tracked as a follow-up.
 
+## `filename_hint` Field
+
+Every `CreateTaskCommand` published by the build watcher includes a `filename_hint` field
+with the human-readable filename stem for the vault task file:
+
+```
+Build Failure {provider} - {owner}-{repo} - {sha7}
+```
+
+| Component | Source | Notes |
+|---|---|---|
+| `Build Failure` | constant | literal |
+| `{provider}` | hard-coded `github` in this watcher | future watchers carry their own constant |
+| `{owner}-{repo}` | `owner` and `repo` from allowlist entry, slugified independently, joined with `-` | lowercase; non-`[a-z0-9-]` → `-`; leading/trailing hyphens stripped |
+| `{sha7}` | first 7 chars of `episode_sha` | matches git's default short-hash length; not slugified |
+
+**Example:** `Build Failure github - bborbe-maintainer - 5886450`
+
+**Future provider slots:** `Build Failure bitbucket - team-svc - a1b2c3d.md`
+
+**Controller behavior (future):** The task controller (`bborbe/agent`) will name the vault file
+`tasks/{filename_hint}.md` when the hint is present and valid. If absent or invalid, the controller
+falls back to `tasks/{uuid}.md`. Controller-side validation and fallback logic ships in a separate
+`bborbe/agent` spec. Until that spec lands, the `filename_hint` field is emitted but ignored.
+
+**Schema compatibility:** The field uses `json:"filename_hint,omitempty"`. Controllers that do not
+recognize `filename_hint` process the message correctly via Go's `encoding/json` permissive default.
+
 ## Per-Repo Configuration (`.maintenance.yaml`)
 
 Each repo can provide a `.maintenance.yaml` at its root to override the watcher's
