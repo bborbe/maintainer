@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [019-human-readable-filenames-for-pr-review-tasks]
 summary: Added WatcherCreateTaskCommand wrapper type to github-pr watcher, implemented computePRFilenameHint/slugifyTitle helpers, updated publishCreate to emit FilenameHint on both trusted and untrusted paths, regenerated mock, added FilenameHint assertions to watcher_test.go, and created filename_internal_test.go with comprehensive slug and JSON marshal tests.
 container: maintainer-096-spec-019-pr-review-filename-hint-emit
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:30:00Z"
 queued: "2026-05-06T20:49:45Z"
 started: "2026-05-06T20:49:53Z"
+completed: "2026-05-06T20:58:22Z"
 branch: dark-factory/human-readable-filenames-for-pr-review-tasks
 ---
 
