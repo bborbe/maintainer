@@ -6,6 +6,7 @@ package pkg
 
 import (
 	"encoding/json"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	. "github.com/onsi/ginkgo/v2"
@@ -168,4 +169,22 @@ var _ = Describe("WatcherCreateTaskCommand JSON marshalling", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(raw)).NotTo(ContainSubstring(`"filename_hint"`))
 	})
+})
+
+var _ = Describe("formatDuration", func() {
+	DescribeTable("formats duration as human-readable string",
+		func(input time.Duration, want string) {
+			Expect(formatDuration(input)).To(Equal(want))
+		},
+		Entry("zero duration returns empty", 0*time.Second, ""),
+		Entry("negative duration returns empty", -1*time.Second, ""),
+		Entry("seconds only", 47*time.Second, "47s"),
+		Entry("minutes and seconds", 2*time.Minute+47*time.Second, "2m 47s"),
+		Entry("hours, minutes, seconds", 1*time.Hour+5*time.Minute+3*time.Second, "1h 5m 3s"),
+		Entry("exactly one minute", 60*time.Second, "1m 0s"),
+		Entry("sub-500ms rounds to zero → empty", 499*time.Millisecond, ""),
+		Entry("exactly 500ms rounds to 1s", 500*time.Millisecond, "1s"),
+		Entry("1499ms rounds to 1s", 1499*time.Millisecond, "1s"),
+		Entry("1500ms rounds to 2s", 1500*time.Millisecond, "2s"),
+	)
 })

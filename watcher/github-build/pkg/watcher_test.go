@@ -731,4 +731,131 @@ var _ = Describe("Watcher", func() {
 			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
 		})
 	})
+
+	Describe("task body header context", func() {
+		var t0 time.Time
+
+		BeforeEach(func() {
+			t0 = time.Date(2026, 5, 6, 14, 32, 0, 0, time.UTC)
+		})
+
+		It("includes all header fields when WorkflowRun has full context", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID:   1,
+					RunID:        42,
+					Name:         "CI",
+					HeadSHA:      "sha-abc",
+					Conclusion:   "failure",
+					HTMLURL:      "https://github.com/owner/repo/actions/runs/42",
+					CreatedAt:    t0,
+					DisplayTitle: "Fix authentication bug",
+					HeadBranch:   "main",
+					Event:        "push",
+					StartedAt:    t0,
+					UpdatedAt:    t0.Add(3*time.Minute + 47*time.Second),
+				},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("**Commit:** Fix authentication bug"))
+			Expect(cmd.Body).To(ContainSubstring("**Branch:** main"))
+			Expect(cmd.Body).To(ContainSubstring("**Event:** push"))
+			Expect(cmd.Body).To(ContainSubstring("**Started:** 2026-05-06T14:32:00Z"))
+			Expect(cmd.Body).To(ContainSubstring("**Finished:** 2026-05-06T14:35:47Z"))
+			Expect(cmd.Body).To(ContainSubstring("**Duration:** 3m 47s"))
+		})
+
+		It("omits all header fields when WorkflowRun has zero context (backwards compat)", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					HeadSHA:    "sha-abc",
+					Conclusion: "failure",
+					CreatedAt:  time.Now(),
+					// DisplayTitle, HeadBranch, Event, StartedAt, UpdatedAt all zero
+				},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).NotTo(ContainSubstring("**Commit:**"))
+			Expect(cmd.Body).NotTo(ContainSubstring("**Branch:**"))
+			Expect(cmd.Body).NotTo(ContainSubstring("**Duration:**"))
+			Expect(cmd.Body).To(ContainSubstring("Episode SHA: `sha-abc`"))
+			Expect(cmd.Body).To(ContainSubstring("## Failing Workflows"))
+		})
+
+		It("omits Duration when only StartedAt is set (UpdatedAt zero)", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					HeadSHA:    "sha-abc",
+					Conclusion: "failure",
+					CreatedAt:  time.Now(),
+					StartedAt:  t0,
+					// UpdatedAt zero
+				},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("**Started:** 2026-05-06T14:32:00Z"))
+			Expect(cmd.Body).NotTo(ContainSubstring("**Finished:**"))
+			Expect(cmd.Body).NotTo(ContainSubstring("**Duration:**"))
+		})
+
+		It("uses earliest failing run for header context when multiple runs fail", func() {
+			early := time.Date(2026, 5, 6, 10, 0, 0, 0, time.UTC)
+			late := early.Add(time.Hour)
+
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID:   1,
+					RunID:        10,
+					Name:         "CI",
+					HeadSHA:      "sha-late",
+					Conclusion:   "failure",
+					HTMLURL:      "https://github.com/owner/repo/actions/runs/10",
+					CreatedAt:    late,
+					DisplayTitle: "Late commit",
+					HeadBranch:   "feature",
+				},
+				{
+					WorkflowID:   2,
+					RunID:        20,
+					Name:         "Deploy",
+					HeadSHA:      "sha-early",
+					Conclusion:   "failure",
+					HTMLURL:      "https://github.com/owner/repo/actions/runs/20",
+					CreatedAt:    early,
+					DisplayTitle: "Early commit",
+					HeadBranch:   "main",
+				},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("**Commit:** Early commit"))
+			Expect(cmd.Body).To(ContainSubstring("**Branch:** main"))
+			Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-early"))
+		})
+	})
 })

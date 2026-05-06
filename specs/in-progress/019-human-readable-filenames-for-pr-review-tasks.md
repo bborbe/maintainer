@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-05-06T20:23:41Z"
 generating: "2026-05-06T20:26:25Z"
 prompted: "2026-05-06T20:31:00Z"
+verifying: "2026-05-06T20:58:22Z"
 branch: dark-factory/human-readable-filenames-for-pr-review-tasks
 ---
 

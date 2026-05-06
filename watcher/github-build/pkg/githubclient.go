@@ -20,12 +20,18 @@ var ErrRateLimited = stderrors.New("github rate limited")
 
 // WorkflowRun holds the fields the watcher needs from a GitHub Actions workflow run.
 type WorkflowRun struct {
-	WorkflowID int64
-	Name       string
-	HeadSHA    string
-	Conclusion string
-	HTMLURL    string
-	CreatedAt  time.Time
+	WorkflowID   int64
+	RunID        int64 // run instance ID — used by jobs API (GET /actions/runs/{id}/jobs)
+	Name         string
+	HeadSHA      string
+	Conclusion   string
+	HTMLURL      string
+	CreatedAt    time.Time
+	DisplayTitle string    // display_title: commit message shown in GitHub UI
+	HeadBranch   string    // head_branch: branch that triggered the run
+	Event        string    // event: push / pull_request / schedule / workflow_dispatch / etc.
+	StartedAt    time.Time // run_started_at: when execution began (not queuing time)
+	UpdatedAt    time.Time // updated_at: last status change — completion time for done runs
 }
 
 //counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
@@ -95,12 +101,18 @@ func (c *githubClient) GetWorkflowRuns(
 			createdAt = run.CreatedAt.Time
 		}
 		runs = append(runs, WorkflowRun{
-			WorkflowID: run.GetWorkflowID(),
-			Name:       run.GetName(),
-			HeadSHA:    run.GetHeadSHA(),
-			Conclusion: run.GetConclusion(),
-			HTMLURL:    run.GetHTMLURL(),
-			CreatedAt:  createdAt,
+			WorkflowID:   run.GetWorkflowID(),
+			RunID:        run.GetID(),
+			Name:         run.GetName(),
+			HeadSHA:      run.GetHeadSHA(),
+			Conclusion:   run.GetConclusion(),
+			HTMLURL:      run.GetHTMLURL(),
+			CreatedAt:    createdAt,
+			DisplayTitle: run.GetDisplayTitle(),
+			HeadBranch:   run.GetHeadBranch(),
+			Event:        run.GetEvent(),
+			StartedAt:    run.GetRunStartedAt().Time,
+			UpdatedAt:    run.GetUpdatedAt().Time,
 		})
 	}
 	return runs, nil

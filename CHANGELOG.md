@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.26
+
+- feat(watcher/github-build): enrich task body header — commit subject, branch, event, started/finished timestamps, and elapsed duration now appear in every build-failure task body using fields already present in the workflow-run API response (zero extra API calls); all fields are optional and omitted gracefully when not populated
+
 ## v0.23.25
 
 - feat(watcher/github-pr): emit filename_hint in CreateTaskCommand — PR-review vault tasks will land at "PR Review github - {owner}-{repo} - {number} - {slug}.md" once the companion bborbe/agent controller PR lands; existing controllers silently ignore the new field

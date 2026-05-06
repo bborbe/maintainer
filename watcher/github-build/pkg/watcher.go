@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
@@ -258,9 +259,38 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	failingRuns []WorkflowRun,
 	assignee, taskStatus, taskPhase string,
 ) WatcherCreateTaskCommand {
-	lines := make([]string, 0, 6+len(failingRuns))
+	firstRun := failingRuns[0]
+	lines := make([]string, 0, 12+len(failingRuns))
+	lines = append(lines, fmt.Sprintf("# Build Failure: %s/%s", owner, repo), "")
+
+	if firstRun.DisplayTitle != "" {
+		lines = append(lines, fmt.Sprintf("**Commit:** %s", firstRun.DisplayTitle))
+	}
+	if firstRun.HeadBranch != "" {
+		lines = append(lines, fmt.Sprintf("**Branch:** %s", firstRun.HeadBranch))
+	}
+	if firstRun.Event != "" {
+		lines = append(lines, fmt.Sprintf("**Event:** %s", firstRun.Event))
+	}
+	if !firstRun.StartedAt.IsZero() {
+		lines = append(
+			lines,
+			fmt.Sprintf("**Started:** %s", firstRun.StartedAt.UTC().Format(time.RFC3339)),
+		)
+	}
+	if !firstRun.UpdatedAt.IsZero() {
+		lines = append(
+			lines,
+			fmt.Sprintf("**Finished:** %s", firstRun.UpdatedAt.UTC().Format(time.RFC3339)),
+		)
+	}
+	if !firstRun.StartedAt.IsZero() && !firstRun.UpdatedAt.IsZero() {
+		if d := formatDuration(firstRun.UpdatedAt.Sub(firstRun.StartedAt)); d != "" {
+			lines = append(lines, fmt.Sprintf("**Duration:** %s", d))
+		}
+	}
+
 	lines = append(lines,
-		fmt.Sprintf("# Build Failure: %s/%s", owner, repo),
 		"",
 		fmt.Sprintf("Episode SHA: `%s`", episodeSHA),
 		"",
@@ -298,4 +328,26 @@ func coalesceString(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// formatDuration formats d as a human-readable string for the task body header.
+// Returns "" when d ≤ 0 so callers can omit the Duration line for zero timestamps.
+func formatDuration(d time.Duration) string {
+	if d <= 0 {
+		return ""
+	}
+	d = d.Round(time.Second)
+	if d <= 0 {
+		return ""
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm %ds", h, m, s)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }
