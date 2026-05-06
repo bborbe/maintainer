@@ -57,6 +57,12 @@ spec:
               value: '{{"SENTRY_PROXY_URL" | env}}'
             - name: REPO_ALLOWLIST
               value: '{{"REPO_ALLOWLIST" | env}}'
+            - name: BUILD_ASSIGNEE
+              value: '{{"BUILD_ASSIGNEE" | env}}'
+            - name: BUILD_TASK_STATUS
+              value: '{{"BUILD_TASK_STATUS" | env}}'
+            - name: BUILD_TASK_PHASE
+              value: '{{"BUILD_TASK_PHASE" | env}}'
           image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-build:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:
