@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [018-human-readable-filenames-for-build-tasks]
 summary: Added WatcherCreateTaskCommand wrapper type, computeFilenameHint/slugifySegment helpers, updated CommandPublisher interface and impl, regenerated mock, added FilenameHint assertions to watcher_test.go, added unit tests for computeFilenameHint/slugifySegment/JSON marshalling to watcher_internal_test.go, updated docs/build-watcher.md and docs/architecture.md, and added CHANGELOG entry.
 container: maintainer-095-spec-018-filename-hint-emit
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:00:00Z"
 queued: "2026-05-06T20:30:06Z"
 started: "2026-05-06T20:30:08Z"
+completed: "2026-05-06T20:47:52Z"
 branch: dark-factory/human-readable-filenames-for-build-tasks
 ---
 
