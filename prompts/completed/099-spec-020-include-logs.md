@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 spec: [020-richer-build-task-context]
 container: maintainer-099-spec-020-include-logs
 dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:00:00Z"
 queued: "2026-05-06T20:54:21Z"
 started: "2026-05-06T21:09:06Z"
+completed: "2026-05-06T21:20:42Z"
 branch: dark-factory/richer-build-task-context
 ---
 
