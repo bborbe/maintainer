@@ -37,9 +37,11 @@ rules, the worked example (t0–t4), and cold-start flood behaviour.
 | `POLL_INTERVAL` | no | `5m` | Poll interval (Go duration string) |
 | `SENTRY_DSN` | no | — | Sentry DSN for error tracking |
 | `SENTRY_PROXY` | no | — | HTTP proxy URL for Sentry transport |
-| `BUILD_ASSIGNEE` | no | `build-fixer-agent` | Frontmatter `assignee` written to published tasks; explicit empty string rejected at startup |
-| `BUILD_TASK_STATUS` | no | `todo` | Frontmatter `status` written to published tasks; explicit empty string rejected at startup |
-| `BUILD_TASK_PHASE` | no | (empty — omitted) | Frontmatter `phase` written to published tasks; if empty or unset, the key is NOT written to frontmatter |
+| `TASK_ASSIGNEE` | no | `build-fixer-agent` | Frontmatter `assignee` written to published tasks; explicit empty string rejected at startup |
+| `TASK_STATUS` | no | `todo` | Frontmatter `status` written to published tasks; explicit empty string rejected at startup |
+| `TASK_PHASE` | no | (empty — omitted) | Frontmatter `phase` written to published tasks; if empty or unset, the key is NOT written to frontmatter |
+
+The container env vars above are short and pod-scoped. The deploy-side env file (`dev.env` / `prod.env`) uses long, namespaced names (`WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` etc.) because that file holds variables for multiple services; the StatefulSet template (`k8s/maintainer-watcher-github-build-sts.yaml`) maps long → short on its way into the pod.
 
 ## HTTP Endpoints
 

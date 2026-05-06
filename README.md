@@ -59,7 +59,7 @@ make buca BRANCH=prod    # same for prod
 
 - Teamvault entries:
   - `SENTRY_DSN_KEY` — Sentry DSN (URL field)
-  - `PR_REVIEWER_GITHUB_TOKEN_KEY` — GitHub PAT (Password field) with `repo` + `read:org` scopes
+  - `AGENT_PR_REVIEWER_GH_TOKEN_KEY` — GitHub PAT (Password field) with `repo` + `read:org` scopes
 - PVC `agent-pr-reviewer` seeded with a valid `.claude/` config (copy from `agent-claude` PVC or run one-time `claude login` in a temp pod; see [claude-oauth-setup.md](https://github.com/bborbe/agent/blob/master/agent/claude/docs/claude-oauth-setup.md)). PVC name preserved across the `code-reviewer` → `maintainer` rename to avoid OAuth re-seed.
 - Config CR registered with the task controller (handled by `k8s/maintainer-agent-pr-reviewer.yaml`)
 

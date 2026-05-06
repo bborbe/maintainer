@@ -2,9 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.23
+
+- chore(watcher/github-build): rename pod-side env vars from `WATCHER_GITHUB_BUILD_TASK_*` to short `TASK_ASSIGNEE` / `TASK_STATUS` / `TASK_PHASE` (the StatefulSet template now maps long deploy-side names → short pod-side names; long names remain in `dev.env`/`prod.env` so the cross-service file stays unambiguous)
+- chore(env): rename teamvault-key env vars to mirror source layout (`GH_BUILD_WATCHER_TOKEN_KEY` → `WATCHER_GITHUB_BUILD_GH_TOKEN_KEY`, `GH_PR_WATCHER_TOKEN_KEY` → `WATCHER_GITHUB_PR_GH_TOKEN_KEY`, `PR_REVIEWER_GITHUB_TOKEN_KEY` → `AGENT_PR_REVIEWER_GH_TOKEN_KEY`); secret manifests updated accordingly
+- feat(env): expose build-watcher task-frontmatter overrides in `dev.env`/`prod.env` (`WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=bborbe`, `WATCHER_GITHUB_BUILD_TASK_STATUS=in_progress`, `WATCHER_GITHUB_BUILD_TASK_PHASE=todo`) so the dev/prod fleet routes build-failure tasks to a human until the build-fixer agent ships
+- feat(watcher/github-build): self-monitor — `bborbe/maintainer` added to the dev `REPO_ALLOWLIST` and a default `.maintenance.yaml` committed at repo root
+- docs(maintainer): new `docs/verifying-specs.md` codifies the three-rung spec verification ladder (local `cmd/run-once` → dev k8s e2e → prod k8s e2e); CLAUDE.md links it as a BLOCKING rule before `dark-factory spec complete`
+- docs(watcher/github-build): README env-vars table uses the short pod-side names with an explainer about the long→short deploy mapping
+
 ## v0.23.22
 
-- feat(watcher/github-build): per-repo .maintenance.yaml overrides — build watcher reads watcher.github-build.{assignee,status,phase} from the repo's root on each green→red transition; missing file, malformed YAML, and API errors fall through silently to watcher defaults (BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE)
+- feat(watcher/github-build): per-repo .maintenance.yaml overrides — build watcher reads watcher.github-build.{assignee,status,phase} from the repo's root on each green→red transition; missing file, malformed YAML, and API errors fall through silently to watcher defaults (WATCHER_GITHUB_BUILD_TASK_ASSIGNEE / WATCHER_GITHUB_BUILD_TASK_STATUS / WATCHER_GITHUB_BUILD_TASK_PHASE)
 
 ## v0.23.21
 
@@ -13,7 +22,7 @@ All notable changes to this project will be documented in this file.
 
 ## v0.23.20
 
-- feat(watcher/github-build): add BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty BUILD_TASK_PHASE omits the phase key entirely
+- feat(watcher/github-build): add WATCHER_GITHUB_BUILD_TASK_ASSIGNEE, WATCHER_GITHUB_BUILD_TASK_STATUS, WATCHER_GITHUB_BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty WATCHER_GITHUB_BUILD_TASK_PHASE omits the phase key entirely
 
 ## v0.23.19
 

@@ -551,7 +551,7 @@ var _ = Describe("Watcher", func() {
 			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
 		})
 
-		It("includes phase key when BUILD_TASK_PHASE is non-empty", func() {
+		It("includes phase key when WATCHER_GITHUB_BUILD_TASK_PHASE is non-empty", func() {
 			ghClient.GetDefaultBranchReturns("main", nil)
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(11, "sha-phase"), nil)
 
@@ -563,7 +563,7 @@ var _ = Describe("Watcher", func() {
 			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
 		})
 
-		It("omits phase key when BUILD_TASK_PHASE is empty string", func() {
+		It("omits phase key when WATCHER_GITHUB_BUILD_TASK_PHASE is empty string", func() {
 			ghClient.GetDefaultBranchReturns("main", nil)
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(12, "sha-nophase"), nil)
 

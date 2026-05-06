@@ -190,7 +190,7 @@ include ../../../Makefile.k8s
      namespace: '{{ "NAMESPACE" | env }}'
    data:
      SENTRY_DSN: '{{ "SENTRY_DSN_KEY" | env | teamvaultUrl | base64 }}'
-     PR_REVIEWER_GITHUB_TOKEN: '{{ "PR_REVIEWER_GITHUB_TOKEN_KEY" | env | teamvaultUrl | base64 }}'
+     PR_REVIEWER_GITHUB_TOKEN: '{{ "AGENT_PR_REVIEWER_GH_TOKEN_KEY" | env | teamvaultUrl | base64 }}'
    ```
 
 5. Create `agent/pr-reviewer/k8s/priorityclass.yaml`:

@@ -35,9 +35,9 @@ Both string literals. If a future fixer agent is renamed, or the operator wants 
 
 | Arg | Env | Default | Purpose |
 |---|---|---|---|
-| `--build-assignee` | `BUILD_ASSIGNEE` | `build-fixer-agent` | Value written to `Frontmatter["assignee"]` |
-| `--build-task-status` | `BUILD_TASK_STATUS` | `todo` | Value written to `Frontmatter["status"]` |
-| `--build-task-phase` | `BUILD_TASK_PHASE` | (empty string — omit field) | Value written to `Frontmatter["phase"]`; if empty, the field is NOT added to frontmatter (preserves today's behavior of omitting `phase`) |
+| `--build-assignee` | `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` | `build-fixer-agent` | Value written to `Frontmatter["assignee"]` |
+| `--build-task-status` | `WATCHER_GITHUB_BUILD_TASK_STATUS` | `todo` | Value written to `Frontmatter["status"]` |
+| `--build-task-phase` | `WATCHER_GITHUB_BUILD_TASK_PHASE` | (empty string — omit field) | Value written to `Frontmatter["phase"]`; if empty, the field is NOT added to frontmatter (preserves today's behavior of omitting `phase`) |
 
 The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are stored on `buildWatcher`, and `buildCreateTaskCommand` reads them via parameters (not package-level state).
 
@@ -51,10 +51,10 @@ The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are store
 
 ## Desired Behavior
 
-1. Setting `BUILD_ASSIGNEE=other-agent` in the StatefulSet env results in published `Frontmatter["assignee"] = "other-agent"`
-2. Setting `BUILD_TASK_STATUS=backlog` results in `Frontmatter["status"] = "backlog"`
-3. Setting `BUILD_TASK_PHASE=planning` results in `Frontmatter["phase"] = "planning"` appearing in the materialized vault file
-4. Leaving `BUILD_TASK_PHASE` unset (or set to empty string) results in NO `phase:` key in the materialized vault file (matches today's behavior — verified against `OpenClaw/tasks/710db30e-86e2-59a6-8ac1-9c7718122d4e.md`)
+1. Setting `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=other-agent` in the StatefulSet env results in published `Frontmatter["assignee"] = "other-agent"`
+2. Setting `WATCHER_GITHUB_BUILD_TASK_STATUS=backlog` results in `Frontmatter["status"] = "backlog"`
+3. Setting `WATCHER_GITHUB_BUILD_TASK_PHASE=planning` results in `Frontmatter["phase"] = "planning"` appearing in the materialized vault file
+4. Leaving `WATCHER_GITHUB_BUILD_TASK_PHASE` unset (or set to empty string) results in NO `phase:` key in the materialized vault file (matches today's behavior — verified against `OpenClaw/tasks/710db30e-86e2-59a6-8ac1-9c7718122d4e.md`)
 5. Setting nothing produces today's exact output (`assignee: build-fixer-agent`, `status: todo`, no `phase` field)
 
 ## Constraints
@@ -73,18 +73,18 @@ The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are store
 | Trigger | Expected behavior | Recovery |
 |---|---|---|
 | All three env vars unset | Defaults applied; today's output unchanged | none |
-| `BUILD_ASSIGNEE=`	(explicit empty) | Startup fails with `assignee must not be empty` (or equivalent service-framework validation) | operator sets a non-empty value |
-| `BUILD_TASK_STATUS=` (explicit empty) | Same as above | same |
-| `BUILD_TASK_PHASE=` (explicit empty) | Treated as "omit field", not error; phase key NOT written to frontmatter | by design — empty disables the field |
-| `BUILD_ASSIGNEE=build-fixer-agent` (explicit, matches default) | Same output as unset; logged | none |
+| `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=`	(explicit empty) | Startup fails with `assignee must not be empty` (or equivalent service-framework validation) | operator sets a non-empty value |
+| `WATCHER_GITHUB_BUILD_TASK_STATUS=` (explicit empty) | Same as above | same |
+| `WATCHER_GITHUB_BUILD_TASK_PHASE=` (explicit empty) | Treated as "omit field", not error; phase key NOT written to frontmatter | by design — empty disables the field |
+| `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=build-fixer-agent` (explicit, matches default) | Same output as unset; logged | none |
 
 ## Acceptance Criteria
 
-- [ ] Setting `BUILD_ASSIGNEE=foo` at startup results in published vault tasks carrying `assignee: foo`
-- [ ] Setting `BUILD_TASK_STATUS=backlog` results in `status: backlog` in published tasks
-- [ ] Setting `BUILD_TASK_PHASE=planning` results in `phase: planning` appearing in published tasks
+- [ ] Setting `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=foo` at startup results in published vault tasks carrying `assignee: foo`
+- [ ] Setting `WATCHER_GITHUB_BUILD_TASK_STATUS=backlog` results in `status: backlog` in published tasks
+- [ ] Setting `WATCHER_GITHUB_BUILD_TASK_PHASE=planning` results in `phase: planning` appearing in published tasks
 - [ ] Leaving all three unset reproduces today's exact published frontmatter (`assignee: build-fixer-agent`, `status: todo`, no `phase` key)
-- [ ] `BUILD_TASK_PHASE=` (explicit empty) results in NO `phase` key in published frontmatter (NOT `phase: ""`)
+- [ ] `WATCHER_GITHUB_BUILD_TASK_PHASE=` (explicit empty) results in NO `phase` key in published frontmatter (NOT `phase: ""`)
 - [ ] The long-running watcher binary AND the one-shot `cmd/run-once` binary both honor all three overrides identically
 - [ ] `cmd/run-once/Makefile`'s `run-once` target lets the operator override any of the three on the make command line
 - [ ] README (`watcher/github-build/README.md`) Environment Variables table includes the three new entries with defaults
@@ -101,7 +101,7 @@ Smoke test the override path locally (port-forward Kafka first):
 
 ```bash
 cd watcher/github-build/cmd/run-once
-make run-once BUILD_ASSIGNEE=test-agent BUILD_TASK_STATUS=backlog BUILD_TASK_PHASE=planning REPO_ALLOWLIST=github.com/bborbe/maintainer
+make run-once WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=test-agent WATCHER_GITHUB_BUILD_TASK_STATUS=backlog WATCHER_GITHUB_BUILD_TASK_PHASE=planning REPO_ALLOWLIST=github.com/bborbe/maintainer
 
 # Expected: a vault task with frontmatter
 #   assignee: test-agent

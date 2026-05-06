@@ -44,9 +44,9 @@ type application struct {
 	PollInterval  string           `required:"false" arg:"poll-interval"  env:"POLL_INTERVAL"  usage:"Poll interval (Go duration)"                                                        default:"5m"`
 	RepoAllowlist string           `required:"true"  arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
 
-	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"BUILD_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                  default:"build-fixer-agent"`
-	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                    default:"todo"`
-	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
+	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                  default:"build-fixer-agent"`
+	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                    default:"todo"`
+	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {

@@ -1,7 +1,7 @@
 ---
 status: completed
 spec: [016-configurable-task-frontmatter]
-summary: Added BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars to github-build watcher; converted buildCreateTaskCommand to a method on buildWatcher; updated factory, both mains, run-once Makefile, README, and CHANGELOG; all tests pass at 85.8% coverage and make precommit exits 0.
+summary: Added WATCHER_GITHUB_BUILD_TASK_ASSIGNEE, WATCHER_GITHUB_BUILD_TASK_STATUS, WATCHER_GITHUB_BUILD_TASK_PHASE env vars to github-build watcher; converted buildCreateTaskCommand to a method on buildWatcher; updated factory, both mains, run-once Makefile, README, and CHANGELOG; all tests pass at 85.8% coverage and make precommit exits 0.
 container: maintainer-092-spec-016-configurable-task-frontmatter
 dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T18:00:00Z"
@@ -13,9 +13,9 @@ branch: dark-factory/configurable-task-frontmatter
 
 <summary>
 - Operators can override the task `assignee`, `status`, and `phase` via env vars at deploy time without code changes or rebuilds
-- Three new env vars added: `BUILD_ASSIGNEE` (default: `build-fixer-agent`), `BUILD_TASK_STATUS` (default: `todo`), `BUILD_TASK_PHASE` (default: empty — field omitted)
-- Empty `BUILD_TASK_PHASE` produces NO `phase:` key in published task frontmatter (not `phase: ""`), preserving today's behavior
-- Explicit empty `BUILD_ASSIGNEE` or `BUILD_TASK_STATUS` is rejected at startup with a validation error from the service framework
+- Three new env vars added: `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` (default: `build-fixer-agent`), `WATCHER_GITHUB_BUILD_TASK_STATUS` (default: `todo`), `WATCHER_GITHUB_BUILD_TASK_PHASE` (default: empty — field omitted)
+- Empty `WATCHER_GITHUB_BUILD_TASK_PHASE` produces NO `phase:` key in published task frontmatter (not `phase: ""`), preserving today's behavior
+- Explicit empty `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` or `WATCHER_GITHUB_BUILD_TASK_STATUS` is rejected at startup with a validation error from the service framework
 - Both the long-running watcher binary (`main.go`) and `cmd/run-once` honor all three overrides identically
 - `cmd/run-once/Makefile` `run-once` target exposes all three as make variables overridable on the command line
 - README env vars table includes the three new entries with their defaults
@@ -24,7 +24,7 @@ branch: dark-factory/configurable-task-frontmatter
 </summary>
 
 <objective>
-Add `BUILD_ASSIGNEE`, `BUILD_TASK_STATUS`, and `BUILD_TASK_PHASE` CLI args / env vars to the github-build watcher so operators can reconfigure published task frontmatter at deploy time without a code change. The values flow from `main.go` through `factory.CreateWatcher` into `pkg.NewWatcher`, are stored on `buildWatcher`, and `buildCreateTaskCommand` reads them from the struct receiver (no package-level state).
+Add `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE`, `WATCHER_GITHUB_BUILD_TASK_STATUS`, and `WATCHER_GITHUB_BUILD_TASK_PHASE` CLI args / env vars to the github-build watcher so operators can reconfigure published task frontmatter at deploy time without a code change. The values flow from `main.go` through `factory.CreateWatcher` into `pkg.NewWatcher`, are stored on `buildWatcher`, and `buildCreateTaskCommand` reads them from the struct receiver (no package-level state).
 </objective>
 
 <context>
@@ -186,9 +186,9 @@ Files to read fully before making any changes:
    Add three new fields to the `application` struct after the existing `RepoAllowlist` field:
 
    ```go
-   BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"BUILD_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                default:"build-fixer-agent"`
-   BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                  default:"todo"`
-   BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
+   BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"WATCHER_GITHUB_BUILD_TASK_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                default:"build-fixer-agent"`
+   BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"WATCHER_GITHUB_BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                  default:"todo"`
+   BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"WATCHER_GITHUB_BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
    ```
 
    Update the `factory.CreateWatcher` call in `Run` to pass the three new fields after `"/data/cursor.json"`:
@@ -212,9 +212,9 @@ Files to read fully before making any changes:
    Add the same three fields to the `application` struct (identical to `main.go`):
 
    ```go
-   BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"BUILD_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                default:"build-fixer-agent"`
-   BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                  default:"todo"`
-   BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
+   BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"WATCHER_GITHUB_BUILD_TASK_ASSIGNEE"    usage:"Frontmatter assignee for published tasks"                default:"build-fixer-agent"`
+   BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"WATCHER_GITHUB_BUILD_TASK_STATUS" usage:"Frontmatter status for published tasks"                  default:"todo"`
+   BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"WATCHER_GITHUB_BUILD_TASK_PHASE"  usage:"Frontmatter phase for published tasks; empty = omit field"`
    ```
 
    Update the `factory.CreateWatcher` call in `Run`:
@@ -238,18 +238,18 @@ Files to read fully before making any changes:
    Add three new make variables (with defaults matching the struct tag defaults) and pass them as flags to `go run`:
 
    ```makefile
-   BUILD_ASSIGNEE    ?= build-fixer-agent
-   BUILD_TASK_STATUS ?= todo
-   BUILD_TASK_PHASE  ?=
+   WATCHER_GITHUB_BUILD_TASK_ASSIGNEE    ?= build-fixer-agent
+   WATCHER_GITHUB_BUILD_TASK_STATUS ?= todo
+   WATCHER_GITHUB_BUILD_TASK_PHASE  ?=
 
    run-once:
    	@GH_TOKEN=$$(gh auth token) go run -mod=mod . \
    		-kafka-brokers="$(KAFKA_BROKERS)" \
    		-stage=$(STAGE) \
    		-repo-allowlist="$(REPO_ALLOWLIST)" \
-   		-build-assignee="$(BUILD_ASSIGNEE)" \
-   		-build-task-status="$(BUILD_TASK_STATUS)" \
-   		-build-task-phase="$(BUILD_TASK_PHASE)" \
+   		-build-assignee="$(WATCHER_GITHUB_BUILD_TASK_ASSIGNEE)" \
+   		-build-task-status="$(WATCHER_GITHUB_BUILD_TASK_STATUS)" \
+   		-build-task-phase="$(WATCHER_GITHUB_BUILD_TASK_PHASE)" \
    		-v=2
    ```
 
@@ -320,7 +320,7 @@ Files to read fully before making any changes:
            Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
        })
 
-       It("includes phase key when BUILD_TASK_PHASE is non-empty", func() {
+       It("includes phase key when WATCHER_GITHUB_BUILD_TASK_PHASE is non-empty", func() {
            ghClient.GetDefaultBranchReturns("main", nil)
            ghClient.GetWorkflowRunsReturns(singleFailingRun(11, "sha-phase"), nil)
 
@@ -332,7 +332,7 @@ Files to read fully before making any changes:
            Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
        })
 
-       It("omits phase key when BUILD_TASK_PHASE is empty string", func() {
+       It("omits phase key when WATCHER_GITHUB_BUILD_TASK_PHASE is empty string", func() {
            ghClient.GetDefaultBranchReturns("main", nil)
            ghClient.GetWorkflowRunsReturns(singleFailingRun(12, "sha-nophase"), nil)
 
@@ -361,15 +361,15 @@ Files to read fully before making any changes:
    Append three new rows to the Environment Variables table (insert before the closing blank line after the `SENTRY_PROXY` row, or append at the end of the table body). The new rows:
 
    ```markdown
-   | `BUILD_ASSIGNEE`    | no | `build-fixer-agent` | Frontmatter `assignee` written to published tasks; explicit empty string rejected at startup |
-   | `BUILD_TASK_STATUS` | no | `todo`              | Frontmatter `status` written to published tasks; explicit empty string rejected at startup |
-   | `BUILD_TASK_PHASE`  | no | (empty — omitted)   | Frontmatter `phase` written to published tasks; if empty or unset, the key is NOT written to frontmatter |
+   | `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE`    | no | `build-fixer-agent` | Frontmatter `assignee` written to published tasks; explicit empty string rejected at startup |
+   | `WATCHER_GITHUB_BUILD_TASK_STATUS` | no | `todo`              | Frontmatter `status` written to published tasks; explicit empty string rejected at startup |
+   | `WATCHER_GITHUB_BUILD_TASK_PHASE`  | no | (empty — omitted)   | Frontmatter `phase` written to published tasks; if empty or unset, the key is NOT written to frontmatter |
    ```
 
 9. **Add CHANGELOG entry** to root `CHANGELOG.md` under `## Unreleased` (create the section if it does not exist):
 
    ```
-   - feat(watcher/github-build): add BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty BUILD_TASK_PHASE omits the phase key entirely
+   - feat(watcher/github-build): add WATCHER_GITHUB_BUILD_TASK_ASSIGNEE, WATCHER_GITHUB_BUILD_TASK_STATUS, WATCHER_GITHUB_BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty WATCHER_GITHUB_BUILD_TASK_PHASE omits the phase key entirely
    ```
 
 10. **Verify ancillary test files compile.** The following may need updates if they reference changed symbols:
@@ -388,7 +388,7 @@ Files to read fully before making any changes:
 - Only edit files under `watcher/github-build/` and root `CHANGELOG.md`
 - Do NOT commit — dark-factory handles git
 - `Frontmatter["phase"]` MUST be omitted (not set to empty string) when `taskPhase == ""` — `phase: ""` in YAML is observably different from no `phase` key and breaks the spec's AC
-- `BuildAssignee` and `BuildTaskStatus` MUST use `required:"true"` struct tag so an explicit empty env var override (e.g. `BUILD_ASSIGNEE=`) is rejected at startup by the service framework
+- `BuildAssignee` and `BuildTaskStatus` MUST use `required:"true"` struct tag so an explicit empty env var override (e.g. `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=`) is rejected at startup by the service framework
 - `BuildTaskPhase` MUST use `required:"false"` — empty string is valid and means "omit the field"
 - `buildCreateTaskCommand` MUST be a method on `buildWatcher` reading `w.assignee`, `w.taskStatus`, `w.taskPhase` — NO package-level mutable state, NO globals
 - `factory.CreateWatcher` MUST pass all 3 new values directly to `pkg.NewWatcher` with no intermediate logic — factory stays zero-logic
@@ -437,11 +437,11 @@ grep -n "BuildAssignee\|BuildTaskStatus\|BuildTaskPhase" watcher/github-build/cm
 # Expected: 3 matches (identical to main.go)
 
 # Confirm run-once Makefile exposes the 3 vars:
-grep -n "BUILD_ASSIGNEE\|BUILD_TASK_STATUS\|BUILD_TASK_PHASE" watcher/github-build/cmd/run-once/Makefile
+grep -n "WATCHER_GITHUB_BUILD_TASK_ASSIGNEE\|WATCHER_GITHUB_BUILD_TASK_STATUS\|WATCHER_GITHUB_BUILD_TASK_PHASE" watcher/github-build/cmd/run-once/Makefile
 # Expected: at least 6 matches (3 variable declarations + 3 flag pass-throughs)
 
 # Confirm README updated:
-grep -n "BUILD_ASSIGNEE\|BUILD_TASK_STATUS\|BUILD_TASK_PHASE" watcher/github-build/README.md
+grep -n "WATCHER_GITHUB_BUILD_TASK_ASSIGNEE\|WATCHER_GITHUB_BUILD_TASK_STATUS\|WATCHER_GITHUB_BUILD_TASK_PHASE" watcher/github-build/README.md
 # Expected: 3 matches in the env vars table
 
 # Confirm new tests present:
@@ -453,6 +453,6 @@ grep -n "NotTo(HaveKey" watcher/github-build/pkg/watcher_test.go
 # Expected: at least 2 matches (empty phase → no key in two It blocks)
 
 # Confirm CHANGELOG entry:
-grep -n "BUILD_ASSIGNEE\|build-task-phase\|configurable.*frontmatter" CHANGELOG.md
+grep -n "WATCHER_GITHUB_BUILD_TASK_ASSIGNEE\|build-task-phase\|configurable.*frontmatter" CHANGELOG.md
 # Expected: one match under ## Unreleased
 </verification>

@@ -1,8 +1,9 @@
 ---
-status: approved
+status: verifying
 approved: "2026-05-06T17:46:03Z"
 generating: "2026-05-06T17:48:00Z"
 prompted: "2026-05-06T17:59:14Z"
+verifying: "2026-05-06T18:50:30Z"
 branch: dark-factory/per-repo-maintenance-yaml
 ---
 
@@ -18,7 +19,7 @@ branch: dark-factory/per-repo-maintenance-yaml
 
 ## Problem
 
-Spec `configurable-task-frontmatter` lets the operator set ONE assignee/status/phase across the whole watcher fleet. But different repos have different fix runbooks: a Go repo wants the `go-deps-update` runbook, a Python repo wants `python-uv-update`, a docs-only repo wants `human-review` (no auto-fix at all). Today the only way to express that is to deploy multiple build-watcher StatefulSets with different `BUILD_ASSIGNEE` values and disjoint allowlists — operationally heavy.
+Spec `configurable-task-frontmatter` lets the operator set ONE assignee/status/phase across the whole watcher fleet. But different repos have different fix runbooks: a Go repo wants the `go-deps-update` runbook, a Python repo wants `python-uv-update`, a docs-only repo wants `human-review` (no auto-fix at all). Today the only way to express that is to deploy multiple build-watcher StatefulSets with different `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` values and disjoint allowlists — operationally heavy.
 
 A per-repo file in the repo itself is the natural home for repo-level routing config: the repo owner edits the file in the repo they own, the watcher reads it on the next poll. Same pattern as `dependabot.yml`, `.github/workflows/*.yml`, `.golangci.yml`.
 
@@ -61,16 +62,16 @@ The build watcher honors its `watcher.github-build` subtree on every `green → 
   ```yaml
   watcher:
     github-build:
-      assignee: <string>   # overrides BUILD_ASSIGNEE
-      status: <string>     # overrides BUILD_TASK_STATUS
-      phase: <string>      # overrides BUILD_TASK_PHASE; empty string = explicit "no phase"
+      assignee: <string>   # overrides WATCHER_GITHUB_BUILD_TASK_ASSIGNEE
+      status: <string>     # overrides WATCHER_GITHUB_BUILD_TASK_STATUS
+      phase: <string>      # overrides WATCHER_GITHUB_BUILD_TASK_PHASE; empty string = explicit "no phase"
     # Future: watcher.github-pr (PR watcher reads its own subtree)
   # Future: agent.build-fixer.* (fixer agent reads its own subtree)
   ```
 - **Subtree isolation**: each maintainer service reads ONLY its own subtree. The build watcher MUST NOT read or react to keys outside `watcher.github-build`. Adding new keys to other subtrees MUST NOT break the build watcher.
 - **Override precedence**: `.maintenance.yaml` `watcher.github-build.<key>` > watcher CLI/env default for the matching key > hardcoded fallback. Lookup is per-key (a missing key in the file does not invalidate other keys).
 - **Empty values in the file**: `assignee: ""` in YAML is treated as "no override; use default". Distinguishing "absent key" from "empty value" adds complexity for no operator benefit — both mean "fall through".
-- **Phase semantics**: `phase: ""` in the file means "set the published frontmatter's `phase` to empty (= omit)". This matches the watcher-default behavior when `BUILD_TASK_PHASE` is unset. For explicit override to a non-empty phase, set `phase: planning` (or whatever).
+- **Phase semantics**: `phase: ""` in the file means "set the published frontmatter's `phase` to empty (= omit)". This matches the watcher-default behavior when `WATCHER_GITHUB_BUILD_TASK_PHASE` is unset. For explicit override to a non-empty phase, set `phase: planning` (or whatever).
 - **Read-only**: the watcher MUST NOT write or modify `.maintenance.yaml`. It only reads.
 - **GitHub API path**: `GET /repos/{owner}/{repo}/contents/.maintenance.yaml?ref={default_branch}` — go-github's `Repositories.GetContents` returns the base64-decoded content
 - **Timeout / cancellation**: the fetch uses the same `ctx` as the rest of the poll cycle; no separate timeout (the surrounding poll cycle's deadline applies)
@@ -150,7 +151,7 @@ gh api -X DELETE /repos/bborbe/maintainer/contents/..maintenance.yaml \
 
 ## Do-Nothing Option
 
-Leave per-repo routing as a deployment concern (run multiple watcher StatefulSets with disjoint allowlists, each with its own `BUILD_ASSIGNEE`). Cost: operational complexity scales linearly with the number of routing variants. Five repos that each want a different fixer = five watchers. With this spec, one watcher serves all repos and each repo declares its own routing — same operator effort whether you have 5 routes or 50.
+Leave per-repo routing as a deployment concern (run multiple watcher StatefulSets with disjoint allowlists, each with its own `WATCHER_GITHUB_BUILD_TASK_ASSIGNEE`). Cost: operational complexity scales linearly with the number of routing variants. Five repos that each want a different fixer = five watchers. With this spec, one watcher serves all repos and each repo declares its own routing — same operator effort whether you have 5 routes or 50.
 
 ## Related
 

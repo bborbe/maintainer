@@ -6,7 +6,7 @@ include ../../common.env
 
 SERVICE = maintainer-agent-pr-reviewer
 
-TOKEN ?= $(shell teamvault-password --teamvault-config ~/.teamvault.json --teamvault-key=$(PR_REVIEWER_GITHUB_TOKEN_KEY))
+TOKEN ?= $(shell teamvault-password --teamvault-config ~/.teamvault.json --teamvault-key=$(AGENT_PR_REVIEWER_GH_TOKEN_KEY))
 
 # verify-gh-token: fetch GH_TOKEN from teamvault (using the key configured
 # in dev.env / prod.env) and probe GitHub's rate_limit API. PAT = 5000/hr,
@@ -14,7 +14,7 @@ TOKEN ?= $(shell teamvault-password --teamvault-config ~/.teamvault.json --teamv
 # they cause silent agent failures in dev/prod.
 .PHONY: verify-gh-token
 verify-gh-token:
-	@echo "teamvault-key: $(PR_REVIEWER_GITHUB_TOKEN_KEY)"
+	@echo "teamvault-key: $(AGENT_PR_REVIEWER_GH_TOKEN_KEY)"
 	@echo "token-prefix:  $(shell echo $(TOKEN) | head -c 12)..."
 	@user=$$(curl -sH "Authorization: token $(TOKEN)" https://api.github.com/user | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('login','<none>'))"); \
 	rl_json=$$(curl -sH "Authorization: token $(TOKEN)" https://api.github.com/rate_limit); \

@@ -27,9 +27,9 @@ make run-once
 # Custom (exercise spec-016 overrides):
 make run-once \
   REPO_ALLOWLIST=github.com/bborbe/maintainer \
-  BUILD_ASSIGNEE=test-agent \
-  BUILD_TASK_STATUS=backlog \
-  BUILD_TASK_PHASE=planning
+  WATCHER_GITHUB_BUILD_TASK_ASSIGNEE=test-agent \
+  WATCHER_GITHUB_BUILD_TASK_STATUS=backlog \
+  WATCHER_GITHUB_BUILD_TASK_PHASE=planning
 ```
 
 What to observe:

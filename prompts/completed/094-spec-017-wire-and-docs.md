@@ -12,7 +12,7 @@ completed: "2026-05-06T18:50:30Z"
 
 <summary>
 - The build watcher now fetches `.maintenance.yaml` from each repo's default branch on every `green → red` transition and applies per-repo overrides to `assignee`, `status`, and `phase`
-- Non-empty values in the file's `watcher.github-build` subtree override the watcher's CLI/env defaults (`BUILD_ASSIGNEE`, `BUILD_TASK_STATUS`, `BUILD_TASK_PHASE`); empty or absent values fall through silently to the watcher defaults
+- Non-empty values in the file's `watcher.github-build` subtree override the watcher's CLI/env defaults (`WATCHER_GITHUB_BUILD_TASK_ASSIGNEE`, `WATCHER_GITHUB_BUILD_TASK_STATUS`, `WATCHER_GITHUB_BUILD_TASK_PHASE`); empty or absent values fall through silently to the watcher defaults
 - Repos without `.maintenance.yaml` (404) produce no log and behave exactly as before — full backwards compatibility
 - Factory wires the maintenance loader from the same `githubClient` instance already used for workflow runs — one client, no extra connection
 - Watcher tests inject a fake loader; new test cases assert all override scenarios and confirm the loader is NOT called on red→red transitions
@@ -434,9 +434,9 @@ Files to read fully before making any changes:
     ```yaml
     watcher:
       github-build:
-        assignee: <string>   # overrides BUILD_ASSIGNEE env var
-        status: <string>     # overrides BUILD_TASK_STATUS env var
-        phase: <string>      # overrides BUILD_TASK_PHASE env var; empty = omit field
+        assignee: <string>   # overrides WATCHER_GITHUB_BUILD_TASK_ASSIGNEE env var
+        status: <string>     # overrides WATCHER_GITHUB_BUILD_TASK_STATUS env var
+        phase: <string>      # overrides WATCHER_GITHUB_BUILD_TASK_PHASE env var; empty = omit field
     # Future: watcher.github-pr (PR watcher reads its own subtree)
     # Future: agent.build-fixer.* (fixer agent reads its own subtree)
     ```
@@ -448,7 +448,7 @@ Files to read fully before making any changes:
 
     ```
     .maintenance.yaml watcher.github-build.<key>  (per-repo, highest priority)
-        > BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE env vars  (fleet-level)
+        > WATCHER_GITHUB_BUILD_TASK_ASSIGNEE / WATCHER_GITHUB_BUILD_TASK_STATUS / WATCHER_GITHUB_BUILD_TASK_PHASE env vars  (fleet-level)
             > hard-coded fallback (build-fixer-agent / todo / <empty>)
     ```
 
@@ -490,7 +490,7 @@ Files to read fully before making any changes:
 11. **Add CHANGELOG entry** to the root `CHANGELOG.md` under `## Unreleased`:
 
     ```
-    - feat(watcher/github-build): per-repo .maintenance.yaml overrides — build watcher reads watcher.github-build.{assignee,status,phase} from the repo's root on each green→red transition; missing file, malformed YAML, and API errors fall through silently to watcher defaults (BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE)
+    - feat(watcher/github-build): per-repo .maintenance.yaml overrides — build watcher reads watcher.github-build.{assignee,status,phase} from the repo's root on each green→red transition; missing file, malformed YAML, and API errors fall through silently to watcher defaults (WATCHER_GITHUB_BUILD_TASK_ASSIGNEE / WATCHER_GITHUB_BUILD_TASK_STATUS / WATCHER_GITHUB_BUILD_TASK_PHASE)
     ```
 
 12. **Run `make precommit`** in `watcher/github-build/`:

@@ -104,9 +104,9 @@ fleet-level defaults for its own tasks. The file is fetched fresh on every
 ```yaml
 watcher:
   github-build:
-    assignee: <string>   # overrides BUILD_ASSIGNEE env var
-    status: <string>     # overrides BUILD_TASK_STATUS env var
-    phase: <string>      # overrides BUILD_TASK_PHASE env var; empty = omit field
+    assignee: <string>   # overrides WATCHER_GITHUB_BUILD_TASK_ASSIGNEE env var
+    status: <string>     # overrides WATCHER_GITHUB_BUILD_TASK_STATUS env var
+    phase: <string>      # overrides WATCHER_GITHUB_BUILD_TASK_PHASE env var; empty = omit field
 # Future: watcher.github-pr (PR watcher reads its own subtree)
 # Future: agent.build-fixer.* (fixer agent reads its own subtree)
 ```
@@ -118,7 +118,7 @@ subtree; the build watcher ignores `watcher.github-pr.*` and all `agent.*` keys.
 
 ```
 .maintenance.yaml watcher.github-build.<key>  (per-repo, highest priority)
-    > BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE env vars  (fleet-level)
+    > WATCHER_GITHUB_BUILD_TASK_ASSIGNEE / WATCHER_GITHUB_BUILD_TASK_STATUS / WATCHER_GITHUB_BUILD_TASK_PHASE env vars  (fleet-level)
         > hard-coded fallback (build-fixer-agent / todo / <empty>)
 ```
 
