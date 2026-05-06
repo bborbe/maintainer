@@ -9,7 +9,7 @@
 
 package filter
 
-//counterfeiter:generate -o mocks/repo_filter.go --fake-name RepoFilter . RepoFilter
+//counterfeiter:generate -o ../mocks/repo_filter.go --fake-name RepoFilter . RepoFilter
 
 // RepoFilter decides whether to skip a repo in a poll cycle.
 // Skip returns true if the repo should be excluded.
