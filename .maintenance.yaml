@@ -1,7 +1,0 @@
-watcher:
-  github-build:
-    # No overrides — falls through to env defaults from the watcher's deployment.
-    # Add per-repo overrides here, e.g.:
-    #   assignee: go-deps-fixer-agent
-    #   status: backlog
-    #   phase: planning
