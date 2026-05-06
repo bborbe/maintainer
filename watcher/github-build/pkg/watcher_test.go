@@ -15,6 +15,7 @@ import (
 
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/mocks"
 )
 
@@ -36,6 +37,8 @@ var _ = Describe("Watcher", func() {
 	})
 
 	makeWatcher := func(allowlist []string) pkg.Watcher {
+		ml := new(mocks.MaintenanceLoader)
+		ml.LoadOverridesReturns(maintenance.GithubBuildConfig{})
 		return pkg.NewWatcher(
 			ghClient,
 			publisher,
@@ -46,6 +49,7 @@ var _ = Describe("Watcher", func() {
 			"build-fixer-agent",
 			"todo",
 			"",
+			ml,
 		)
 	}
 
@@ -504,6 +508,8 @@ var _ = Describe("Watcher", func() {
 
 	Describe("configurable frontmatter", func() {
 		makeCustomWatcher := func(allowlist []string, assignee, taskStatus, taskPhase string) pkg.Watcher {
+			ml := new(mocks.MaintenanceLoader)
+			ml.LoadOverridesReturns(maintenance.GithubBuildConfig{})
 			return pkg.NewWatcher(
 				ghClient,
 				publisher,
@@ -514,6 +520,7 @@ var _ = Describe("Watcher", func() {
 				assignee,
 				taskStatus,
 				taskPhase,
+				ml,
 			)
 		}
 
@@ -566,6 +573,157 @@ var _ = Describe("Watcher", func() {
 			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
 			_, cmd := publisher.PublishCreateArgsForCall(0)
 			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
+		})
+	})
+
+	Describe("per-repo maintenance overrides", func() {
+		var maintenanceLoader *mocks.MaintenanceLoader
+
+		makeWatcherWithLoader := func(allowlist []string, loader maintenance.Loader) pkg.Watcher {
+			return pkg.NewWatcher(
+				ghClient,
+				publisher,
+				metrics,
+				filter.RepoFilters{},
+				allowlist,
+				cursorPath,
+				"build-fixer-agent",
+				"todo",
+				"",
+				loader,
+			)
+		}
+
+		singleFailingRunMaint := func(sha string) []pkg.WorkflowRun {
+			return []pkg.WorkflowRun{
+				{
+					WorkflowID: 999,
+					Name:       "CI",
+					HeadSHA:    sha,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+					CreatedAt:  time.Now(),
+				},
+			}
+		}
+
+		singleSuccessRunMaint := func(sha string) []pkg.WorkflowRun {
+			return []pkg.WorkflowRun{
+				{
+					WorkflowID: 999,
+					Name:       "CI",
+					HeadSHA:    sha,
+					Conclusion: "success",
+					CreatedAt:  time.Now(),
+				},
+			}
+		}
+
+		BeforeEach(func() {
+			maintenanceLoader = new(mocks.MaintenanceLoader)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{})
+		})
+
+		It("uses watcher defaults when maintenance file returns empty config", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-default"), nil)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{})
+
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("todo"))
+			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
+		})
+
+		It("overrides all three fields when the maintenance file provides them", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-override"), nil)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{
+				Assignee: "go-deps-fixer-agent",
+				Status:   "backlog",
+				Phase:    "planning",
+			})
+
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("go-deps-fixer-agent"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("backlog"))
+			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
+		})
+
+		It("overrides only assignee; watcher defaults apply for status and phase", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-partial"), nil)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{
+				Assignee: "other-agent",
+			})
+
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("other-agent"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("todo"))
+			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
+		})
+
+		It("empty assignee in file falls through to watcher default", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-empty"), nil)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{
+				Assignee: "",
+			})
+
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+		})
+
+		It("loader is NOT called on red→red (no wasted API call)", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-red"), nil)
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+			callsAfterFirst := maintenanceLoader.LoadOverridesCallCount()
+			Expect(callsAfterFirst).To(Equal(1))
+
+			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(callsAfterFirst))
+		})
+
+		It("loader is NOT called on green→green (steady state, no publish)", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleSuccessRunMaint("sha-green"), nil)
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(0))
+			Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+		})
+
+		It("loader is NOT called on red→green (clear-state path; no publish)", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturnsOnCall(0, singleFailingRunMaint("sha-red"), nil)
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+			callsAfterRed := maintenanceLoader.LoadOverridesCallCount()
+			Expect(callsAfterRed).To(Equal(1))
+
+			ghClient.GetWorkflowRunsReturnsOnCall(1, singleSuccessRunMaint("sha-green"), nil)
+			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(callsAfterRed))
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
 		})
 	})
 })

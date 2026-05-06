@@ -92,3 +92,66 @@ per-watcher repo allowlists ("no shared ConfigMap"). v1 ships with both watchers
 sharing the existing `REPO_ALLOWLIST` env var injected from `dev.env`/`prod.env`.
 Splitting per-watcher requires a new env naming convention (`BUILD_REPO_ALLOWLIST`,
 `PR_REPO_ALLOWLIST`) and corresponding code wiring; tracked as a follow-up.
+
+## Per-Repo Configuration (`.maintenance.yaml`)
+
+Each repo can provide a `.maintenance.yaml` at its root to override the watcher's
+fleet-level defaults for its own tasks. The file is fetched fresh on every
+`green → red` transition; no caching.
+
+### Schema
+
+```yaml
+watcher:
+  github-build:
+    assignee: <string>   # overrides BUILD_ASSIGNEE env var
+    status: <string>     # overrides BUILD_TASK_STATUS env var
+    phase: <string>      # overrides BUILD_TASK_PHASE env var; empty = omit field
+# Future: watcher.github-pr (PR watcher reads its own subtree)
+# Future: agent.build-fixer.* (fixer agent reads its own subtree)
+```
+
+All keys are optional at every level. Each maintainer service reads **only** its own
+subtree; the build watcher ignores `watcher.github-pr.*` and all `agent.*` keys.
+
+### Override Precedence
+
+```
+.maintenance.yaml watcher.github-build.<key>  (per-repo, highest priority)
+    > BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE env vars  (fleet-level)
+        > hard-coded fallback (build-fixer-agent / todo / <empty>)
+```
+
+Precedence is **per-key**: a missing key in the file does not suppress the env-var
+default for other keys. Empty string values (`assignee: ""`) are treated identically
+to an absent key — the env-var default applies.
+
+### Failure Modes
+
+| Trigger | Behavior |
+|---|---|
+| File absent (HTTP 404) | Silent fall-through to env defaults — the common case |
+| Malformed YAML | WARN log with parse error; publish with env defaults |
+| Valid YAML, `watcher.github-build` subtree absent | Silent fall-through; subtree isolation by design |
+| Valid YAML, unknown key inside `watcher.github-build` | INFO log "ignored unknown key"; known keys applied |
+| `assignee: ""` (explicit empty) | Same as absent — env default applies |
+| GitHub API 5xx fetching file | WARN log; publish with env defaults |
+| File > 1 MiB | Reject as malformed; WARN log; env defaults applied |
+
+Errors fetching `.maintenance.yaml` **never** prevent the task from being published.
+The build-status signal is more important than the routing config.
+
+### Example
+
+To route `bborbe/myrepo`'s build failures to a Go-specific fixer agent:
+
+```yaml
+# .maintenance.yaml (at repo root of bborbe/myrepo)
+watcher:
+  github-build:
+    assignee: go-deps-fixer-agent
+    status: todo
+```
+
+The next `green → red` transition on `bborbe/myrepo` publishes a task with
+`assignee: go-deps-fixer-agent` instead of the fleet default.

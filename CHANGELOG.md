@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.22
+
+- feat(watcher/github-build): per-repo .maintenance.yaml overrides — build watcher reads watcher.github-build.{assignee,status,phase} from the repo's root on each green→red transition; missing file, malformed YAML, and API errors fall through silently to watcher defaults (BUILD_ASSIGNEE / BUILD_TASK_STATUS / BUILD_TASK_PHASE)
+
 ## v0.23.21
 
 - feat(watcher/github-build): add `pkg/maintenance` package with `Loader` interface and `loaderImpl` that fetches `.maintenance.yaml` from a repo's default branch and returns a `GithubBuildConfig` with optional `Assignee`, `Status`, and `Phase` overrides; 404 is silent, all other failures log WARN and fall through to empty config

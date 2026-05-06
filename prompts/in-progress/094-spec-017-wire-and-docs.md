@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [017-per-repo-maintenance-yaml]
+summary: 'Wired maintenance loader into build watcher: NewWatcher takes 10th maintenanceLoader param, applyStateMachine loads per-repo overrides on green→red transitions only, factory creates loader from existing ghClient, tests updated with new override scenarios, .maintenance.yaml and docs added.'
+container: maintainer-094-spec-017-wire-and-docs
+dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T18:10:00Z"
 queued: "2026-05-06T18:40:38Z"
+started: "2026-05-06T18:46:36Z"
 ---
 
 <summary>

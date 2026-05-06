@@ -17,6 +17,7 @@ import (
 
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 )
 
 // CreateKafkaPublisher constructs a CommandPublisher backed by a Kafka sync producer.
@@ -61,6 +62,7 @@ func CreateWatcher(
 		return nil, nil, errors.Wrap(ctx, err, "create kafka publisher")
 	}
 	ghClient := pkg.NewGitHubClient(ghToken)
+	maintenanceLoader := maintenance.NewLoader(ghClient)
 	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(allowlist)}
 	w := pkg.NewWatcher(
 		ghClient,
@@ -72,6 +74,7 @@ func CreateWatcher(
 		assignee,
 		taskStatus,
 		taskPhase,
+		maintenanceLoader,
 	)
 	return w, cleanup, nil
 }

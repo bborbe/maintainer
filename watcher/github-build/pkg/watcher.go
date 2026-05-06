@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 )
 
 //counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
@@ -36,30 +37,33 @@ func NewWatcher(
 	assignee string,
 	taskStatus string,
 	taskPhase string,
+	maintenanceLoader maintenance.Loader,
 ) Watcher {
 	return &buildWatcher{
-		githubClient: githubClient,
-		publisher:    publisher,
-		metrics:      metrics,
-		repoFilter:   repoFilter,
-		allowlist:    allowlist,
-		cursorPath:   cursorPath,
-		assignee:     assignee,
-		taskStatus:   taskStatus,
-		taskPhase:    taskPhase,
+		githubClient:      githubClient,
+		publisher:         publisher,
+		metrics:           metrics,
+		repoFilter:        repoFilter,
+		allowlist:         allowlist,
+		cursorPath:        cursorPath,
+		assignee:          assignee,
+		taskStatus:        taskStatus,
+		taskPhase:         taskPhase,
+		maintenanceLoader: maintenanceLoader,
 	}
 }
 
 type buildWatcher struct {
-	githubClient GitHubClient
-	publisher    CommandPublisher
-	metrics      Metrics
-	repoFilter   filter.RepoFilter
-	allowlist    []string
-	cursorPath   string
-	assignee     string
-	taskStatus   string
-	taskPhase    string
+	githubClient      GitHubClient
+	publisher         CommandPublisher
+	metrics           Metrics
+	repoFilter        filter.RepoFilter
+	allowlist         []string
+	cursorPath        string
+	assignee          string
+	taskStatus        string
+	taskPhase         string
+	maintenanceLoader maintenance.Loader
 }
 
 func (w *buildWatcher) Poll(ctx context.Context) error {
@@ -150,8 +154,21 @@ func (w *buildWatcher) applyStateMachine(
 
 	switch {
 	case (prevState == "" || prevState == "green") && currState == "red":
+		overrides := w.maintenanceLoader.LoadOverrides(ctx, owner, repo, repoState.DefaultBranch)
+		effectiveAssignee := coalesceString(overrides.Assignee, w.assignee)
+		effectiveStatus := coalesceString(overrides.Status, w.taskStatus)
+		effectivePhase := coalesceString(overrides.Phase, w.taskPhase)
 		taskID := DeriveTaskID(owner, repo, episodeSHA)
-		cmd := w.buildCreateTaskCommand(taskID, owner, repo, episodeSHA, failingRuns)
+		cmd := w.buildCreateTaskCommand(
+			taskID,
+			owner,
+			repo,
+			episodeSHA,
+			failingRuns,
+			effectiveAssignee,
+			effectiveStatus,
+			effectivePhase,
+		)
 		if err := w.publisher.PublishCreate(ctx, cmd); err != nil {
 			glog.Errorf("publish create-task failed repo=%s err=%v", repoKey, err)
 			w.metrics.IncPollError("kafka_error")
@@ -239,6 +256,7 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	taskID uuid.UUID,
 	owner, repo, episodeSHA string,
 	failingRuns []WorkflowRun,
+	assignee, taskStatus, taskPhase string,
 ) agentlib.CreateTaskCommand {
 	lines := make([]string, 0, 6+len(failingRuns))
 	lines = append(lines,
@@ -255,17 +273,26 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	body := strings.Join(lines, "\n") + "\n"
 
 	fm := agentlib.TaskFrontmatter{
-		"assignee":    w.assignee,
+		"assignee":    assignee,
 		"repo":        owner + "/" + repo,
 		"episode_sha": episodeSHA,
-		"status":      w.taskStatus,
+		"status":      taskStatus,
 	}
-	if w.taskPhase != "" {
-		fm["phase"] = w.taskPhase
+	if taskPhase != "" {
+		fm["phase"] = taskPhase
 	}
 	return agentlib.CreateTaskCommand{
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
 		Frontmatter:    fm,
 		Body:           body,
 	}
+}
+
+// coalesceString returns the first non-empty string. Used to merge a
+// per-repo file override (a) with the watcher-level default (b).
+func coalesceString(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
