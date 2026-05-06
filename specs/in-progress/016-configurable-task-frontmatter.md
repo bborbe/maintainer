@@ -1,9 +1,9 @@
 ---
-status: draft
-created: "2026-05-06T19:00:00Z"
+status: generating
+approved: "2026-05-06T17:43:51Z"
+generating: "2026-05-06T17:43:52Z"
+branch: dark-factory/configurable-task-frontmatter
 ---
-
-# Configurable task-frontmatter defaults for build watcher
 
 ## Summary
 
@@ -54,7 +54,6 @@ The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are store
 3. Setting `BUILD_TASK_PHASE=planning` results in `Frontmatter["phase"] = "planning"` appearing in the materialized vault file
 4. Leaving `BUILD_TASK_PHASE` unset (or set to empty string) results in NO `phase:` key in the materialized vault file (matches today's behavior — verified against `OpenClaw/tasks/710db30e-86e2-59a6-8ac1-9c7718122d4e.md`)
 5. Setting nothing produces today's exact output (`assignee: build-fixer-agent`, `status: todo`, no `phase` field)
-6. The args appear in the binary's `--help` and in startup `argument_print` logs (the existing service framework prints all `application`-struct fields on boot)
 
 ## Constraints
 
@@ -65,7 +64,7 @@ The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are store
 - Existing tests in `pkg/watcher_test.go` MUST pass — they don't currently exercise this codepath but should be updated to construct `NewWatcher` with the new params and to assert frontmatter values when relevant
 - Error wrapping: `github.com/bborbe/errors`, never `fmt.Errorf`
 - The `cmd/run-once` binary mirrors the same args/env so smoke tests can exercise non-default values
-- `Makefile.k8s` apply pipeline: the StatefulSet template should be updatable to expose `BUILD_ASSIGNEE` / `BUILD_TASK_STATUS` / `BUILD_TASK_PHASE` from `dev.env` / `prod.env` IF the operator wants to override them. Default deploy (no env set) MUST still work — the args' defaults cover it without any env-file change
+- The default deploy (no env set in `dev.env` / `prod.env` / StatefulSet) MUST still work — the args' defaults cover the no-override case
 
 ## Failure Modes
 
@@ -79,19 +78,16 @@ The values flow through `factory.CreateWatcher` into `pkg.NewWatcher`, are store
 
 ## Acceptance Criteria
 
-- [ ] Three new fields on `application` struct in `watcher/github-build/main.go` with `arg`, `env`, `usage`, `default` tags
-- [ ] Three corresponding params in `factory.CreateWatcher` and `pkg.NewWatcher`
-- [ ] `buildWatcher` struct stores the three values
-- [ ] `buildCreateTaskCommand` (or its caller `applyStateMachine`) reads from the struct, not from a hard-coded literal
-- [ ] `phase` key present in frontmatter when `BUILD_TASK_PHASE` non-empty; absent when empty
-- [ ] Unit test: default config produces frontmatter with `assignee=build-fixer-agent`, `status=todo`, NO `phase` key
-- [ ] Unit test: custom config (`assignee=foo`, `status=backlog`, `phase=planning`) produces matching frontmatter
-- [ ] Unit test: `phase=""` produces frontmatter with no `phase` key
-- [ ] `cmd/run-once/main.go` exposes the same three args
-- [ ] `cmd/run-once/Makefile` `run-once` target accepts `BUILD_ASSIGNEE` / `BUILD_TASK_STATUS` / `BUILD_TASK_PHASE` overrides on the make command line
+- [ ] Setting `BUILD_ASSIGNEE=foo` at startup results in published vault tasks carrying `assignee: foo`
+- [ ] Setting `BUILD_TASK_STATUS=backlog` results in `status: backlog` in published tasks
+- [ ] Setting `BUILD_TASK_PHASE=planning` results in `phase: planning` appearing in published tasks
+- [ ] Leaving all three unset reproduces today's exact published frontmatter (`assignee: build-fixer-agent`, `status: todo`, no `phase` key)
+- [ ] `BUILD_TASK_PHASE=` (explicit empty) results in NO `phase` key in published frontmatter (NOT `phase: ""`)
+- [ ] The long-running watcher binary AND the one-shot `cmd/run-once` binary both honor all three overrides identically
+- [ ] `cmd/run-once/Makefile`'s `run-once` target lets the operator override any of the three on the make command line
+- [ ] README (`watcher/github-build/README.md`) Environment Variables table includes the three new entries with defaults
 - [ ] CHANGELOG entry under `## Unreleased`
 - [ ] `make precommit` clean from `watcher/github-build/`
-- [ ] README (`watcher/github-build/README.md`) Environment Variables table includes the three new entries
 
 ## Verification
 
