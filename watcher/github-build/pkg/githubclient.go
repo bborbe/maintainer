@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	stderrors "errors"
+	"net/http"
 	"time"
 
 	"github.com/bborbe/errors"
@@ -37,6 +38,12 @@ type GitHubClient interface {
 
 	// GetDefaultBranch returns the default branch name for a repository.
 	GetDefaultBranch(ctx context.Context, owner, repo string) (string, error)
+
+	// GetFileContent fetches the raw content of a file at the given ref.
+	// Returns (nil, nil) if the file does not exist (HTTP 404 — the common case).
+	// Returns (nil, ErrRateLimited) when rate-limited.
+	// Returns (nil, err) for any other API error.
+	GetFileContent(ctx context.Context, owner, repo, path, ref string) ([]byte, error)
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
@@ -113,4 +120,42 @@ func (c *githubClient) GetDefaultBranch(
 		return "", errors.Wrapf(ctx, err, "get repository %s/%s", owner, repo)
 	}
 	return repository.GetDefaultBranch(), nil
+}
+
+func (c *githubClient) GetFileContent(
+	ctx context.Context,
+	owner, repo, path, ref string,
+) ([]byte, error) {
+	opts := &gogithub.RepositoryContentGetOptions{Ref: ref}
+	fileContent, _, _, err := c.client.Repositories.GetContents(ctx, owner, repo, path, opts)
+	if err != nil {
+		var ghErr *gogithub.ErrorResponse
+		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
+			return nil, nil
+		}
+		var rl *gogithub.RateLimitError
+		var arl *gogithub.AbuseRateLimitError
+		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+			return nil, ErrRateLimited
+		}
+		return nil, errors.Wrapf(ctx, err, "get file content %s/%s/%s@%s", owner, repo, path, ref)
+	}
+	if fileContent == nil {
+		return nil, nil
+	}
+	if fileContent.GetSize() > 1024*1024 {
+		return nil, errors.Errorf(
+			ctx,
+			"file %s/%s/%s too large: %d bytes (max 1 MiB)",
+			owner,
+			repo,
+			path,
+			fileContent.GetSize(),
+		)
+	}
+	decoded, err := fileContent.GetContent()
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "decode content %s/%s/%s", owner, repo, path)
+	}
+	return []byte(decoded), nil
 }

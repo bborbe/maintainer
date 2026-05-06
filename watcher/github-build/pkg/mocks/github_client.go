@@ -24,6 +24,23 @@ type GitHubClient struct {
 		result1 string
 		result2 error
 	}
+	GetFileContentStub        func(context.Context, string, string, string, string) ([]byte, error)
+	getFileContentMutex       sync.RWMutex
+	getFileContentArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 string
+		arg5 string
+	}
+	getFileContentReturns struct {
+		result1 []byte
+		result2 error
+	}
+	getFileContentReturnsOnCall map[int]struct {
+		result1 []byte
+		result2 error
+	}
 	GetWorkflowRunsStub        func(context.Context, string, string, string) ([]pkg.WorkflowRun, error)
 	getWorkflowRunsMutex       sync.RWMutex
 	getWorkflowRunsArgsForCall []struct {
@@ -106,6 +123,74 @@ func (fake *GitHubClient) GetDefaultBranchReturnsOnCall(i int, result1 string, r
 	}
 	fake.getDefaultBranchReturnsOnCall[i] = struct {
 		result1 string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) GetFileContent(arg1 context.Context, arg2 string, arg3 string, arg4 string, arg5 string) ([]byte, error) {
+	fake.getFileContentMutex.Lock()
+	ret, specificReturn := fake.getFileContentReturnsOnCall[len(fake.getFileContentArgsForCall)]
+	fake.getFileContentArgsForCall = append(fake.getFileContentArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 string
+		arg5 string
+	}{arg1, arg2, arg3, arg4, arg5})
+	stub := fake.GetFileContentStub
+	fakeReturns := fake.getFileContentReturns
+	fake.recordInvocation("GetFileContent", []interface{}{arg1, arg2, arg3, arg4, arg5})
+	fake.getFileContentMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4, arg5)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *GitHubClient) GetFileContentCallCount() int {
+	fake.getFileContentMutex.RLock()
+	defer fake.getFileContentMutex.RUnlock()
+	return len(fake.getFileContentArgsForCall)
+}
+
+func (fake *GitHubClient) GetFileContentCalls(stub func(context.Context, string, string, string, string) ([]byte, error)) {
+	fake.getFileContentMutex.Lock()
+	defer fake.getFileContentMutex.Unlock()
+	fake.GetFileContentStub = stub
+}
+
+func (fake *GitHubClient) GetFileContentArgsForCall(i int) (context.Context, string, string, string, string) {
+	fake.getFileContentMutex.RLock()
+	defer fake.getFileContentMutex.RUnlock()
+	argsForCall := fake.getFileContentArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
+}
+
+func (fake *GitHubClient) GetFileContentReturns(result1 []byte, result2 error) {
+	fake.getFileContentMutex.Lock()
+	defer fake.getFileContentMutex.Unlock()
+	fake.GetFileContentStub = nil
+	fake.getFileContentReturns = struct {
+		result1 []byte
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) GetFileContentReturnsOnCall(i int, result1 []byte, result2 error) {
+	fake.getFileContentMutex.Lock()
+	defer fake.getFileContentMutex.Unlock()
+	fake.GetFileContentStub = nil
+	if fake.getFileContentReturnsOnCall == nil {
+		fake.getFileContentReturnsOnCall = make(map[int]struct {
+			result1 []byte
+			result2 error
+		})
+	}
+	fake.getFileContentReturnsOnCall[i] = struct {
+		result1 []byte
 		result2 error
 	}{result1, result2}
 }

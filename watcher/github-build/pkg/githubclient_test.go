@@ -193,4 +193,96 @@ var _ = Describe("pkg.GitHubClient", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Describe("GetFileContent", func() {
+		Context("file exists", func() {
+			It("returns the decoded file content", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(r.URL.Path).To(Equal("/repos/owner/repo/contents/.maintenance.yaml"))
+						w.Header().Set("Content-Type", "application/json")
+						// "hello: world\n" base64-encoded
+						fmt.Fprintf(
+							w,
+							`{"type":"file","encoding":"base64","content":"aGVsbG86IHdvcmxkCg==\n","size":14}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				content, err := client.GetFileContent(
+					ctx,
+					"owner",
+					"repo",
+					".maintenance.yaml",
+					"main",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(content).NotTo(BeNil())
+				Expect(string(content)).To(Equal("hello: world\n"))
+			})
+		})
+
+		Context("file not found (404)", func() {
+			It("returns (nil, nil) silently", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprintf(w, `{"message":"Not Found"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				content, err := client.GetFileContent(
+					ctx,
+					"owner",
+					"repo",
+					".maintenance.yaml",
+					"main",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(content).To(BeNil())
+			})
+		})
+
+		Context("server returns HTTP 500", func() {
+			It("returns a non-nil error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusInternalServerError)
+						fmt.Fprintf(w, `{"message":"Internal Server Error"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetFileContent(ctx, "owner", "repo", ".maintenance.yaml", "main")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("path resolves to a directory (API returns array)", func() {
+			It("returns (nil, nil)", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`[{"type":"file","name":"README.md","path":"README.md","size":42}]`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				content, err := client.GetFileContent(ctx, "owner", "repo", "somedir", "main")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(content).To(BeNil())
+			})
+		})
+	})
 })

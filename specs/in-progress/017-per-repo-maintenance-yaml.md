@@ -1,7 +1,8 @@
 ---
-status: generating
+status: approved
 approved: "2026-05-06T17:46:03Z"
 generating: "2026-05-06T17:48:00Z"
+prompted: "2026-05-06T17:59:14Z"
 branch: dark-factory/per-repo-maintenance-yaml
 ---
 

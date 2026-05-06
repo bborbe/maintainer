@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.21
+
+- feat(watcher/github-build): add `pkg/maintenance` package with `Loader` interface and `loaderImpl` that fetches `.maintenance.yaml` from a repo's default branch and returns a `GithubBuildConfig` with optional `Assignee`, `Status`, and `Phase` overrides; 404 is silent, all other failures log WARN and fall through to empty config
+- feat(watcher/github-build): extend `GitHubClient` interface with `GetFileContent` method; implement on `*githubClient` using `Repositories.GetContents` with silent 404, rate-limit sentinel, and 1 MiB size guard
+
 ## v0.23.20
 
 - feat(watcher/github-build): add BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars so operators can override published task frontmatter at deploy time without a code change; empty BUILD_TASK_PHASE omits the phase key entirely
