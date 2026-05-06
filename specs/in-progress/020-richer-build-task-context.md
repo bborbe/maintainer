@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-05-06T20:25:29Z"
 generating: "2026-05-06T20:31:00Z"
 prompted: "2026-05-06T20:49:09Z"
+verifying: "2026-05-06T21:20:42Z"
 branch: dark-factory/richer-build-task-context
 ---
 
