@@ -22,9 +22,10 @@ type FileContentFetcher interface {
 // GithubBuildConfig holds the watcher.github-build subtree of .maintenance.yaml.
 // All fields are optional; empty string means "no override — use watcher default".
 type GithubBuildConfig struct {
-	Assignee string
-	Status   string
-	Phase    string
+	Assignee    string
+	Status      string
+	Phase       string
+	IncludeLogs bool // include_logs: true enables the ## Error log snippet opt-in
 }
 
 // Loader fetches per-repo override config for the build watcher.
@@ -89,7 +90,7 @@ func (l *loaderImpl) LoadOverrides(
 	}
 
 	// Log INFO for unknown keys; extract known keys.
-	known := map[string]bool{"assignee": true, "status": true, "phase": true}
+	known := map[string]bool{"assignee": true, "status": true, "phase": true, "include_logs": true}
 	for k := range buildSection {
 		if !known[k] {
 			glog.Infof(
@@ -111,6 +112,9 @@ func (l *loaderImpl) LoadOverrides(
 	}
 	if v, ok := buildSection["phase"].(string); ok {
 		cfg.Phase = v
+	}
+	if v, ok := buildSection["include_logs"].(bool); ok {
+		cfg.IncludeLogs = v
 	}
 	return cfg
 }

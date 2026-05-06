@@ -285,4 +285,82 @@ var _ = Describe("pkg.GitHubClient", func() {
 			})
 		})
 	})
+
+	Describe("GetJobLog", func() {
+		Context("GitHub API returns 302 and log server returns content", func() {
+			It("fetches and returns the log bytes", func() {
+				logContent := "step 1: ok\nstep 2: FAILED\n"
+
+				// Log storage server — plain HTTP so http.DefaultClient can reach it
+				logServer := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusOK)
+						fmt.Fprint(w, logContent)
+					}),
+				)
+				defer logServer.Close()
+
+				// GitHub API mock — returns 302 redirect to logServer
+				ghServer := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(r.URL.Path).To(ContainSubstring("/actions/jobs/"))
+						http.Redirect(w, r, logServer.URL+"/log", http.StatusFound)
+					}),
+				)
+				defer ghServer.Close()
+
+				client := buildClient(ghServer)
+				data, err := client.GetJobLog(ctx, "owner", "repo", 42)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(data)).To(Equal(logContent))
+			})
+		})
+
+		Context("GitHub API returns HTTP error", func() {
+			It("returns a non-nil error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusUnauthorized)
+						fmt.Fprintf(w, `{"message":"Bad credentials"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetJobLog(ctx, "owner", "repo", 42)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("log payload exceeds 1 MiB", func() {
+			It("returns an error", func() {
+				// Serve 1 MiB + 1 byte so the size check triggers
+				oversizedContent := make([]byte, 1024*1024+2)
+				for i := range oversizedContent {
+					oversizedContent[i] = 'x'
+				}
+
+				logServer := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write(oversizedContent)
+					}),
+				)
+				defer logServer.Close()
+
+				ghServer := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						http.Redirect(w, r, logServer.URL+"/log", http.StatusFound)
+					}),
+				)
+				defer ghServer.Close()
+
+				client := buildClient(ghServer)
+				_, err := client.GetJobLog(ctx, "owner", "repo", 42)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("exceeds 1 MiB"))
+			})
+		})
+	})
 })

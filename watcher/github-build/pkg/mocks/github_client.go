@@ -41,6 +41,22 @@ type GitHubClient struct {
 		result1 []byte
 		result2 error
 	}
+	GetJobLogStub        func(context.Context, string, string, int64) ([]byte, error)
+	getJobLogMutex       sync.RWMutex
+	getJobLogArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 int64
+	}
+	getJobLogReturns struct {
+		result1 []byte
+		result2 error
+	}
+	getJobLogReturnsOnCall map[int]struct {
+		result1 []byte
+		result2 error
+	}
 	GetJobsForRunStub        func(context.Context, string, string, int64) ([]pkg.WorkflowJobInfo, error)
 	getJobsForRunMutex       sync.RWMutex
 	getJobsForRunArgsForCall []struct {
@@ -206,6 +222,73 @@ func (fake *GitHubClient) GetFileContentReturnsOnCall(i int, result1 []byte, res
 		})
 	}
 	fake.getFileContentReturnsOnCall[i] = struct {
+		result1 []byte
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) GetJobLog(arg1 context.Context, arg2 string, arg3 string, arg4 int64) ([]byte, error) {
+	fake.getJobLogMutex.Lock()
+	ret, specificReturn := fake.getJobLogReturnsOnCall[len(fake.getJobLogArgsForCall)]
+	fake.getJobLogArgsForCall = append(fake.getJobLogArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 int64
+	}{arg1, arg2, arg3, arg4})
+	stub := fake.GetJobLogStub
+	fakeReturns := fake.getJobLogReturns
+	fake.recordInvocation("GetJobLog", []interface{}{arg1, arg2, arg3, arg4})
+	fake.getJobLogMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *GitHubClient) GetJobLogCallCount() int {
+	fake.getJobLogMutex.RLock()
+	defer fake.getJobLogMutex.RUnlock()
+	return len(fake.getJobLogArgsForCall)
+}
+
+func (fake *GitHubClient) GetJobLogCalls(stub func(context.Context, string, string, int64) ([]byte, error)) {
+	fake.getJobLogMutex.Lock()
+	defer fake.getJobLogMutex.Unlock()
+	fake.GetJobLogStub = stub
+}
+
+func (fake *GitHubClient) GetJobLogArgsForCall(i int) (context.Context, string, string, int64) {
+	fake.getJobLogMutex.RLock()
+	defer fake.getJobLogMutex.RUnlock()
+	argsForCall := fake.getJobLogArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+}
+
+func (fake *GitHubClient) GetJobLogReturns(result1 []byte, result2 error) {
+	fake.getJobLogMutex.Lock()
+	defer fake.getJobLogMutex.Unlock()
+	fake.GetJobLogStub = nil
+	fake.getJobLogReturns = struct {
+		result1 []byte
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) GetJobLogReturnsOnCall(i int, result1 []byte, result2 error) {
+	fake.getJobLogMutex.Lock()
+	defer fake.getJobLogMutex.Unlock()
+	fake.GetJobLogStub = nil
+	if fake.getJobLogReturnsOnCall == nil {
+		fake.getJobLogReturnsOnCall = make(map[int]struct {
+			result1 []byte
+			result2 error
+		})
+	}
+	fake.getJobLogReturnsOnCall[i] = struct {
 		result1 []byte
 		result2 error
 	}{result1, result2}

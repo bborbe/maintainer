@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	stderrors "errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -64,6 +65,12 @@ type GitHubClient interface {
 	// Returns (nil, ErrRateLimited) when rate-limited.
 	// Returns (nil, err) for other API errors.
 	GetJobsForRun(ctx context.Context, owner, repo string, runID int64) ([]WorkflowJobInfo, error)
+
+	// GetJobLog fetches the plain-text log for a workflow job by following GitHub's
+	// redirect to an Azure storage URL. Returns (nil, nil) when the URL is unavailable.
+	// Returns (nil, err) for a non-nil error where the log should be omitted.
+	// Rejects payloads > 1 MiB before truncation (returns (nil, err)).
+	GetJobLog(ctx context.Context, owner, repo string, jobID int64) ([]byte, error)
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
@@ -227,4 +234,57 @@ func (c *githubClient) GetJobsForRun(
 		})
 	}
 	return infos, nil
+}
+
+func (c *githubClient) GetJobLog(
+	ctx context.Context,
+	owner, repo string,
+	jobID int64,
+) ([]byte, error) {
+	logURL, _, err := c.client.Actions.GetWorkflowJobLogs(ctx, owner, repo, jobID, 0)
+	if err != nil {
+		var rl *gogithub.RateLimitError
+		var arl *gogithub.AbuseRateLimitError
+		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+			return nil, ErrRateLimited
+		}
+		return nil, errors.Wrapf(
+			ctx,
+			err,
+			"get job log URL owner=%s repo=%s job=%d",
+			owner,
+			repo,
+			jobID,
+		)
+	}
+	if logURL == nil {
+		return nil, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL.String(), nil)
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "create log request job=%d", jobID)
+	}
+	resp, err := http.DefaultClient.Do(
+		req,
+	) // #nosec G107 — URL comes from GitHub API, not user input
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "fetch log job=%d", jobID)
+	}
+	defer resp.Body.Close()
+
+	const maxBytes = 1024 * 1024 // 1 MiB
+	// Read one extra byte to detect >1 MiB without reading the entire payload:
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxBytes)+1))
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "read log body job=%d", jobID)
+	}
+	if len(data) > maxBytes {
+		return nil, errors.Errorf(
+			ctx,
+			"log payload exceeds 1 MiB for job=%d (got %d bytes) — treating as suspicious",
+			jobID,
+			len(data),
+		)
+	}
+	return data, nil
 }

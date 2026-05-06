@@ -6,6 +6,7 @@ package pkg
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
@@ -187,4 +188,70 @@ var _ = Describe("formatDuration", func() {
 		Entry("1499ms rounds to 1s", 1499*time.Millisecond, "1s"),
 		Entry("1500ms rounds to 2s", 1500*time.Millisecond, "2s"),
 	)
+})
+
+var _ = Describe("redactLogSnippet", func() {
+	DescribeTable("redacts known secret patterns",
+		func(input, wantContain, wantNotContain string) {
+			result := redactLogSnippet(input)
+			if wantContain != "" {
+				Expect(result).To(ContainSubstring(wantContain))
+			}
+			if wantNotContain != "" {
+				Expect(result).NotTo(ContainSubstring(wantNotContain))
+			}
+		},
+		Entry("GitHub PAT (ghp_)",
+			"token=ghp_ABCDEFGHIJKLMNOPabcde",
+			"[REDACTED]", "ghp_ABCDEFGHIJKLMNOPabcde"),
+		Entry("GitHub OAuth token (gho_)",
+			"Authorization: gho_ABCDEFGHIJKLMNOPqrstu",
+			"[REDACTED]", "gho_ABCDEFGHIJKLMNOPqrstu"),
+		Entry("Bearer header",
+			"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc",
+			"Bearer [REDACTED]", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+		Entry("AWS access key ID",
+			"access_key=AKIAIOSFODNN7EXAMPLE1",
+			"[REDACTED]", "AKIAIOSFODNN7EXAMPLE1"),
+		Entry("AWS secret access key",
+			"aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"aws_secret_access_key = [REDACTED]", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+		Entry("long hex string (≥40 hex chars)",
+			"token: da39a3ee5e6b4b0d3255bfef95601890afd80709 ok",
+			"[REDACTED]", "da39a3ee5e6b4b0d3255bfef95601890afd80709"),
+		Entry("safe short hex string not redacted",
+			"short: abc123",
+			"short: abc123", ""),
+		Entry("non-secret text passes through unchanged",
+			"INFO: build succeeded in 42s",
+			"INFO: build succeeded in 42s", ""),
+	)
+})
+
+var _ = Describe("lastNLinesUpTo4KB", func() {
+	It("returns last N lines when fewer than N lines exist", func() {
+		Expect(lastNLinesUpTo4KB("a\nb\nc", 10)).To(Equal("a\nb\nc"))
+	})
+
+	It("returns exactly the last N lines when more exist", func() {
+		input := strings.Join([]string{"1", "2", "3", "4", "5"}, "\n")
+		result := lastNLinesUpTo4KB(input, 3)
+		Expect(result).To(Equal("3\n4\n5"))
+	})
+
+	It("caps at 4096 bytes when last N lines exceed 4 KB", func() {
+		// Build a string where the last 30 lines sum to > 4096 bytes
+		longLine := strings.Repeat("x", 200) // 200 bytes per line
+		lines := make([]string, 40)
+		for i := range lines {
+			lines[i] = longLine
+		}
+		input := strings.Join(lines, "\n")
+		result := lastNLinesUpTo4KB(input, 30)
+		Expect(len(result)).To(BeNumerically("<=", 4096))
+	})
+
+	It("handles empty input", func() {
+		Expect(lastNLinesUpTo4KB("", 30)).To(Equal(""))
+	})
 })

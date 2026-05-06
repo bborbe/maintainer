@@ -860,6 +860,114 @@ var _ = Describe("Watcher", func() {
 		})
 	})
 
+	Describe("include_logs opt-in", func() {
+		var maintenanceLoaderWithLogs *mocks.MaintenanceLoader
+		var runID int64 = 77
+		var jobID int64 = 99
+
+		makeWatcherWithLogs := func(includeLogs bool) pkg.Watcher {
+			maintenanceLoaderWithLogs = new(mocks.MaintenanceLoader)
+			maintenanceLoaderWithLogs.LoadOverridesReturns(maintenance.GithubBuildConfig{
+				IncludeLogs: includeLogs,
+			})
+			return pkg.NewWatcher(
+				ghClient,
+				publisher,
+				metrics,
+				filter.RepoFilters{},
+				[]string{"owner/repo"},
+				cursorPath,
+				"build-fixer-agent",
+				"todo",
+				"",
+				maintenanceLoaderWithLogs,
+			)
+		}
+
+		singleFailingRunWithJobID := func(sha string) []pkg.WorkflowRun {
+			return []pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					RunID:      runID,
+					Name:       "CI",
+					HeadSHA:    sha,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/77",
+					CreatedAt:  time.Now(),
+				},
+			}
+		}
+
+		BeforeEach(func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetJobsForRunReturns([]pkg.WorkflowJobInfo{
+				{JobID: jobID, JobName: "build", FailedStepName: "Run tests"},
+			}, nil)
+		})
+
+		It("emits ## Error section with redacted snippet when include_logs=true", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithJobID("sha-logs"), nil)
+			// Log contains a GitHub token that should be redacted
+			logContent := "step 1: ok\nstep 2: token=ghp_ABCDEFGHIJKLMNOPqrstu\nstep 3: FAILED"
+			ghClient.GetJobLogReturns([]byte(logContent), nil)
+
+			w := makeWatcherWithLogs(true)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("## Error"))
+			Expect(cmd.Body).To(ContainSubstring("```"))
+			// Token must be redacted
+			Expect(cmd.Body).NotTo(ContainSubstring("ghp_ABCDEFGHIJKLMNOPqrstu"))
+			Expect(cmd.Body).To(ContainSubstring("[REDACTED]"))
+			// Log content (sans token) must be present
+			Expect(cmd.Body).To(ContainSubstring("step 3: FAILED"))
+		})
+
+		It("omits ## Error section when include_logs=false (default)", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithJobID("sha-nologs"), nil)
+
+			w := makeWatcherWithLogs(false)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).NotTo(ContainSubstring("## Error"))
+			// GetJobLog must NOT be called when include_logs=false
+			Expect(ghClient.GetJobLogCallCount()).To(Equal(0))
+		})
+
+		It("omits ## Error section when log fetch fails; publish still succeeds", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithJobID("sha-logfail"), nil)
+			ghClient.GetJobLogReturns(nil, os.ErrNotExist)
+
+			w := makeWatcherWithLogs(true)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			// Body still has the table — just no ## Error section
+			Expect(cmd.Body).To(ContainSubstring("## Failing Workflows"))
+			Expect(cmd.Body).NotTo(ContainSubstring("## Error"))
+		})
+
+		It("omits ## Error when jobs API fails (no jobID to log-fetch with)", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithJobID("sha-nojob"), nil)
+			// jobs API failure → primaryJobID stays 0 → log fetch skipped
+			ghClient.GetJobsForRunReturns(nil, os.ErrNotExist)
+			ghClient.GetJobLogReturns(nil, nil)
+
+			w := makeWatcherWithLogs(true)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).NotTo(ContainSubstring("## Error"))
+			Expect(ghClient.GetJobLogCallCount()).To(Equal(0))
+		})
+	})
+
 	Describe("failing workflows table", func() {
 		var runID int64 = 42
 

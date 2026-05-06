@@ -160,4 +160,30 @@ var _ = Describe("Loader", func() {
 			Expect(cfg.Phase).To(BeEmpty())
 		})
 	})
+
+	Context("valid YAML — include_logs: true", func() {
+		It("returns IncludeLogs=true", func() {
+			content := []byte(`watcher:
+  github-build:
+    assignee: go-deps-fixer-agent
+    include_logs: true
+`)
+			fetcher.GetFileContentReturns(content, nil)
+			cfg := loader.LoadOverrides(ctx, "owner", "repo", "main")
+			Expect(cfg.IncludeLogs).To(BeTrue())
+			Expect(cfg.Assignee).To(Equal("go-deps-fixer-agent"))
+		})
+	})
+
+	Context("valid YAML — include_logs absent (default false)", func() {
+		It("returns IncludeLogs=false", func() {
+			content := []byte(`watcher:
+  github-build:
+    assignee: build-fixer-agent
+`)
+			fetcher.GetFileContentReturns(content, nil)
+			cfg := loader.LoadOverrides(ctx, "owner", "repo", "main")
+			Expect(cfg.IncludeLogs).To(BeFalse())
+		})
+	})
 })

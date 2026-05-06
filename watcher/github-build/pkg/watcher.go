@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -170,6 +171,7 @@ func (w *buildWatcher) applyStateMachine(
 			effectiveAssignee,
 			effectiveStatus,
 			effectivePhase,
+			overrides.IncludeLogs,
 		)
 		if err := w.publisher.PublishCreate(ctx, cmd); err != nil {
 			glog.Errorf("publish create-task failed repo=%s err=%v", repoKey, err)
@@ -260,11 +262,58 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	owner, repo, episodeSHA string,
 	failingRuns []WorkflowRun,
 	assignee, taskStatus, taskPhase string,
+	includeLogs bool,
 ) WatcherCreateTaskCommand {
-	firstRun := failingRuns[0]
-	lines := make([]string, 0, 12+len(failingRuns))
-	lines = append(lines, fmt.Sprintf("# Build Failure: %s/%s", owner, repo), "")
+	lines := w.buildBodyHeader(failingRuns[0], owner, repo)
+	lines = append(lines,
+		"",
+		fmt.Sprintf("Episode SHA: `%s`", episodeSHA),
+		"",
+		"## Failing Workflows",
+		"",
+		"| Workflow | Job | Failed Step | Run |",
+		"|---|---|---|---|",
+	)
 
+	var primaryJobID int64 // job ID for failingRuns[0] — used for log fetch
+	for i, run := range failingRuns {
+		jobName, stepName, jobID := w.fetchJobInfoForRun(ctx, owner, repo, run.RunID)
+		if i == 0 {
+			primaryJobID = jobID
+		}
+		lines = append(lines, fmt.Sprintf("| %s | %s | %s | [Run](%s) |",
+			run.Name, jobName, stepName, run.HTMLURL))
+	}
+
+	if includeLogs && primaryJobID != 0 {
+		lines = w.appendLogSection(ctx, lines, owner, repo, primaryJobID)
+	}
+
+	body := strings.Join(lines, "\n") + "\n"
+
+	fm := agentlib.TaskFrontmatter{
+		"assignee":    assignee,
+		"repo":        owner + "/" + repo,
+		"episode_sha": episodeSHA,
+		"status":      taskStatus,
+	}
+	if taskPhase != "" {
+		fm["phase"] = taskPhase
+	}
+	return WatcherCreateTaskCommand{
+		CreateTaskCommand: agentlib.CreateTaskCommand{
+			TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
+			Frontmatter:    fm,
+			Body:           body,
+		},
+		FilenameHint: computeFilenameHint("github", owner, repo, episodeSHA),
+	}
+}
+
+// buildBodyHeader builds the markdown header lines for a build-failure task body.
+func (w *buildWatcher) buildBodyHeader(firstRun WorkflowRun, owner, repo string) []string {
+	lines := make([]string, 0, 10)
+	lines = append(lines, fmt.Sprintf("# Build Failure: %s/%s", owner, repo), "")
 	if firstRun.DisplayTitle != "" {
 		lines = append(lines, fmt.Sprintf("**Commit:** %s", firstRun.DisplayTitle))
 	}
@@ -291,53 +340,16 @@ func (w *buildWatcher) buildCreateTaskCommand(
 			lines = append(lines, fmt.Sprintf("**Duration:** %s", d))
 		}
 	}
-
-	lines = append(lines,
-		"",
-		fmt.Sprintf("Episode SHA: `%s`", episodeSHA),
-		"",
-		"## Failing Workflows",
-		"",
-	)
-
-	lines = append(lines,
-		"| Workflow | Job | Failed Step | Run |",
-		"|---|---|---|---|",
-	)
-
-	for _, run := range failingRuns {
-		jobName, stepName := w.jobPlaceholders(ctx, owner, repo, run.RunID)
-		lines = append(lines, fmt.Sprintf("| %s | %s | %s | [Run](%s) |",
-			run.Name, jobName, stepName, run.HTMLURL))
-	}
-	body := strings.Join(lines, "\n") + "\n"
-
-	fm := agentlib.TaskFrontmatter{
-		"assignee":    assignee,
-		"repo":        owner + "/" + repo,
-		"episode_sha": episodeSHA,
-		"status":      taskStatus,
-	}
-	if taskPhase != "" {
-		fm["phase"] = taskPhase
-	}
-	return WatcherCreateTaskCommand{
-		CreateTaskCommand: agentlib.CreateTaskCommand{
-			TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
-			Frontmatter:    fm,
-			Body:           body,
-		},
-		FilenameHint: computeFilenameHint("github", owner, repo, episodeSHA),
-	}
+	return lines
 }
 
-// jobPlaceholders returns (jobName, stepName) for a failing run.
-// Returns ("?", "?") when the jobs API is unavailable or returns no failed jobs.
-func (w *buildWatcher) jobPlaceholders(
+// fetchJobInfoForRun returns job name, step name, and job ID for a failing run.
+// Returns ("?", "?", 0) when the jobs API is unavailable or returns no failed jobs.
+func (w *buildWatcher) fetchJobInfoForRun(
 	ctx context.Context,
 	owner, repo string,
 	runID int64,
-) (jobName, stepName string) {
+) (jobName, stepName string, jobID int64) {
 	jobName, stepName = "?", "?"
 	if runID == 0 {
 		return
@@ -360,7 +372,38 @@ func (w *buildWatcher) jobPlaceholders(
 	if jobs[0].FailedStepName != "" {
 		stepName = jobs[0].FailedStepName
 	}
+	jobID = jobs[0].JobID
 	return
+}
+
+// appendLogSection fetches the job log and appends an ## Error section to lines.
+// Returns lines unchanged on any fetch error or when the log is empty.
+func (w *buildWatcher) appendLogSection(
+	ctx context.Context,
+	lines []string,
+	owner, repo string,
+	jobID int64,
+) []string {
+	logData, err := w.githubClient.GetJobLog(ctx, owner, repo, jobID)
+	if err != nil {
+		glog.Warningf(
+			"log fetch failed repo=%s/%s job=%d err=%v — omitting ## Error section",
+			owner,
+			repo,
+			jobID,
+			err,
+		)
+		return lines
+	}
+	if logData == nil {
+		return lines
+	}
+	redacted := redactLogSnippet(string(logData))
+	snippet := lastNLinesUpTo4KB(redacted, 30)
+	if snippet == "" {
+		return lines
+	}
+	return append(lines, "", "## Error", "", "```", snippet, "```")
 }
 
 // coalesceString returns the first non-empty string. Used to merge a
@@ -392,4 +435,58 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm %ds", m, s)
 	}
 	return fmt.Sprintf("%ds", s)
+}
+
+// redactLogSnippet applies regex redaction to remove known secret patterns from a
+// CI log snippet before it enters the task body.
+//
+// ORDER MATTERS — apply specific patterns BEFORE the generic hex catch-all so token
+// shapes that happen to be hex (e.g. github tokens are alphanumeric so unaffected;
+// but a future bearer-token shape that's hex-only would be caught by step 5 with a
+// generic [REDACTED] marker, losing the "Bearer " prefix). Reordering here is a bug.
+//
+// Pattern 5 (40+-char hex) WILL redact the episode SHA if it appears verbatim in
+// log output. Acceptable: the SHA is already shown in plain text in the body header,
+// so the operator hasn't lost recoverable context. False positives < leaked tokens.
+func redactLogSnippet(s string) string {
+	// 1. GitHub tokens: gho_, ghp_, ghs_, ghu_ followed by ≥16 alphanumerics
+	s = regexp.MustCompile(`gh[opsu]_[a-zA-Z0-9]{16,}`).ReplaceAllString(s, "[REDACTED]")
+
+	// 2. Bearer auth headers: "Bearer " followed by ≥16 token chars
+	s = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]{16,}`).ReplaceAllString(s, "Bearer [REDACTED]")
+
+	// 3. AWS access key IDs: AKIA followed by 16 uppercase alphanumerics
+	s = regexp.MustCompile(`AKIA[0-9A-Z]{16}`).ReplaceAllString(s, "[REDACTED]")
+
+	// 4. AWS secret access keys: keep the key= prefix, redact the 40-char base64 secret
+	s = regexp.MustCompile(`(aws_secret_access_key[\s=:]+["']?)[A-Za-z0-9/+]{40}["']?`).
+		ReplaceAllString(s, "${1}[REDACTED]")
+
+	// 5. Long opaque hex strings (≥40 chars) — generic auth hashes catch-all.
+	//    Will also match the episode SHA if present in log output — acceptable per spec.
+	//    MUST run last so the specific patterns above (1-4) match their tokens first.
+	s = regexp.MustCompile(`\b[a-f0-9]{40,}\b`).ReplaceAllString(s, "[REDACTED]")
+
+	return s
+}
+
+// lastNLinesUpTo4KB returns the last n lines of s, further capped at maxBytes bytes.
+// Applied AFTER redaction to limit what enters the task body.
+func lastNLinesUpTo4KB(s string, n int) string {
+	const maxBytes = 4096
+	// Trim trailing newline to avoid a phantom empty last line
+	s = strings.TrimRight(s, "\n")
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	snippet := strings.Join(lines, "\n")
+	if len(snippet) > maxBytes {
+		// Keep the tail: truncate from the start, then trim to the next line boundary
+		snippet = snippet[len(snippet)-maxBytes:]
+		if idx := strings.Index(snippet, "\n"); idx >= 0 && idx < len(snippet)-1 {
+			snippet = snippet[idx+1:]
+		}
+	}
+	return snippet
 }

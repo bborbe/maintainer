@@ -183,3 +183,50 @@ watcher:
 
 The next `green → red` transition on `bborbe/myrepo` publishes a task with
 `assignee: go-deps-fixer-agent` instead of the fleet default.
+
+## Log Snippets (`include_logs`)
+
+Opt-in per repo by adding to `.maintenance.yaml`:
+
+```yaml
+watcher:
+  github-build:
+    include_logs: true
+```
+
+When enabled, each build-failure task body gains an `## Error` section with the last
+30 lines (≤ 4 KB) of the primary failing job's log, fenced as a code block and redacted.
+
+**Default:** `false`. Repos that do not set this flag see no `## Error` section.
+
+### Redaction
+
+The following patterns are stripped before the snippet enters the task body:
+
+| Pattern | Replaces with |
+|---|---|
+| `gh[opsu]_[a-zA-Z0-9]{16,}` | `[REDACTED]` |
+| `Bearer\s+[A-Za-z0-9._-]{16,}` | `Bearer [REDACTED]` |
+| `AKIA[0-9A-Z]{16}` | `[REDACTED]` |
+| `aws_secret_access_key[\s=:]+["']?[A-Za-z0-9/+]{40}["']?` | keeps prefix, redacts secret |
+| `\b[a-f0-9]{40,}\b` | `[REDACTED]` (catches generic auth hashes; false-positive on commit SHAs is acceptable — SHAs already appear in the header) |
+
+**Residual risk:** Regex cannot catch every token shape. Operators should audit their
+CI logs for secret leakage before enabling `include_logs: true` on a repo.
+
+### Size limits
+
+| Limit | Value | When measured |
+|---|---|---|
+| Raw log payload | 1 MiB max | Before redaction — payloads larger than this are rejected as suspicious and the `## Error` section is omitted |
+| Line cap | last 30 lines | After redaction |
+| Byte cap | 4 KB | After redaction and line cap — the tail is kept when both limits apply |
+
+### Failure modes
+
+| Trigger | Behavior |
+|---|---|
+| Log fetch error (any reason) | WARN log; `## Error` section omitted; publish proceeds |
+| Log size > 1 MiB | WARN log; `## Error` section omitted; publish proceeds |
+| Jobs API failed (no `jobID`) | Log fetch skipped; `## Error` omitted; publish proceeds |
+| `include_logs: false` or absent | No log fetch attempted; `## Error` omitted |
