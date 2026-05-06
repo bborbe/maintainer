@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [020-richer-build-task-context]
 summary: Replaced failing-workflows bullet list with a Markdown table (Workflow/Job/Failed Step/Run) by adding GetJobsForRun to GitHubClient, implementing jobPlaceholders helper, regenerating the counterfeiter mock, updating buildCreateTaskCommand to accept ctx, and adding 5 new Ginkgo test cases covering success, error, no-step, call-count, and red→red paths.
 container: maintainer-098-spec-020-jobs-table
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:00:00Z"
 queued: "2026-05-06T20:54:21Z"
 started: "2026-05-06T21:03:27Z"
+completed: "2026-05-06T21:09:04Z"
 branch: dark-factory/richer-build-task-context
 ---
 
