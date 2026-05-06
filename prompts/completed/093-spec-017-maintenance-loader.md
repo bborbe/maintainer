@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [017-per-repo-maintenance-yaml]
 summary: Created pkg/maintenance package with Loader and FileContentFetcher interfaces, added GetFileContent to GitHubClient, generated all counterfeiter mocks, added comprehensive tests achieving 84.2% coverage on GetFileContent and 96.7% on maintenance package, made gopkg.in/yaml.v3 a direct dependency; make precommit exited 0.
 container: maintainer-093-spec-017-maintenance-loader
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T18:10:00Z"
 queued: "2026-05-06T18:40:38Z"
 started: "2026-05-06T18:40:39Z"
+completed: "2026-05-06T18:46:34Z"
 ---
 
 <summary>
