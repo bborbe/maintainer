@@ -215,22 +215,28 @@ func (w *watcher) publishCreate(
 		return false
 	}
 
-	var cmd agentlib.CreateTaskCommand
+	var cmd WatcherCreateTaskCommand
 	if trustResult.Success() {
-		cmd = agentlib.CreateTaskCommand{
-			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
-			Body:           buildTaskBody(pr),
+		cmd = WatcherCreateTaskCommand{
+			CreateTaskCommand: agentlib.CreateTaskCommand{
+				TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+				Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
+				Body:           buildTaskBody(pr),
+			},
+			FilenameHint: computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
 		}
 	} else {
 		if author == "" {
 			author = "(unknown)"
 		}
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
-		cmd = agentlib.CreateTaskCommand{
-			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
-			Body:           buildUntrustedBody(author, trustResult.Description()),
+		cmd = WatcherCreateTaskCommand{
+			CreateTaskCommand: agentlib.CreateTaskCommand{
+				TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+				Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
+				Body:           buildUntrustedBody(author, trustResult.Description()),
+			},
+			FilenameHint: computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
 		}
 	}
 

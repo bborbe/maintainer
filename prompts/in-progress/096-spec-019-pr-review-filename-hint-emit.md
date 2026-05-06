@@ -1,7 +1,12 @@
 ---
-status: draft
+status: committing
 spec: [019-human-readable-filenames-for-pr-review-tasks]
+summary: Added WatcherCreateTaskCommand wrapper type to github-pr watcher, implemented computePRFilenameHint/slugifyTitle helpers, updated publishCreate to emit FilenameHint on both trusted and untrusted paths, regenerated mock, added FilenameHint assertions to watcher_test.go, and created filename_internal_test.go with comprehensive slug and JSON marshal tests.
+container: maintainer-096-spec-019-pr-review-filename-hint-emit
+dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:30:00Z"
+queued: "2026-05-06T20:49:45Z"
+started: "2026-05-06T20:49:53Z"
 branch: dark-factory/human-readable-filenames-for-pr-review-tasks
 ---
 
@@ -368,7 +373,51 @@ Files to read fully before making any changes:
    			"PR Review github - my-org-my-repo - 99 - bump-deps"),
    	)
    })
+
+   // JSON marshal contract: lock the wire-format tag for the controller boundary.
+   // Even though spec-018 already verified this shape for the build watcher's
+   // wrapper, this watcher's wrapper is a separate declaration — re-verify locally
+   // so a future struct-tag drift doesn't leak past PR-review reviews.
+   var _ = Describe("WatcherCreateTaskCommand JSON marshalling", func() {
+   	It("emits filename_hint as a top-level snake_case field alongside embedded fields", func() {
+   		cmd := WatcherCreateTaskCommand{
+   			CreateTaskCommand: agentlib.CreateTaskCommand{
+   				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+   				Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
+   				Body:           "# body",
+   			},
+   			FilenameHint: "PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never",
+   		}
+   		raw, err := json.Marshal(cmd)
+   		Expect(err).NotTo(HaveOccurred())
+
+   		// Top-level snake_case key consumed by the controller
+   		Expect(string(raw)).To(ContainSubstring(`"filename_hint":"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"`))
+
+   		// Embedded fields stay at top level (struct embedding, not nested)
+   		Expect(string(raw)).To(ContainSubstring(`"taskIdentifier":"00000000-0000-0000-0000-000000000000"`))
+
+   		// No nesting under a "CreateTaskCommand" key
+   		Expect(string(raw)).NotTo(ContainSubstring(`"CreateTaskCommand"`))
+   	})
+
+   	It("omits filename_hint when empty (omitempty contract)", func() {
+   		cmd := WatcherCreateTaskCommand{
+   			CreateTaskCommand: agentlib.CreateTaskCommand{
+   				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+   				Frontmatter:    agentlib.TaskFrontmatter{},
+   				Body:           "",
+   			},
+   			FilenameHint: "",
+   		}
+   		raw, err := json.Marshal(cmd)
+   		Expect(err).NotTo(HaveOccurred())
+   		Expect(string(raw)).NotTo(ContainSubstring(`"filename_hint"`))
+   	})
+   })
    ```
+
+   Add `"encoding/json"` and `agentlib "github.com/bborbe/agent/lib"` to the import block of `filename_internal_test.go` if not already present.
 
    The internal test file uses the same Ginkgo test runner registered in `watcher/github-pr/pkg/suite_test.go` — no new suite file needed.
 

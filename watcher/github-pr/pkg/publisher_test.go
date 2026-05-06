@@ -35,10 +35,12 @@ var _ = Describe("Publisher", func() {
 		Context("sender succeeds", func() {
 			It("calls SendCommandObject once with correct operation", func() {
 				sender.SendCommandObjectReturns(nil)
-				cmd := agentlib.CreateTaskCommand{
-					TaskIdentifier: agentlib.TaskIdentifier("task-uuid-123"),
-					Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
-					Body:           "# PR Review: test\n\nhttps://example.com\n",
+				cmd := pkg.WatcherCreateTaskCommand{
+					CreateTaskCommand: agentlib.CreateTaskCommand{
+						TaskIdentifier: agentlib.TaskIdentifier("task-uuid-123"),
+						Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
+						Body:           "# PR Review: test\n\nhttps://example.com\n",
+					},
 				}
 				err := pub.PublishCreate(ctx, cmd)
 				Expect(err).NotTo(HaveOccurred())
@@ -52,9 +54,11 @@ var _ = Describe("Publisher", func() {
 		Context("sender returns error", func() {
 			It("returns wrapped error", func() {
 				sender.SendCommandObjectReturns(errors.New("kafka down"))
-				cmd := agentlib.CreateTaskCommand{
-					TaskIdentifier: "t1",
-					Frontmatter:    agentlib.TaskFrontmatter{},
+				cmd := pkg.WatcherCreateTaskCommand{
+					CreateTaskCommand: agentlib.CreateTaskCommand{
+						TaskIdentifier: "t1",
+						Frontmatter:    agentlib.TaskFrontmatter{},
+					},
 				}
 				err := pub.PublishCreate(ctx, cmd)
 				Expect(err).To(HaveOccurred())
@@ -65,9 +69,11 @@ var _ = Describe("Publisher", func() {
 		Context("event data contains task identifier", func() {
 			It("serializes taskIdentifier into the command event", func() {
 				sender.SendCommandObjectReturns(nil)
-				cmd := agentlib.CreateTaskCommand{
-					TaskIdentifier: agentlib.TaskIdentifier("my-task-id"),
-					Frontmatter:    agentlib.TaskFrontmatter{"status": "in_progress"},
+				cmd := pkg.WatcherCreateTaskCommand{
+					CreateTaskCommand: agentlib.CreateTaskCommand{
+						TaskIdentifier: agentlib.TaskIdentifier("my-task-id"),
+						Frontmatter:    agentlib.TaskFrontmatter{"status": "in_progress"},
+					},
 				}
 				Expect(pub.PublishCreate(ctx, cmd)).To(Succeed())
 				_, obj := sender.SendCommandObjectArgsForCall(0)
@@ -115,9 +121,11 @@ var _ = Describe("Publisher", func() {
 	Describe("CommandObject shape", func() {
 		It("has non-empty RequestID", func() {
 			sender.SendCommandObjectReturns(nil)
-			cmd := agentlib.CreateTaskCommand{
-				TaskIdentifier: "x",
-				Frontmatter:    agentlib.TaskFrontmatter{},
+			cmd := pkg.WatcherCreateTaskCommand{
+				CreateTaskCommand: agentlib.CreateTaskCommand{
+					TaskIdentifier: "x",
+					Frontmatter:    agentlib.TaskFrontmatter{},
+				},
 			}
 			Expect(pub.PublishCreate(ctx, cmd)).To(Succeed())
 			_, obj := sender.SendCommandObjectArgsForCall(0)
@@ -126,9 +134,11 @@ var _ = Describe("Publisher", func() {
 
 		It("SchemaID is agent-task-v1", func() {
 			sender.SendCommandObjectReturns(nil)
-			Expect(pub.PublishCreate(ctx, agentlib.CreateTaskCommand{
-				TaskIdentifier: "x",
-				Frontmatter:    agentlib.TaskFrontmatter{},
+			Expect(pub.PublishCreate(ctx, pkg.WatcherCreateTaskCommand{
+				CreateTaskCommand: agentlib.CreateTaskCommand{
+					TaskIdentifier: "x",
+					Frontmatter:    agentlib.TaskFrontmatter{},
+				},
 			})).To(Succeed())
 			_, obj := sender.SendCommandObjectArgsForCall(0)
 			Expect(obj.SchemaID).To(Equal(cdb.SchemaID{

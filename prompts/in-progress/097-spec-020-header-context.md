@@ -1,7 +1,9 @@
 ---
-spec: ["020"]
-status: draft
+status: approved
+spec: [020-richer-build-task-context]
 created: "2026-05-06T21:00:00Z"
+queued: "2026-05-06T20:54:21Z"
+branch: dark-factory/richer-build-task-context
 ---
 
 <summary>
@@ -222,13 +224,15 @@ If any accessor does not exist in the grep output, adapt the field name to what 
            Entry("minutes and seconds", 2*time.Minute+47*time.Second, "2m 47s"),
            Entry("hours, minutes, seconds", 1*time.Hour+5*time.Minute+3*time.Second, "1h 5m 3s"),
            Entry("exactly one minute", 60*time.Second, "1m 0s"),
-           Entry("sub-second rounded to zero rounds down", 500*time.Millisecond, ""),
-           Entry("sub-second ≥ 500ms rounds to 1s", 1500*time.Millisecond, "2s"),
+           Entry("sub-500ms rounds to zero → empty", 499*time.Millisecond, ""),
+           Entry("exactly 500ms rounds to 1s", 500*time.Millisecond, "1s"),
+           Entry("1499ms rounds to 1s", 1499*time.Millisecond, "1s"),
+           Entry("1500ms rounds to 2s", 1500*time.Millisecond, "2s"),
        )
    })
    ```
 
-   Note: `formatDuration` uses `d.Round(time.Second)` — 500ms rounds to 1s (Go's banker's rounding applies to ties, but for ≥500ms, Round always rounds up). Verify the rounding behavior by running the test.
+   Note: `formatDuration` uses `d.Round(time.Second)`. Per the Go stdlib doc, `Round` rounds **half away from zero** — so 500ms → 1s, 1500ms → 2s, etc. The 499ms / 1499ms entries above lock the boundary on the under-half side; 500ms / 1500ms lock the at-half side.
 
 7. **Add header assertion tests in `watcher/github-build/pkg/watcher_test.go`**
 

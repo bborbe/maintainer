@@ -147,6 +147,9 @@ var _ = Describe("pkg.Watcher", func() {
 			_, cmd := pub.PublishCreateArgsForCall(0)
 			Expect(string(cmd.TaskIdentifier)).NotTo(BeEmpty())
 			Expect(cmd.Frontmatter["assignee"]).To(Equal("pr-reviewer-agent"))
+			Expect(
+				cmd.FilenameHint,
+			).To(Equal("PR Review github - bborbe-code-reviewer - 42 - feat-new-feature"))
 			Expect(fakeMetrics.IncPRPublishedCallCount()).To(Equal(1))
 			command := fakeMetrics.IncPRPublishedArgsForCall(0)
 			Expect(command).To(Equal("create"))
@@ -807,6 +810,7 @@ var _ = Describe("pkg.Watcher", func() {
 			Expect(cmd.Frontmatter["stage"]).To(Equal("dev"))
 			Expect(cmd.Frontmatter["title"]).To(Equal("my title"))
 			Expect(cmd.Frontmatter["task_identifier"]).NotTo(BeEmpty())
+			Expect(cmd.FilenameHint).To(Equal("PR Review github - bborbe-repo - 5 - my-title"))
 		})
 	})
 
@@ -920,6 +924,7 @@ var _ = Describe("pkg.Watcher", func() {
 				_, cmd := pub.PublishCreateArgsForCall(0)
 				Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
 				Expect(cmd.Frontmatter["status"]).To(Equal("in_progress"))
+				Expect(cmd.FilenameHint).To(Equal("PR Review github - bborbe-repo - 10 - some-pr"))
 			})
 		})
 
@@ -938,6 +943,9 @@ var _ = Describe("pkg.Watcher", func() {
 					Expect(cmd.Body).To(ContainSubstring("alice"))
 					Expect(cmd.Body).To(ContainSubstring("Untrusted author"))
 					Expect(cmd.Body).To(ContainSubstring("phase: in_progress"))
+					Expect(
+						cmd.FilenameHint,
+					).To(Equal("PR Review github - bborbe-repo - 10 - some-pr"))
 				},
 			)
 		})
@@ -1011,6 +1019,7 @@ var _ = Describe("pkg.Watcher", func() {
 				_, cmd := pub.PublishCreateArgsForCall(0)
 				Expect(cmd.Frontmatter["phase"]).To(Equal("human_review"))
 				Expect(cmd.Body).To(ContainSubstring("unknown"))
+				Expect(cmd.FilenameHint).To(Equal("PR Review github - bborbe-repo - 10 - some-pr"))
 			})
 		})
 	})

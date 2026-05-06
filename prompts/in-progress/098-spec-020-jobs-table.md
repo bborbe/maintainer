@@ -1,7 +1,9 @@
 ---
-spec: ["020"]
-status: draft
+status: approved
+spec: [020-richer-build-task-context]
 created: "2026-05-06T21:00:00Z"
+queued: "2026-05-06T20:54:21Z"
+branch: dark-factory/richer-build-task-context
 ---
 
 <summary>
@@ -312,7 +314,7 @@ Adapt implementation to the actual struct/method names found. Document any devia
 
        It("shows ? for job and step when jobs API returns an error", func() {
            ghClient.GetWorkflowRunsReturns(singleFailingRunWithID("sha-err"), nil)
-           ghClient.GetJobsForRunReturns(nil, errors.New("http 503 service unavailable"))
+           ghClient.GetJobsForRunReturns(nil, stderrors.New("http 503 service unavailable"))
 
            w := makeWatcher([]string{"owner/repo"})
            Expect(w.Poll(ctx)).To(Succeed())
@@ -379,7 +381,7 @@ Adapt implementation to the actual struct/method names found. Document any devia
    })
    ```
 
-   Note: the `errors.New` call in the test needs `stderrors "errors"` import or `os.ErrNotExist` — use whatever is already imported. Or use `fmt.Errorf` in test code only (test code is exempt from the "no fmt.Errorf" rule since `go-error-wrapping-guide.md` bans it for production code, not tests). Alternatively, import the already-present `os` package and use `os.ErrNotExist`.
+   Note: the test uses `stderrors.New(...)` — `stderrors "errors"` is already imported in the watcher package's production code (used for `errors.As` rate-limit detection); reuse that same alias in test code. Do NOT use `fmt.Errorf` (banned project-wide) or `os.ErrNotExist` (semantic mismatch — this is an HTTP error, not a file-not-found). Add `stderrors "errors"` to the test file's imports if it isn't already there.
 
 8. **Add a CHANGELOG entry** to root `CHANGELOG.md` under `## Unreleased`:
 

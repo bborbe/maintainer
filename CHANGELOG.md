@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.25
+
+- feat(watcher/github-pr): emit filename_hint in CreateTaskCommand — PR-review vault tasks will land at "PR Review github - {owner}-{repo} - {number} - {slug}.md" once the companion bborbe/agent controller PR lands; existing controllers silently ignore the new field
+
 ## v0.23.24
 
 - feat(watcher/github-build): emit filename_hint in CreateTaskCommand — build-failure vault tasks will land at "Build Failure github - {owner}-{repo} - {sha7}.md" once the companion bborbe/agent controller PR lands; existing controllers silently ignore the new field
