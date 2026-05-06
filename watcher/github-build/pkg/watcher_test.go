@@ -6,6 +6,7 @@ package pkg_test
 
 import (
 	"context"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -857,5 +858,114 @@ var _ = Describe("Watcher", func() {
 			Expect(cmd.Body).To(ContainSubstring("**Branch:** main"))
 			Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-early"))
 		})
+	})
+
+	Describe("failing workflows table", func() {
+		var runID int64 = 42
+
+		singleFailingRunWithID := func(sha string) []pkg.WorkflowRun {
+			return []pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					RunID:      runID,
+					Name:       "CI",
+					HeadSHA:    sha,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/42",
+					CreatedAt:  time.Now(),
+				},
+			}
+		}
+
+		BeforeEach(func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+		})
+
+		It("emits a table with job name and step name when jobs API succeeds", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithID("sha-jobs"), nil)
+			ghClient.GetJobsForRunReturns([]pkg.WorkflowJobInfo{
+				{JobID: 99, JobName: "build", FailedStepName: "Run tests"},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("| Workflow | Job | Failed Step | Run |"))
+			Expect(
+				cmd.Body,
+			).To(ContainSubstring("| CI | build | Run tests | [Run](https://github.com/owner/repo/actions/runs/42) |"))
+		})
+
+		It("shows ? for job and step when jobs API returns an error", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithID("sha-err"), nil)
+			ghClient.GetJobsForRunReturns(nil, stderrors.New("http 503 service unavailable"))
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			// Publish still succeeds despite jobs API failure
+			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("| CI | ? | ? |"))
+		})
+
+		It("shows ? for step when jobs API returns a job with no failed step", func() {
+			ghClient.GetWorkflowRunsReturns(singleFailingRunWithID("sha-nostep"), nil)
+			ghClient.GetJobsForRunReturns([]pkg.WorkflowJobInfo{
+				{JobID: 99, JobName: "build", FailedStepName: ""},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			_, cmd := publisher.PublishCreateArgsForCall(0)
+			Expect(cmd.Body).To(ContainSubstring("| CI | build | ? |"))
+		})
+
+		It("calls GetJobsForRun exactly once per failing run", func() {
+			early := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+			late := early.Add(time.Minute)
+
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{WorkflowID: 1, RunID: 10, Name: "CI", HeadSHA: "sha-a",
+					Conclusion: "failure", HTMLURL: "https://x/1", CreatedAt: early},
+				{WorkflowID: 2, RunID: 20, Name: "Lint", HeadSHA: "sha-a",
+					Conclusion: "failure", HTMLURL: "https://x/2", CreatedAt: late},
+			}, nil)
+			ghClient.GetJobsForRunReturns([]pkg.WorkflowJobInfo{
+				{JobID: 1, JobName: "check", FailedStepName: "golangci-lint"},
+			}, nil)
+
+			w := makeWatcher([]string{"owner/repo"})
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			// Exactly 2 calls — one per failing run (not one per job or step)
+			Expect(ghClient.GetJobsForRunCallCount()).To(Equal(2))
+			_, _, _, runID1 := ghClient.GetJobsForRunArgsForCall(0)
+			_, _, _, runID2 := ghClient.GetJobsForRunArgsForCall(1)
+			Expect([]int64{runID1, runID2}).To(ConsistOf(int64(10), int64(20)))
+		})
+
+		It(
+			"table still renders on second poll (red→red) without additional GetJobsForRun calls",
+			func() {
+				ghClient.GetWorkflowRunsReturns(singleFailingRunWithID("sha-locked"), nil)
+				ghClient.GetJobsForRunReturns([]pkg.WorkflowJobInfo{
+					{JobID: 99, JobName: "build", FailedStepName: "Run tests"},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+				firstCallCount := ghClient.GetJobsForRunCallCount()
+				Expect(firstCallCount).To(Equal(1))
+
+				// Second poll: red→red — no publish, no GetJobsForRun call
+				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(ghClient.GetJobsForRunCallCount()).To(Equal(firstCallCount))
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1)) // still only 1 publish
+			},
+		)
 	})
 })

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.27
+
+- feat(watcher/github-build): replace failing-workflows bullet list with a Markdown table — columns: Workflow / Job / Failed Step / Run; failed-step names fetched via one jobs API call per failing run; degraded gracefully (shows ?) when the jobs API is unavailable
+
 ## v0.23.26
 
 - feat(watcher/github-build): enrich task body header — commit subject, branch, event, started/finished timestamps, and elapsed duration now appear in every build-failure task body using fields already present in the workflow-run API response (zero extra API calls); all fields are optional and omitted gracefully when not populated

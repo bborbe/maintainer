@@ -161,6 +161,7 @@ func (w *buildWatcher) applyStateMachine(
 		effectivePhase := coalesceString(overrides.Phase, w.taskPhase)
 		taskID := DeriveTaskID(owner, repo, episodeSHA)
 		cmd := w.buildCreateTaskCommand(
+			ctx,
 			taskID,
 			owner,
 			repo,
@@ -254,6 +255,7 @@ func splitRepoKey(key string) (owner, repo string) {
 
 // buildCreateTaskCommand constructs a CreateTaskCommand for a build failure episode.
 func (w *buildWatcher) buildCreateTaskCommand(
+	ctx context.Context,
 	taskID uuid.UUID,
 	owner, repo, episodeSHA string,
 	failingRuns []WorkflowRun,
@@ -297,8 +299,16 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		"## Failing Workflows",
 		"",
 	)
+
+	lines = append(lines,
+		"| Workflow | Job | Failed Step | Run |",
+		"|---|---|---|---|",
+	)
+
 	for _, run := range failingRuns {
-		lines = append(lines, fmt.Sprintf("- [%s](%s)", run.Name, run.HTMLURL))
+		jobName, stepName := w.jobPlaceholders(ctx, owner, repo, run.RunID)
+		lines = append(lines, fmt.Sprintf("| %s | %s | %s | [Run](%s) |",
+			run.Name, jobName, stepName, run.HTMLURL))
 	}
 	body := strings.Join(lines, "\n") + "\n"
 
@@ -319,6 +329,38 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		},
 		FilenameHint: computeFilenameHint("github", owner, repo, episodeSHA),
 	}
+}
+
+// jobPlaceholders returns (jobName, stepName) for a failing run.
+// Returns ("?", "?") when the jobs API is unavailable or returns no failed jobs.
+func (w *buildWatcher) jobPlaceholders(
+	ctx context.Context,
+	owner, repo string,
+	runID int64,
+) (jobName, stepName string) {
+	jobName, stepName = "?", "?"
+	if runID == 0 {
+		return
+	}
+	jobs, err := w.githubClient.GetJobsForRun(ctx, owner, repo, runID)
+	if err != nil {
+		glog.Warningf(
+			"jobs API failed run=%d repo=%s/%s err=%v — using ? placeholders",
+			runID,
+			owner,
+			repo,
+			err,
+		)
+		return
+	}
+	if len(jobs) == 0 {
+		return
+	}
+	jobName = jobs[0].JobName
+	if jobs[0].FailedStepName != "" {
+		stepName = jobs[0].FailedStepName
+	}
+	return
 }
 
 // coalesceString returns the first non-empty string. Used to merge a

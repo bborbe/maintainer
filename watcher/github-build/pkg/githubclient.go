@@ -34,6 +34,14 @@ type WorkflowRun struct {
 	UpdatedAt    time.Time // updated_at: last status change — completion time for done runs
 }
 
+// WorkflowJobInfo holds the failed job and step names for one failing workflow run.
+// If no failed job is found in the response, JobName and FailedStepName are empty strings.
+type WorkflowJobInfo struct {
+	JobID          int64
+	JobName        string
+	FailedStepName string // first failed step's name; empty when not determinable
+}
+
 //counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub Actions API calls.
@@ -50,6 +58,12 @@ type GitHubClient interface {
 	// Returns (nil, ErrRateLimited) when rate-limited.
 	// Returns (nil, err) for any other API error.
 	GetFileContent(ctx context.Context, owner, repo, path, ref string) ([]byte, error)
+
+	// GetJobsForRun returns info about failed jobs in a run.
+	// Returns an empty slice (not an error) when the run has no failed jobs.
+	// Returns (nil, ErrRateLimited) when rate-limited.
+	// Returns (nil, err) for other API errors.
+	GetJobsForRun(ctx context.Context, owner, repo string, runID int64) ([]WorkflowJobInfo, error)
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
@@ -170,4 +184,47 @@ func (c *githubClient) GetFileContent(
 		return nil, errors.Wrapf(ctx, err, "decode content %s/%s/%s", owner, repo, path)
 	}
 	return []byte(decoded), nil
+}
+
+func (c *githubClient) GetJobsForRun(
+	ctx context.Context,
+	owner, repo string,
+	runID int64,
+) ([]WorkflowJobInfo, error) {
+	opts := &gogithub.ListWorkflowJobsOptions{Filter: "latest"}
+	result, _, err := c.client.Actions.ListWorkflowJobs(ctx, owner, repo, runID, opts)
+	if err != nil {
+		var rl *gogithub.RateLimitError
+		var arl *gogithub.AbuseRateLimitError
+		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+			return nil, ErrRateLimited
+		}
+		return nil, errors.Wrapf(
+			ctx,
+			err,
+			"list jobs for run %d owner=%s repo=%s",
+			runID,
+			owner,
+			repo,
+		)
+	}
+	var infos []WorkflowJobInfo
+	for _, job := range result.Jobs {
+		if job.GetConclusion() != "failure" {
+			continue
+		}
+		var failedStep string
+		for _, step := range job.Steps {
+			if step.GetConclusion() == "failure" {
+				failedStep = step.GetName()
+				break
+			}
+		}
+		infos = append(infos, WorkflowJobInfo{
+			JobID:          job.GetID(),
+			JobName:        job.GetName(),
+			FailedStepName: failedStep,
+		})
+	}
+	return infos, nil
 }
