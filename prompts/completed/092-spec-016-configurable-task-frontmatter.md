@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [016-configurable-task-frontmatter]
 summary: Added BUILD_ASSIGNEE, BUILD_TASK_STATUS, BUILD_TASK_PHASE env vars to github-build watcher; converted buildCreateTaskCommand to a method on buildWatcher; updated factory, both mains, run-once Makefile, README, and CHANGELOG; all tests pass at 85.8% coverage and make precommit exits 0.
 container: maintainer-092-spec-016-configurable-task-frontmatter
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T18:00:00Z"
 queued: "2026-05-06T17:52:12Z"
 started: "2026-05-06T17:52:58Z"
+completed: "2026-05-06T17:56:18Z"
 branch: dark-factory/configurable-task-frontmatter
 ---
 
