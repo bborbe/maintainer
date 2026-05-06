@@ -1,4 +1,5 @@
 watcher:
   github-build:
-    assignee: build-fixer-agent
-    status: todo
+    assignee: route-from-file-test
+    status: backlog
+    phase: triage
