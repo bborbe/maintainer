@@ -1,6 +1,7 @@
 autoRelease: true
 validationPrompt: docs/dod.md
 workflow: direct
+maxContainers: 8
 env:
   GOPATH: /home/node/go
   GOCACHE: /home/node/.cache/go-build
