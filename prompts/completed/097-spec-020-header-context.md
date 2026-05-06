@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [020-richer-build-task-context]
 summary: Extended WorkflowRun with 6 new fields (RunID, DisplayTitle, HeadBranch, Event, StartedAt, UpdatedAt) populated from existing workflow-run API response, and emitted a structured header block in build-failure task bodies with all fields conditionally emitted; added formatDuration helper with full DescribeTable coverage and 4 header-assertion tests in watcher_test.go.
 container: maintainer-097-spec-020-header-context
@@ -7,6 +7,7 @@ dark-factory-version: v0.148.4-3-gc45254a
 created: "2026-05-06T21:00:00Z"
 queued: "2026-05-06T20:54:21Z"
 started: "2026-05-06T20:58:24Z"
+completed: "2026-05-06T21:03:25Z"
 branch: dark-factory/richer-build-task-context
 ---
 
