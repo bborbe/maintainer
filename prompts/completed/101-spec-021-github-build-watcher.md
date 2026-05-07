@@ -1,8 +1,12 @@
 ---
-status: approved
+status: completed
 spec: [021-migrate-watchers-to-task-create-command-sender]
+container: maintainer-101-spec-021-github-build-watcher
+dark-factory-version: v0.151.2-4-g3dc5753
 created: "2026-05-07T20:30:00Z"
 queued: "2026-05-07T20:17:53Z"
+started: "2026-05-07T20:30:18Z"
+completed: "2026-05-07T21:02:46Z"
 branch: dark-factory/migrate-watchers-to-task-create-command-sender
 ---
 
