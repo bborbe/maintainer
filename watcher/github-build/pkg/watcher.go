@@ -13,6 +13,7 @@ import (
 	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
@@ -31,7 +32,7 @@ type Watcher interface {
 // NewWatcher returns a Watcher that polls GitHub Actions and publishes commands.
 func NewWatcher(
 	githubClient GitHubClient,
-	publisher CommandPublisher,
+	createSender task.CreateCommandSender,
 	metrics Metrics,
 	repoFilter filter.RepoFilter,
 	allowlist []string,
@@ -43,7 +44,7 @@ func NewWatcher(
 ) Watcher {
 	return &buildWatcher{
 		githubClient:      githubClient,
-		publisher:         publisher,
+		createSender:      createSender,
 		metrics:           metrics,
 		repoFilter:        repoFilter,
 		allowlist:         allowlist,
@@ -57,7 +58,7 @@ func NewWatcher(
 
 type buildWatcher struct {
 	githubClient      GitHubClient
-	publisher         CommandPublisher
+	createSender      task.CreateCommandSender
 	metrics           Metrics
 	repoFilter        filter.RepoFilter
 	allowlist         []string
@@ -173,7 +174,7 @@ func (w *buildWatcher) applyStateMachine(
 			effectivePhase,
 			overrides.IncludeLogs,
 		)
-		if err := w.publisher.PublishCreate(ctx, cmd); err != nil {
+		if err := w.createSender.SendCommand(ctx, cmd); err != nil {
 			glog.Errorf("publish create-task failed repo=%s err=%v", repoKey, err)
 			w.metrics.IncPollError("kafka_error")
 			return // do NOT update cursor — next poll retries
@@ -263,7 +264,7 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	failingRuns []WorkflowRun,
 	assignee, taskStatus, taskPhase string,
 	includeLogs bool,
-) WatcherCreateTaskCommand {
+) task.CreateCommand {
 	lines := w.buildBodyHeader(failingRuns[0], owner, repo)
 	lines = append(lines,
 		"",
@@ -300,13 +301,11 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	if taskPhase != "" {
 		fm["phase"] = taskPhase
 	}
-	return WatcherCreateTaskCommand{
-		CreateTaskCommand: agentlib.CreateTaskCommand{
-			TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
-			Frontmatter:    fm,
-			Body:           body,
-		},
-		FilenameHint: computeFilenameHint("github", owner, repo, episodeSHA),
+	return task.CreateCommand{
+		Title:          computeFilenameHint("github", owner, repo, episodeSHA),
+		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
+		Frontmatter:    fm,
+		Body:           body,
 	}
 }
 

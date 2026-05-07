@@ -8,6 +8,7 @@ package factory
 import (
 	"context"
 
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"
@@ -20,13 +21,13 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 )
 
-// CreateKafkaPublisher constructs a CommandPublisher backed by a Kafka sync producer.
+// CreateKafkaCreateSender constructs a typed create-task command sender backed by a Kafka sync producer.
 // The cleanup function closes the underlying sync producer on shutdown.
-func CreateKafkaPublisher(
+func CreateKafkaCreateSender(
 	ctx context.Context,
 	brokers libkafka.Brokers,
 	branch base.Branch,
-) (pkg.CommandPublisher, func(), error) {
+) (task.CreateCommandSender, func(), error) {
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		brokers,
@@ -41,7 +42,7 @@ func CreateKafkaPublisher(
 			glog.Warningf("close kafka sync producer: %v", err)
 		}
 	}
-	return pkg.NewCommandPublisher(ctx, sender), cleanup, nil
+	return task.NewCreateCommandSender(sender), cleanup, nil
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
@@ -57,16 +58,16 @@ func CreateWatcher(
 	taskPhase string,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
-	pub, cleanup, err := CreateKafkaPublisher(ctx, brokers, branch)
+	createSender, cleanup, err := CreateKafkaCreateSender(ctx, brokers, branch)
 	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka publisher")
+		return nil, nil, errors.Wrap(ctx, err, "create kafka create sender")
 	}
 	ghClient := pkg.NewGitHubClient(ghToken)
 	maintenanceLoader := maintenance.NewLoader(ghClient)
 	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(allowlist)}
 	w := pkg.NewWatcher(
 		ghClient,
-		pub,
+		createSender,
 		pkg.NewMetrics(),
 		repoFilter,
 		allowlist,

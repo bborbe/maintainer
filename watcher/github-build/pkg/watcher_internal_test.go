@@ -5,11 +5,13 @@
 package pkg
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
+	task "github.com/bborbe/agent/lib/command/task"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -129,47 +131,43 @@ var _ = Describe("slugifySegment", func() {
 	)
 })
 
-// JSON marshal contract: lock the wire-format tag for the controller boundary.
-var _ = Describe("WatcherCreateTaskCommand JSON marshalling", func() {
-	It("emits filename_hint as a top-level snake_case field alongside embedded fields", func() {
-		cmd := WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
-				Frontmatter:    agentlib.TaskFrontmatter{"assignee": "bborbe"},
-				Body:           "# body",
-			},
-			FilenameHint: "Build Failure github - bborbe-maintainer - 5886450",
+// Wire-format contract: lock "title" in and "filename_hint" out.
+var _ = Describe("task.CreateCommand wire format", func() {
+	It("emits 'title' as the top-level key (not 'filename_hint')", func() {
+		cmd := task.CreateCommand{
+			Title:          "Build Failure github - bborbe-maintainer - 5886450",
+			TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+			Frontmatter:    agentlib.TaskFrontmatter{"assignee": "bborbe"},
+			Body:           "# body",
 		}
 		raw, err := json.Marshal(cmd)
 		Expect(err).NotTo(HaveOccurred())
-
-		// Top-level snake_case key for the controller's consumer
 		Expect(
 			string(raw),
-		).To(ContainSubstring(`"filename_hint":"Build Failure github - bborbe-maintainer - 5886450"`))
-
-		// Embedded fields stay at top level (struct embedding, not nested under a key)
-		Expect(
-			string(raw),
-		).To(ContainSubstring(`"taskIdentifier":"00000000-0000-0000-0000-000000000000"`))
-
-		// No nesting under a "CreateTaskCommand" key
-		Expect(string(raw)).NotTo(ContainSubstring(`"CreateTaskCommand"`))
-	})
-
-	It("omits filename_hint when empty (omitempty contract)", func() {
-		cmd := WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
-				Frontmatter:    agentlib.TaskFrontmatter{},
-				Body:           "",
-			},
-			FilenameHint: "",
-		}
-		raw, err := json.Marshal(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		).To(ContainSubstring(`"title":"Build Failure github - bborbe-maintainer - 5886450"`))
 		Expect(string(raw)).NotTo(ContainSubstring(`"filename_hint"`))
 	})
+
+	// Boundary contract: slug helper output MUST pass task.CreateCommand.Validate.
+	// Prevents future drift between watcher's slug rules and lib's Title validator.
+	DescribeTable("computeFilenameHint output passes task.CreateCommand.Validate",
+		func(provider, owner, repo, sha string) {
+			title := computeFilenameHint(provider, owner, repo, sha)
+			cmd := task.CreateCommand{
+				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+				Title:          title,
+				Frontmatter: agentlib.TaskFrontmatter{
+					"assignee": "build-fixer-agent",
+					"status":   "todo",
+				},
+				Body: "build failed",
+			}
+			Expect(cmd.Validate(context.Background())).To(Succeed())
+		},
+		Entry("typical", "github", "bborbe", "maintainer", "5886450a1234"),
+		Entry("hyphenated repo", "github", "my-org", "my-repo", "abc1234"),
+		Entry("digits in repo", "github", "bborbe", "repo123", "deadbeef"),
+	)
 })
 
 var _ = Describe("formatDuration", func() {
