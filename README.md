@@ -2,7 +2,12 @@
 
 Autonomous repo-maintenance agents backed by Claude Code. Watchers detect signals (PRs, failed builds, alerts), Pattern B Job agents act on them.
 
-Ships today: PR reviewer + GitHub PR watcher. Planned siblings: build-fixer, dep-updater, sentry-triager, repo-reviewer.
+Ships today:
+- **`agent/pr-reviewer`** — Pattern B Job agent that reviews GitHub + Bitbucket Server pull requests
+- **`watcher/github-pr`** — polls open PRs and emits create-task commands for each new PR
+- **`watcher/github-build`** — polls GitHub Actions for failed CI runs on default branches and emits create-task commands on green→red transitions
+
+Planned siblings: build-fixer agent (consume github-build tasks → propose fix PRs), dep-updater, sentry-triager, repo-reviewer.
 
 ## pr-reviewer (current)
 
@@ -112,6 +117,9 @@ maintainer/
 │   └── agent/.claude/CLAUDE.md headless-review guardrails
 ├── watcher/github-pr/          GitHub PR watcher service (own go.mod)
 │   └── pkg/                    poll loop, GitHub client, cursor, Kafka publisher
+├── watcher/github-build/       GitHub build-failure watcher (own go.mod)
+│   ├── cmd/run-once/           one-shot CLI for ad-hoc polling
+│   └── pkg/                    poll loop, state machine (green→red detection), filter, Kafka publisher
 ├── Makefile.*                  shared includes (variables, env, docker, k8s, folder, precommit)
 ├── common.env / dev.env / prod.env
 └── prompts/ specs/             dark-factory pipeline metadata
