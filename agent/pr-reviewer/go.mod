@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer/agent/pr-reviewer
 
-go 1.26.2
+go 1.26.3
 
 replace (
 	github.com/anthropics/anthropic-sdk-go => github.com/anthropics/anthropic-sdk-go v1.26.0

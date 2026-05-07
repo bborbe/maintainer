@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer/watcher/github-pr
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/bborbe/agent/lib v0.57.0
