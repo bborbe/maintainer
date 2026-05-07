@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-06T17:46:03Z"
 generating: "2026-05-06T17:48:00Z"
 prompted: "2026-05-06T17:59:14Z"
 verifying: "2026-05-06T18:50:30Z"
+completed: "2026-05-07T08:21:01Z"
 branch: dark-factory/per-repo-maintenance-yaml
 ---
 

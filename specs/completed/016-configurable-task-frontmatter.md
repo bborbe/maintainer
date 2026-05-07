@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-06T17:43:51Z"
 generating: "2026-05-06T17:43:52Z"
 prompted: "2026-05-06T17:48:00Z"
 verifying: "2026-05-06T17:56:18Z"
+completed: "2026-05-07T08:21:01Z"
 branch: dark-factory/configurable-task-frontmatter
 ---
 
