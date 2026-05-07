@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [021-migrate-watchers-to-task-create-command-sender]
 summary: Migrated github-pr watcher create-task and update-frontmatter publish paths to task.CreateCommandSender and task.UpdateFrontmatterCommandSender from agent/lib/command/task, removing WatcherCreateTaskCommand wrapper and hand-rolled kafkaPublisher; slug result now populates Title field; agent/lib bumped to v0.58.0.
 container: maintainer-100-spec-021-github-pr-watcher
@@ -7,6 +7,7 @@ dark-factory-version: v0.151.2-4-g3dc5753
 created: "2026-05-07T20:30:00Z"
 queued: "2026-05-07T20:17:53Z"
 started: "2026-05-07T20:17:54Z"
+completed: "2026-05-07T20:30:16Z"
 branch: dark-factory/migrate-watchers-to-task-create-command-sender
 ---
 
