@@ -5,9 +5,11 @@
 package pkg
 
 import (
+	"context"
 	"encoding/json"
 
 	agentlib "github.com/bborbe/agent/lib"
+	task "github.com/bborbe/agent/lib/command/task"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -84,45 +86,52 @@ var _ = Describe("computePRFilenameHint", func() {
 	)
 })
 
-// JSON marshal contract: lock the wire-format tag for the controller boundary.
-var _ = Describe("WatcherCreateTaskCommand JSON marshalling", func() {
-	It("emits filename_hint as a top-level snake_case field alongside embedded fields", func() {
-		cmd := WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
-				Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
-				Body:           "# body",
-			},
-			FilenameHint: "PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never",
+// Wire-format contract: lock the JSON key for the task.CreateCommand boundary.
+var _ = Describe("task.CreateCommand wire format", func() {
+	It("emits 'title' as the top-level key (not 'filename_hint')", func() {
+		cmd := task.CreateCommand{
+			Title:          "PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never",
+			TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+			Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
+			Body:           "# body",
 		}
 		raw, err := json.Marshal(cmd)
 		Expect(err).NotTo(HaveOccurred())
 
-		// Top-level snake_case key consumed by the controller
 		Expect(
 			string(raw),
-		).To(ContainSubstring(`"filename_hint":"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"`))
-
-		// Embedded fields stay at top level (struct embedding, not nested)
-		Expect(
-			string(raw),
-		).To(ContainSubstring(`"taskIdentifier":"00000000-0000-0000-0000-000000000000"`))
-
-		// No nesting under a "CreateTaskCommand" key
-		Expect(string(raw)).NotTo(ContainSubstring(`"CreateTaskCommand"`))
-	})
-
-	It("omits filename_hint when empty (omitempty contract)", func() {
-		cmd := WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
-				Frontmatter:    agentlib.TaskFrontmatter{},
-				Body:           "",
-			},
-			FilenameHint: "",
-		}
-		raw, err := json.Marshal(cmd)
-		Expect(err).NotTo(HaveOccurred())
+		).To(ContainSubstring(`"title":"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"`))
 		Expect(string(raw)).NotTo(ContainSubstring(`"filename_hint"`))
 	})
+
+	// Boundary contract: slug helper output MUST pass task.CreateCommand.Validate (level-1 contract test).
+	// Prevents future drift between watcher's slug rules and lib's Title validator.
+	DescribeTable(
+		"computePRFilenameHint output passes task.CreateCommand.Validate",
+		func(provider, owner, repo string, number int, prTitle string) {
+			title := computePRFilenameHint(provider, owner, repo, number, prTitle)
+			cmd := task.CreateCommand{
+				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
+				Title:          title,
+				Frontmatter: agentlib.TaskFrontmatter{
+					"assignee": "pr-reviewer-agent",
+					"status":   "todo",
+				},
+				Body: "review the PR",
+			}
+			Expect(cmd.Validate(context.Background())).To(Succeed())
+		},
+		Entry("typical PR", "github", "bborbe", "maintainer", 2, "test: delete this PR never"),
+		Entry("hyphenated repo", "github", "my-org", "my-repo", 99, "bump deps"),
+		Entry(
+			"special chars in title",
+			"github",
+			"bborbe",
+			"trading",
+			110,
+			"fix: chromium @trixie [edge]",
+		),
+		Entry("empty title (slug omits segment)", "github", "bborbe", "x", 7, ""),
+		Entry("unicode-only title (slug omits segment)", "github", "bborbe", "x", 7, "🚀🎉"),
+	)
 })

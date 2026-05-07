@@ -1,9 +1,11 @@
 ---
-status: approved
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-05-07T19:49:58Z"
+generating: "2026-05-07T20:00:18Z"
+prompted: "2026-05-07T20:07:23Z"
 branch: dark-factory/migrate-watchers-to-task-create-command-sender
 ---
 

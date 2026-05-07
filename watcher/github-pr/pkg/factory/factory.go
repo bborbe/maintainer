@@ -8,6 +8,7 @@ package factory
 import (
 	"context"
 
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"
@@ -21,20 +22,20 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-// CreateKafkaPublisher constructs a CommandPublisher backed by a Kafka sync producer.
+// CreateKafkaSenders constructs typed task command senders backed by a Kafka sync producer.
 // The cleanup function closes the underlying sync producer on shutdown.
-func CreateKafkaPublisher(
+func CreateKafkaSenders(
 	ctx context.Context,
 	brokers libkafka.Brokers,
 	branch base.Branch,
-) (pkg.CommandPublisher, func(), error) {
+) (task.CreateCommandSender, task.UpdateFrontmatterCommandSender, func(), error) {
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		brokers,
 		"maintainer-watcher-github-pr",
 	)
 	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
+		return nil, nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
 	cleanup := func() {
@@ -42,7 +43,10 @@ func CreateKafkaPublisher(
 			glog.Warningf("close kafka sync producer: %v", err)
 		}
 	}
-	return pkg.NewCommandPublisher(ctx, sender), cleanup, nil
+	return task.NewCreateCommandSender(sender),
+		task.NewUpdateFrontmatterCommandSender(sender),
+		cleanup,
+		nil
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
@@ -57,9 +61,9 @@ func CreateWatcher(
 	trustedAuthors []string,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
-	pub, cleanup, err := CreateKafkaPublisher(ctx, brokers, branch)
+	createSender, updateFrontmatterSender, cleanup, err := CreateKafkaSenders(ctx, brokers, branch)
 	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka publisher")
+		return nil, nil, errors.Wrap(ctx, err, "create kafka senders")
 	}
 
 	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
@@ -67,7 +71,8 @@ func CreateWatcher(
 	ghClient := pkg.NewGitHubClient(ghToken)
 	w := pkg.NewWatcher(
 		ghClient,
-		pub,
+		createSender,
+		updateFrontmatterSender,
 		pkg.DefaultCursorPath,
 		startTime,
 		repoScope,

@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.29
+
+- refactor(watcher/github-pr): migrate create-task and update-frontmatter publish paths to task.CreateCommandSender / task.UpdateFrontmatterCommandSender from agent/lib/command/task — removes WatcherCreateTaskCommand wrapper; slug result now populates Title field; bumps agent/lib to v0.58.0
+
 ## v0.23.28
 
 - feat(watcher/github-build): add include_logs opt-in — repos with watcher.github-build.include_logs: true in .maintenance.yaml receive an ## Error section in the task body containing the last 30 lines (≤ 4 KB) of the primary failing job's log, redacted for GitHub tokens, Bearer headers, AWS keys, and long hex strings; log fetch failures degrade silently without blocking the publish

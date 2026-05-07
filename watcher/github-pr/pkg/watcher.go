@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	agentlib "github.com/bborbe/agent/lib"
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/errors"
 	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
@@ -27,7 +28,8 @@ type Watcher interface {
 // NewWatcher returns a Watcher that polls GitHub and publishes commands.
 func NewWatcher(
 	ghClient GitHubClient,
-	pub CommandPublisher,
+	createSender task.CreateCommandSender,
+	updateFrontmatterSender task.UpdateFrontmatterCommandSender,
 	cursorPath string,
 	startTime libtime.DateTime,
 	scope string,
@@ -37,28 +39,30 @@ func NewWatcher(
 	trustDecision trust.Trust,
 ) Watcher {
 	return &watcher{
-		ghClient:           ghClient,
-		publisher:          pub,
-		cursorPath:         cursorPath,
-		startTime:          startTime,
-		scope:              scope,
-		taskCreationFilter: taskCreationFilter,
-		stage:              stage,
-		metrics:            metrics,
-		trustDecision:      trustDecision,
+		ghClient:                ghClient,
+		createSender:            createSender,
+		updateFrontmatterSender: updateFrontmatterSender,
+		cursorPath:              cursorPath,
+		startTime:               startTime,
+		scope:                   scope,
+		taskCreationFilter:      taskCreationFilter,
+		stage:                   stage,
+		metrics:                 metrics,
+		trustDecision:           trustDecision,
 	}
 }
 
 type watcher struct {
-	ghClient           GitHubClient
-	publisher          CommandPublisher
-	cursorPath         string
-	startTime          libtime.DateTime
-	scope              string
-	taskCreationFilter filter.TaskCreationFilter
-	stage              string
-	metrics            Metrics
-	trustDecision      trust.Trust
+	ghClient                GitHubClient
+	createSender            task.CreateCommandSender
+	updateFrontmatterSender task.UpdateFrontmatterCommandSender
+	cursorPath              string
+	startTime               libtime.DateTime
+	scope                   string
+	taskCreationFilter      filter.TaskCreationFilter
+	stage                   string
+	metrics                 Metrics
+	trustDecision           trust.Trust
 }
 
 func (w *watcher) Poll(ctx context.Context) error {
@@ -215,32 +219,28 @@ func (w *watcher) publishCreate(
 		return false
 	}
 
-	var cmd WatcherCreateTaskCommand
+	var cmd task.CreateCommand
 	if trustResult.Success() {
-		cmd = WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-				Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
-				Body:           buildTaskBody(pr),
-			},
-			FilenameHint: computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+		cmd = task.CreateCommand{
+			Title:          computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
+			Body:           buildTaskBody(pr),
 		}
 	} else {
 		if author == "" {
 			author = "(unknown)"
 		}
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
-		cmd = WatcherCreateTaskCommand{
-			CreateTaskCommand: agentlib.CreateTaskCommand{
-				TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-				Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
-				Body:           buildUntrustedBody(author, trustResult.Description()),
-			},
-			FilenameHint: computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+		cmd = task.CreateCommand{
+			Title:          computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
+			Body:           buildUntrustedBody(author, trustResult.Description()),
 		}
 	}
 
-	if err := w.publisher.PublishCreate(ctx, cmd); err != nil {
+	if err := w.createSender.SendCommand(ctx, cmd); err != nil {
 		glog.Errorf("publish create-task failed pr=%s err=%v", pr.HTMLURL, err)
 		w.metrics.IncPRPublished("error")
 		return false
@@ -270,7 +270,7 @@ func (w *watcher) publishForcePush(
 	heading := fmt.Sprintf("## Outdated by force-push %s", oldSHA)
 
 	var updates agentlib.TaskFrontmatter
-	var bodySection *agentlib.BodySection
+	var bodySection *task.BodySection
 
 	if trustResult.Success() {
 		updates = agentlib.TaskFrontmatter{
@@ -278,7 +278,7 @@ func (w *watcher) publishForcePush(
 			"status":        "in_progress",
 			"trigger_count": 0,
 		}
-		bodySection = &agentlib.BodySection{Heading: heading, Section: heading + "\n"}
+		bodySection = &task.BodySection{Heading: heading, Section: heading + "\n"}
 	} else {
 		if author == "" {
 			author = "(unknown)"
@@ -290,15 +290,15 @@ func (w *watcher) publishForcePush(
 			"trigger_count": 0,
 		}
 		section := heading + "\n" + buildUntrustedBody(author, trustResult.Description())
-		bodySection = &agentlib.BodySection{Heading: heading, Section: section}
+		bodySection = &task.BodySection{Heading: heading, Section: section}
 	}
 
-	cmd := agentlib.UpdateFrontmatterCommand{
+	cmd := task.UpdateFrontmatterCommand{
 		TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 		Updates:        updates,
 		Body:           bodySection,
 	}
-	if err := w.publisher.PublishUpdateFrontmatter(ctx, cmd); err != nil {
+	if err := w.updateFrontmatterSender.SendCommand(ctx, cmd); err != nil {
 		glog.Errorf("publish update-frontmatter failed pr=%s err=%v", pr.HTMLURL, err)
 		w.metrics.IncPRPublished("error")
 		return false
