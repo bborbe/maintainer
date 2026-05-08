@@ -37,6 +37,8 @@ func NewWatcher(
 	stage string,
 	metrics Metrics,
 	trustDecision trust.Trust,
+	maxSlugLen int,
+	maxTitleLen int,
 ) Watcher {
 	return &watcher{
 		ghClient:                ghClient,
@@ -49,6 +51,8 @@ func NewWatcher(
 		stage:                   stage,
 		metrics:                 metrics,
 		trustDecision:           trustDecision,
+		maxSlugLen:              maxSlugLen,
+		maxTitleLen:             maxTitleLen,
 	}
 }
 
@@ -63,6 +67,8 @@ type watcher struct {
 	stage                   string
 	metrics                 Metrics
 	trustDecision           trust.Trust
+	maxSlugLen              int
+	maxTitleLen             int
 }
 
 func (w *watcher) Poll(ctx context.Context) error {
@@ -222,7 +228,15 @@ func (w *watcher) publishCreate(
 	var cmd task.CreateCommand
 	if trustResult.Success() {
 		cmd = task.CreateCommand{
-			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title: computePRTitle(
+				"github",
+				pr.Owner,
+				pr.Repo,
+				pr.Number,
+				pr.Title,
+				w.maxSlugLen,
+				w.maxTitleLen,
+			),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildTaskBody(pr),
@@ -233,7 +247,7 @@ func (w *watcher) publishCreate(
 		}
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
 		cmd = task.CreateCommand{
-			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title, w.maxSlugLen, w.maxTitleLen),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildUntrustedBody(author, trustResult.Description()),

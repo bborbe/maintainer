@@ -32,6 +32,24 @@ import (
 
 var repoScopePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
+func validateLengthCaps(ctx context.Context, maxSlugLen, maxTitleLen int) error {
+	if maxSlugLen <= 0 {
+		return errors.Errorf(ctx, "MAX_SLUG_LEN must be > 0; got %d", maxSlugLen)
+	}
+	if maxTitleLen <= 0 {
+		return errors.Errorf(ctx, "MAX_TITLE_LEN must be > 0; got %d", maxTitleLen)
+	}
+	if maxSlugLen >= maxTitleLen {
+		return errors.Errorf(
+			ctx,
+			"MAX_SLUG_LEN (%d) must be < MAX_TITLE_LEN (%d)",
+			maxSlugLen,
+			maxTitleLen,
+		)
+	}
+	return nil
+}
+
 func validateRepoScope(ctx context.Context, scope string) error {
 	if !repoScopePattern.MatchString(scope) {
 		return errors.Errorf(ctx, "repo scope %q must match ^[a-zA-Z0-9_.-]+$", scope)
@@ -97,10 +115,19 @@ type application struct {
 	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"        usage:"Skip PRs older than this (Go duration; empty disables)"                                        default:"2160h"`
 	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION" usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)"     default:"720h"`
 	RepoAllowlist    string           `required:"false" arg:"repo-allowlist"    env:"REPO_ALLOWLIST"    usage:"Comma-separated host-qualified repo allowlist (host/owner/repo format); empty means allow-all"`
+	MaxSlugLen       int              `required:"false" arg:"max-slug-len"      env:"MAX_SLUG_LEN"      usage:"Max length of slugified PR-title segment in vault filenames"                                   default:"80"`
+	MaxTitleLen      int              `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN"     usage:"Max length of vault task filename (whole title; safety cap)"                                   default:"200"`
+}
+
+func (a *application) validateConfig(ctx context.Context) error {
+	if err := validateRepoScope(ctx, a.RepoScope); err != nil {
+		return err
+	}
+	return validateLengthCaps(ctx, a.MaxSlugLen, a.MaxTitleLen)
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
-	if err := validateRepoScope(ctx, a.RepoScope); err != nil {
+	if err := a.validateConfig(ctx); err != nil {
 		return err
 	}
 
@@ -163,6 +190,8 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		taskCreationFilter,
 		startTime,
 		trustedAuthors,
+		a.MaxSlugLen,
+		a.MaxTitleLen,
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")

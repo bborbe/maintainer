@@ -56,6 +56,7 @@ func CreateWatcher(
 	assignee string,
 	taskStatus string,
 	taskPhase string,
+	maxTitleLen int,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
 	createSender, cleanup, err := CreateKafkaCreateSender(ctx, brokers, branch)
@@ -76,6 +77,7 @@ func CreateWatcher(
 		taskStatus,
 		taskPhase,
 		maintenanceLoader,
+		maxTitleLen,
 	)
 	return w, cleanup, nil
 }

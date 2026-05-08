@@ -11,33 +11,38 @@ import (
 	"github.com/golang/glog"
 )
 
-// maxTitleLen is the maximum byte length of a title value.
-// Titles that exceed this limit are truncated with a WARN log.
-const maxTitleLen = 200
+// DefaultMaxTitleLen is the default safety cap for the whole title, including segments and separators.
+// Crosses Windows MAX_PATH=260 and ext4 NAME_MAX=255 with margin. Override via MAX_TITLE_LEN.
+const DefaultMaxTitleLen = 200
 
-// maxSlugLen is the maximum character length of the slugified PR-title segment.
-const maxSlugLen = 50
+// DefaultMaxSlugLen is the default cap for the slugified PR-title segment alone.
+// Bumped from 50 to 80 (2026-05-08) — 50 cut typical PR titles mid-word. Override via MAX_SLUG_LEN.
+const DefaultMaxSlugLen = 80
 
 // computePRTitle returns the human-readable title for a PR-review task.
-// Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {slug}"
-// Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number}"
-// The returned string MUST NOT include the .md extension; the controller appends it.
-func computePRTitle(provider, owner, repo string, number int, title string) string {
+// maxSlug caps the slug segment alone; maxTitle is a safety cap on the full title.
+// Both are passed by the caller (read from env at startup) — see watcher/github-pr/main.go.
+func computePRTitle(
+	provider, owner, repo string,
+	number int,
+	title string,
+	maxSlug, maxTitle int,
+) string {
 	base := fmt.Sprintf("PR Review %s - %s-%s - %d", provider, owner, repo, number)
-	slug := slugifyTitle(title)
+	slug := slugifyTitle(title, maxSlug)
 	var t string
 	if slug == "" {
 		t = base
 	} else {
 		t = base + " - " + slug
 	}
-	if len(t) > maxTitleLen {
+	if len(t) > maxTitle {
 		glog.Warningf(
 			"PR title exceeds max length: len=%d max=%d — truncating",
 			len(t),
-			maxTitleLen,
+			maxTitle,
 		)
-		t = t[:maxTitleLen]
+		t = t[:maxTitle]
 	}
 	return t
 }
@@ -48,9 +53,9 @@ func computePRTitle(provider, owner, repo string, number int, title string) stri
 // 2. Replace any character that is not [a-z0-9] with a hyphen
 // 3. Collapse consecutive hyphens into a single hyphen
 // 4. Trim leading and trailing hyphens
-// 5. Truncate to maxSlugLen (50) characters; trim any trailing hyphen left by truncation
+// 5. Truncate to maxSlug characters; trim any trailing hyphen left by truncation
 // Returns empty string if the result after step 4 is empty (e.g. unicode-only or whitespace-only title).
-func slugifyTitle(title string) string {
+func slugifyTitle(title string, maxSlug int) string {
 	lower := strings.ToLower(title)
 	var b strings.Builder
 	prevHyphen := false
@@ -64,8 +69,8 @@ func slugifyTitle(title string) string {
 		}
 	}
 	result := strings.Trim(b.String(), "-")
-	if len(result) > maxSlugLen {
-		result = result[:maxSlugLen]
+	if len(result) > maxSlug {
+		result = result[:maxSlug]
 		result = strings.TrimRight(result, "-")
 	}
 	return result

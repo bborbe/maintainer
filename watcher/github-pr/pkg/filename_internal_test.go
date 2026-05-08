@@ -17,71 +17,126 @@ import (
 var _ = Describe("slugifyTitle", func() {
 	DescribeTable(
 		"produces correct slug",
-		func(input, want string) {
-			Expect(slugifyTitle(input)).To(Equal(want))
+		func(input string, maxSlug int, want string) {
+			Expect(slugifyTitle(input, maxSlug)).To(Equal(want))
 		},
-		Entry("simple lowercase", "fix bug", "fix-bug"),
-		Entry("uppercase converted", "Fix Bug", "fix-bug"),
-		Entry("special chars replaced with hyphen", "feat: new-feature!", "feat-new-feature"),
-		Entry("consecutive special chars collapsed to one hyphen", "hello   world", "hello-world"),
-		Entry("leading special char stripped", "!leading", "leading"),
-		Entry("trailing special char stripped", "trailing!", "trailing"),
-		Entry("only special chars → empty string", "!!!", ""),
-		Entry("empty string → empty string", "", ""),
-		Entry("unicode-only → empty string", "🚀🎉", ""),
-		Entry("mixed unicode and ascii", "fix 🐛 bug", "fix-bug"),
-		Entry("digits preserved", "v1 release", "v1-release"),
-		Entry("already slug-safe", "my-feature", "my-feature"),
+		Entry("simple lowercase", "fix bug", DefaultMaxSlugLen, "fix-bug"),
+		Entry("uppercase converted", "Fix Bug", DefaultMaxSlugLen, "fix-bug"),
 		Entry(
-			"truncation at 50 chars",
+			"special chars replaced with hyphen",
+			"feat: new-feature!",
+			DefaultMaxSlugLen,
+			"feat-new-feature",
+		),
+		Entry(
+			"consecutive special chars collapsed to one hyphen",
+			"hello   world",
+			DefaultMaxSlugLen,
+			"hello-world",
+		),
+		Entry("leading special char stripped", "!leading", DefaultMaxSlugLen, "leading"),
+		Entry("trailing special char stripped", "trailing!", DefaultMaxSlugLen, "trailing"),
+		Entry("only special chars → empty string", "!!!", DefaultMaxSlugLen, ""),
+		Entry("empty string → empty string", "", DefaultMaxSlugLen, ""),
+		Entry("unicode-only → empty string", "🚀🎉", DefaultMaxSlugLen, ""),
+		Entry("mixed unicode and ascii", "fix 🐛 bug", DefaultMaxSlugLen, "fix-bug"),
+		Entry("digits preserved", "v1 release", DefaultMaxSlugLen, "v1-release"),
+		Entry("already slug-safe", "my-feature", DefaultMaxSlugLen, "my-feature"),
+		Entry(
+			"49-char input not truncated at default cap",
 			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklm",
+			DefaultMaxSlugLen,
 			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklm",
 		),
 		Entry(
-			"truncation trims trailing hyphen",
+			"truncation at custom cap 50 trims trailing hyphen",
 			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklm-extra-words-here",
+			50,
 			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklm",
 		),
-		Entry("pr title with colon", "feat: add new endpoint", "feat-add-new-endpoint"),
-		Entry("pr title with slash", "fix/auth bug", "fix-auth-bug"),
-		Entry("pr title with dots", "bump v1.2.3", "bump-v1-2-3"),
+		Entry(
+			"truncation at default cap 80 trims trailing hyphen",
+			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz abcdefghijklmnop more",
+			DefaultMaxSlugLen,
+			"abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz-abcdefghijklmnop",
+		),
+		Entry(
+			"pr title with colon",
+			"feat: add new endpoint",
+			DefaultMaxSlugLen,
+			"feat-add-new-endpoint",
+		),
+		Entry("pr title with slash", "fix/auth bug", DefaultMaxSlugLen, "fix-auth-bug"),
+		Entry("pr title with dots", "bump v1.2.3", DefaultMaxSlugLen, "bump-v1-2-3"),
 	)
 })
 
 var _ = Describe("computePRTitle", func() {
-	DescribeTable("produces correct title",
-		func(provider, owner, repo string, number int, title, want string) {
-			Expect(computePRTitle(provider, owner, repo, number, title)).To(Equal(want))
+	DescribeTable(
+		"produces correct title",
+		func(provider, owner, repo string, number int, title string, maxSlug, maxTitle int, want string) {
+			Expect(
+				computePRTitle(provider, owner, repo, number, title, maxSlug, maxTitle),
+			).To(Equal(want))
 		},
 		Entry("normal PR with title",
 			"github", "bborbe", "maintainer", 2, "test: delete this PR never",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"),
 		Entry("title with special chars",
 			"github", "bborbe", "trading", 110, "fix: chromium trixie",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - bborbe-trading - 110 - fix-chromium-trixie"),
 		Entry("empty title → no slug segment",
 			"github", "bborbe", "x", 7, "",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - bborbe-x - 7"),
 		Entry("whitespace-only title → no slug segment",
 			"github", "bborbe", "x", 7, "   ",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - bborbe-x - 7"),
 		Entry("unicode-only title → no slug segment",
 			"github", "bborbe", "x", 7, "🚀🎉",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - bborbe-x - 7"),
 		Entry(
-			"slug truncated at 50 chars",
+			"slug truncated at default cap 80",
 			"github",
 			"org",
 			"repo",
 			1,
 			"this is a very long pull request title that exceeds the maximum slug length limit here",
-			"PR Review github - org-repo - 1 - this-is-a-very-long-pull-request-title-that-exceed",
+			DefaultMaxSlugLen,
+			DefaultMaxTitleLen,
+			"PR Review github - org-repo - 1 - this-is-a-very-long-pull-request-title-that-exceeds-the-maximum-slug-length-limi",
+		),
+		Entry(
+			"slug truncated at custom cap 30 with hyphen-trim",
+			"github",
+			"bborbe",
+			"x",
+			1,
+			"abcdefghijklmnopqrstuvwxyz ab more",
+			30, DefaultMaxTitleLen,
+			"PR Review github - bborbe-x - 1 - abcdefghijklmnopqrstuvwxyz-ab",
+		),
+		Entry(
+			"title cap kicks in: slug under slug-cap but full title truncated at maxTitle",
+			"github",
+			"bborbe",
+			"maintainer",
+			1,
+			"very long title",
+			80, 40,
+			"PR Review github - bborbe-maintainer - 1",
 		),
 		Entry("future bitbucket provider",
 			"bitbucket", "team", "svc", 42, "fix auth bug",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review bitbucket - team-svc - 42 - fix-auth-bug"),
 		Entry("hyphenated repo name joined correctly",
 			"github", "my-org", "my-repo", 99, "bump deps",
+			DefaultMaxSlugLen, DefaultMaxTitleLen,
 			"PR Review github - my-org-my-repo - 99 - bump-deps"),
 	)
 })
@@ -109,7 +164,15 @@ var _ = Describe("task.CreateCommand wire format", func() {
 	DescribeTable(
 		"computePRTitle output passes task.CreateCommand.Validate",
 		func(provider, owner, repo string, number int, prTitle string) {
-			title := computePRTitle(provider, owner, repo, number, prTitle)
+			title := computePRTitle(
+				provider,
+				owner,
+				repo,
+				number,
+				prTitle,
+				DefaultMaxSlugLen,
+				DefaultMaxTitleLen,
+			)
 			cmd := task.CreateCommand{
 				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 				Title:          title,

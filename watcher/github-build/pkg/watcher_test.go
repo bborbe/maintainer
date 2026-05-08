@@ -52,6 +52,7 @@ var _ = Describe("Watcher", func() {
 			"todo",
 			"",
 			ml,
+			pkg.DefaultMaxTitleLen,
 		)
 	}
 
@@ -528,6 +529,7 @@ var _ = Describe("Watcher", func() {
 				taskStatus,
 				taskPhase,
 				ml,
+				pkg.DefaultMaxTitleLen,
 			)
 		}
 
@@ -598,6 +600,7 @@ var _ = Describe("Watcher", func() {
 				"todo",
 				"",
 				loader,
+				pkg.DefaultMaxTitleLen,
 			)
 		}
 
@@ -882,6 +885,7 @@ var _ = Describe("Watcher", func() {
 				"todo",
 				"",
 				maintenanceLoaderWithLogs,
+				pkg.DefaultMaxTitleLen,
 			)
 		}
 
