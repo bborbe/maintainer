@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Added /resetcursor/{repo:.+} admin endpoint to watcher/github-build protected by libhttp.NewDangerousHandlerWrapper, with Ginkgo contract tests covering slash-in-repo-key routing, successful reset, and 404 for unknown repo.
 container: maintainer-103-add-resetcursor-endpoint-to-watchers
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-08T14:30:00Z"
 queued: "2026-05-08T12:41:37Z"
 started: "2026-05-08T12:41:38Z"
+completed: "2026-05-08T12:47:27Z"
 ---
 
 <summary>
