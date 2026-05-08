@@ -1,11 +1,13 @@
 ---
-status: prompted
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-05-07T19:49:58Z"
 generating: "2026-05-07T20:00:18Z"
 prompted: "2026-05-07T20:07:23Z"
+verifying: "2026-05-07T21:03:18Z"
+completed: "2026-05-08T06:08:51Z"
 branch: dark-factory/migrate-watchers-to-task-create-command-sender
 ---
 
@@ -103,3 +105,20 @@ Keep `WatcherCreateTaskCommand` and `FilenameHint`. Cost: the agent controller's
 - Agent spec 020 (`agent-lib-command-package-restructure`): relocates to `agent/lib/command/task/`; renames (`CreateTaskCommand` → `CreateCommand`)
 - Maintainer spec 018 (`human-readable-filenames-for-build-tasks`): introduced `FilenameHint` for build tasks (this spec retires it)
 - Maintainer spec 019 (`human-readable-filenames-for-pr-review-tasks`): introduced `FilenameHint` for PR-review tasks (this spec retires it)
+
+## Verification Result
+
+**Verified:** 2026-05-08T06:08:14Z (HEAD 318dd757)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory v0.154.0
+**Scenario:** No scenario file (four-condition test); structural ACs verified via fresh `make precommit` in both watcher subdirs; rung-2 verified by build-failure task landing in vault post dev-deploy.
+**Evidence:**
+- `watcher/github-pr/pkg/publisher.go` + `watcher/github-build/pkg/publisher.go` reduced to 5-line stubs; zero `WatcherCreateTaskCommand` / `FilenameHint` / `filename_hint` matches across `watcher/`
+- Both `go.mod` pin `github.com/bborbe/agent/lib v0.58.0`; both wire `task.NewCreateCommandSender` in `pkg/factory/factory.go`; github-pr also wires `task.NewUpdateFrontmatterCommandSender`
+- Watcher code emits `task.CreateCommand{Title: computePRFilenameHint(...)}` (`watcher/github-pr/pkg/watcher.go:225,236`) and `task.CreateCommand{Title: computeFilenameHint(...)}` (`watcher/github-build/pkg/watcher.go:305`) via `createSender.SendCommand`
+- Wire-format unit tests assert `"title"` in / `"filename_hint"` out: `watcher/github-pr/pkg/filename_internal_test.go:91-104`, `watcher/github-build/pkg/watcher_internal_test.go:134-148`
+- `taskmocks.TaskCreateCommandSender` + `TaskUpdateFrontmatterCommandSender` consumed across both watchers' `_test.go` files
+- `cd watcher/github-pr && make precommit` → `Issues: 0`, trivy clean, `ready to commit` (run 2026-05-08 08:07 local against HEAD 318dd757)
+- `cd watcher/github-build && make precommit` → `Issues: 0`, trivy clean, `ready to commit` (run 2026-05-08 08:07 local)
+- Rung-2: `~/Documents/Obsidian/OpenClaw/tasks/Build Failure github - bborbe-go-skeleton - 08490c4.md` landed 2026-05-08 00:33 local — exact `computeFilenameHint` slug format, frontmatter and body produced by deployed dev build-watcher (post-`BRANCH=dev make buca`) round-tripping through agent task-controller v0.58.0+
+- CHANGELOG: `## v0.23.29` entry covers github-pr migration; `## Unreleased` covers github-build migration
+**Verdict:** PASS
