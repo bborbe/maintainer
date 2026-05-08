@@ -2,8 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.23.30
 
+- feat(watcher): add `/setloglevel/{level}` endpoint to `maintainer-watcher-github-build` and `maintainer-watcher-github-pr` for runtime glog verbosity control (auto-resets after 5min)
 - refactor(watcher/github-build): migrate create-task publish path to task.CreateCommandSender from agent/lib/command/task — removes WatcherCreateTaskCommand wrapper and hand-rolled kafkaPublisher; slug result now populates Title field; bumps agent/lib to v0.58.0
 
 ## v0.23.29

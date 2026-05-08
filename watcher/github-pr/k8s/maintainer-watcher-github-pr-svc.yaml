@@ -3,6 +3,9 @@ kind: Service
 metadata:
   name: maintainer-watcher-github-pr
   namespace: '{{ "NAMESPACE" | env }}'
+  annotations:
+    admin/port: '9090'
+    admin/path: ''
 spec:
   clusterIP: None
   selector:
