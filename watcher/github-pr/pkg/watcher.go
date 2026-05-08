@@ -222,7 +222,7 @@ func (w *watcher) publishCreate(
 	var cmd task.CreateCommand
 	if trustResult.Success() {
 		cmd = task.CreateCommand{
-			Title:          computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildTaskBody(pr),
@@ -233,7 +233,7 @@ func (w *watcher) publishCreate(
 		}
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
 		cmd = task.CreateCommand{
-			Title:          computePRFilenameHint("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildUntrustedBody(author, trustResult.Description()),

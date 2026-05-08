@@ -11,35 +11,35 @@ import (
 	"github.com/golang/glog"
 )
 
-// maxFilenameHintLen is the maximum byte length of a filename_hint value.
-// Hints that exceed this limit are truncated with a WARN log.
-const maxFilenameHintLen = 200
+// maxTitleLen is the maximum byte length of a title value.
+// Titles that exceed this limit are truncated with a WARN log.
+const maxTitleLen = 200
 
 // maxSlugLen is the maximum character length of the slugified PR-title segment.
 const maxSlugLen = 50
 
-// computePRFilenameHint returns the human-readable filename hint for a PR-review task.
+// computePRTitle returns the human-readable title for a PR-review task.
 // Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {slug}"
 // Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
-func computePRFilenameHint(provider, owner, repo string, number int, title string) string {
+func computePRTitle(provider, owner, repo string, number int, title string) string {
 	base := fmt.Sprintf("PR Review %s - %s-%s - %d", provider, owner, repo, number)
 	slug := slugifyTitle(title)
-	var hint string
+	var t string
 	if slug == "" {
-		hint = base
+		t = base
 	} else {
-		hint = base + " - " + slug
+		t = base + " - " + slug
 	}
-	if len(hint) > maxFilenameHintLen {
+	if len(t) > maxTitleLen {
 		glog.Warningf(
-			"filename_hint exceeds max length: len=%d max=%d — truncating",
-			len(hint),
-			maxFilenameHintLen,
+			"PR title exceeds max length: len=%d max=%d — truncating",
+			len(t),
+			maxTitleLen,
 		)
-		hint = hint[:maxFilenameHintLen]
+		t = t[:maxTitleLen]
 	}
-	return hint
+	return t
 }
 
 // slugifyTitle converts a PR title to a filesystem-safe, human-readable slug.

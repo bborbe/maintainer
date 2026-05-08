@@ -48,10 +48,10 @@ var _ = Describe("slugifyTitle", func() {
 	)
 })
 
-var _ = Describe("computePRFilenameHint", func() {
-	DescribeTable("produces correct filename hint",
+var _ = Describe("computePRTitle", func() {
+	DescribeTable("produces correct title",
 		func(provider, owner, repo string, number int, title, want string) {
-			Expect(computePRFilenameHint(provider, owner, repo, number, title)).To(Equal(want))
+			Expect(computePRTitle(provider, owner, repo, number, title)).To(Equal(want))
 		},
 		Entry("normal PR with title",
 			"github", "bborbe", "maintainer", 2, "test: delete this PR never",
@@ -107,9 +107,9 @@ var _ = Describe("task.CreateCommand wire format", func() {
 	// Boundary contract: slug helper output MUST pass task.CreateCommand.Validate (level-1 contract test).
 	// Prevents future drift between watcher's slug rules and lib's Title validator.
 	DescribeTable(
-		"computePRFilenameHint output passes task.CreateCommand.Validate",
+		"computePRTitle output passes task.CreateCommand.Validate",
 		func(provider, owner, repo string, number int, prTitle string) {
-			title := computePRFilenameHint(provider, owner, repo, number, prTitle)
+			title := computePRTitle(provider, owner, repo, number, prTitle)
 			cmd := task.CreateCommand{
 				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 				Title:          title,

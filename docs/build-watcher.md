@@ -93,9 +93,9 @@ sharing the existing `REPO_ALLOWLIST` env var injected from `dev.env`/`prod.env`
 Splitting per-watcher requires a new env naming convention (`BUILD_REPO_ALLOWLIST`,
 `PR_REPO_ALLOWLIST`) and corresponding code wiring; tracked as a follow-up.
 
-## `filename_hint` Field
+## Title Field
 
-Every `CreateTaskCommand` published by the build watcher includes a `filename_hint` field
+Every `task.CreateCommand` published by the build watcher sets the `Title` field
 with the human-readable filename stem for the vault task file:
 
 ```
@@ -113,13 +113,11 @@ Build Failure {provider} - {owner}-{repo} - {sha7}
 
 **Future provider slots:** `Build Failure bitbucket - team-svc - a1b2c3d.md`
 
-**Controller behavior (future):** The task controller (`bborbe/agent`) will name the vault file
-`tasks/{filename_hint}.md` when the hint is present and valid. If absent or invalid, the controller
-falls back to `tasks/{uuid}.md`. Controller-side validation and fallback logic ships in a separate
-`bborbe/agent` spec. Until that spec lands, the `filename_hint` field is emitted but ignored.
-
-**Schema compatibility:** The field uses `json:"filename_hint,omitempty"`. Controllers that do not
-recognize `filename_hint` process the message correctly via Go's `encoding/json` permissive default.
+**Controller behaviour:** The bborbe/agent task controller writes the vault file at
+`tasks/{Title}.md` when `Title` is present and passes validation. On validation failure
+the controller logs WARN and falls back to `tasks/{task_identifier}.md`. See
+`bborbe/agent/specs/completed/019-human-readable-vault-task-paths.md` for the
+controller-side contract.
 
 ## Per-Repo Configuration (`.maintenance.yaml`)
 

@@ -31,11 +31,11 @@ var _ = Describe("splitRepoKey", func() {
 	)
 })
 
-var _ = Describe("computeFilenameHint", func() {
+var _ = Describe("computeBuildTitle", func() {
 	DescribeTable(
-		"produces correct filename hint",
+		"produces correct title",
 		func(provider, owner, repo, sha, want string) {
-			Expect(computeFilenameHint(provider, owner, repo, sha)).To(Equal(want))
+			Expect(computeBuildTitle(provider, owner, repo, sha)).To(Equal(want))
 		},
 		Entry(
 			"normal github repo",
@@ -150,9 +150,9 @@ var _ = Describe("task.CreateCommand wire format", func() {
 
 	// Boundary contract: slug helper output MUST pass task.CreateCommand.Validate.
 	// Prevents future drift between watcher's slug rules and lib's Title validator.
-	DescribeTable("computeFilenameHint output passes task.CreateCommand.Validate",
+	DescribeTable("computeBuildTitle output passes task.CreateCommand.Validate",
 		func(provider, owner, repo, sha string) {
-			title := computeFilenameHint(provider, owner, repo, sha)
+			title := computeBuildTitle(provider, owner, repo, sha)
 			cmd := task.CreateCommand{
 				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 				Title:          title,

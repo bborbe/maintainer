@@ -10,29 +10,29 @@ import (
 	"github.com/golang/glog"
 )
 
-// maxFilenameHintLen is the maximum byte length of a filename_hint value.
-// Hints that exceed this limit are truncated with a WARN log to prevent filesystem aliasing.
-const maxFilenameHintLen = 200
+// maxTitleLen is the maximum byte length of a title value.
+// Titles that exceed this limit are truncated with a WARN log to prevent filesystem aliasing.
+const maxTitleLen = 200
 
-// computeFilenameHint returns the human-readable filename hint for a build-failure task.
+// computeBuildTitle returns the human-readable title for a build-failure task.
 // Format: "Build Failure {provider} - {slugifySegment(owner)}-{slugifySegment(repo)} - {sha7}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
-func computeFilenameHint(provider, owner, repo, episodeSHA string) string {
+func computeBuildTitle(provider, owner, repo, episodeSHA string) string {
 	sha7 := episodeSHA
 	if len(sha7) > 7 {
 		sha7 = sha7[:7]
 	}
 	ownerRepo := slugifySegment(owner) + "-" + slugifySegment(repo)
-	hint := "Build Failure " + provider + " - " + ownerRepo + " - " + sha7
-	if len(hint) > maxFilenameHintLen {
+	title := "Build Failure " + provider + " - " + ownerRepo + " - " + sha7
+	if len(title) > maxTitleLen {
 		glog.Warningf(
-			"filename_hint exceeds max length: len=%d max=%d — truncating",
-			len(hint),
-			maxFilenameHintLen,
+			"build task title exceeds max length: len=%d max=%d — truncating",
+			len(title),
+			maxTitleLen,
 		)
-		hint = hint[:maxFilenameHintLen]
+		title = title[:maxTitleLen]
 	}
-	return hint
+	return title
 }
 
 // slugifySegment converts s to a filesystem-safe lowercase segment.

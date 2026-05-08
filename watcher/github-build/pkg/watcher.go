@@ -302,7 +302,7 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		fm["phase"] = taskPhase
 	}
 	return task.CreateCommand{
-		Title:          computeFilenameHint("github", owner, repo, episodeSHA),
+		Title:          computeBuildTitle("github", owner, repo, episodeSHA),
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
 		Frontmatter:    fm,
 		Body:           body,

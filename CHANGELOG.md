@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.32
+
+- refactor(watcher): rename internal `filename_hint` terminology to `title` across both watchers — function names (`computePRTitle`, `computeBuildTitle`), constants (`maxTitleLen`), comments, log messages, and stale doc sections updated; wire format unchanged (already on `Title` field per 0.31.x); contract tests preserved verbatim
+
 ## v0.23.31
 
 - feat(watcher/github-build): add `/resetcursor/{repo}` admin endpoint to release stuck episode locks. Protected by `libhttp.NewDangerousHandlerWrapper` (passphrase rotated every 5min, logged on each unauthenticated hit). Use as: `curl 'https://<stage>.quant.benjamin-borbe.de/admin/maintainer-watcher-github-build/resetcursor/github.com/bborbe/<repo>?passphrase=<from-logs>'`
