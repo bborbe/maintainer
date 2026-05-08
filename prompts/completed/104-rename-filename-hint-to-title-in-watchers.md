@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: 'Renamed internal filename_hint terminology to title across both watchers: computePRFilenameHint→computePRTitle, computeFilenameHint→computeBuildTitle, maxFilenameHintLen→maxTitleLen in code files and callers; updated doc comments and log messages; rewrote stale docs/build-watcher.md section and docs/architecture.md JSON example + prose; added CHANGELOG entry; contract tests preserved verbatim.'
 container: maintainer-104-rename-filename-hint-to-title-in-watchers
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-08T13:30:43Z"
 queued: "2026-05-08T13:30:43Z"
 started: "2026-05-08T13:30:44Z"
+completed: "2026-05-08T13:34:46Z"
 ---
 
 <summary>
