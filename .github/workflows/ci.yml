@@ -30,4 +30,6 @@ jobs:
           sudo apt-get install -y trivy
 
       - name: Run precommit checks
+        env:
+          RACE: "false"
         run: make precommit

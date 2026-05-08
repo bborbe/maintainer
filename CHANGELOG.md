@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- chore(test): make `-race` flag opt-in via `RACE` Makefile variable (default `true` preserves local behaviour). CI sets `RACE=false` to sidestep ubuntu-latest+go1.26.3 segfault under `-race` in `agent/pr-reviewer` (run 25558544578). Race detection still on for local dev + can be re-enabled in CI by removing the env block when the runner issue is resolved.
+
 ## v0.23.32
 
 - refactor(watcher): rename internal `filename_hint` terminology to `title` across both watchers — function names (`computePRTitle`, `computeBuildTitle`), constants (`maxTitleLen`), comments, log messages, and stale doc sections updated; wire format unchanged (already on `Title` field per 0.31.x); contract tests preserved verbatim

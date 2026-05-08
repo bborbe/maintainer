@@ -1,5 +1,7 @@
 export ROOTDIR ?= $(shell git rev-parse --show-toplevel)
 
+RACE ?= true
+
 include $(ROOTDIR)/tools.env
 
 default: precommit
@@ -26,7 +28,7 @@ generate:
 
 .PHONY: test
 test:
-	go test -mod=mod -p=$${GO_TEST_PARALLEL:-1} -cover -race $(shell go list -mod=mod ./... | grep -v /vendor/)
+	go test -mod=mod -p=$${GO_TEST_PARALLEL:-1} -cover $(if $(filter true,$(RACE)),-race) $(shell go list -mod=mod ./... | grep -v /vendor/)
 
 check: lint vet errcheck vulncheck osv-scanner gosec trivy
 
