@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Added /setloglevel/{level} HTTP endpoint to both watcher/github-build/main.go and watcher/github-pr/main.go, importing github.com/bborbe/log and registering log.NewSetLoglevelHandler with a 5-minute auto-reset TTL; CHANGELOG updated.
 container: maintainer-102-add-setloglevel-endpoint-to-watchers
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-08T12:55:00Z"
 queued: "2026-05-08T11:43:31Z"
 started: "2026-05-08T11:49:11Z"
+completed: "2026-05-08T11:53:38Z"
 ---
 
 <summary>
