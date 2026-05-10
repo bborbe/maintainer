@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [023-build-watcher-task-type-and-parked-assignee]
 summary: 'Added task_type: build-fix to all emitted task frontmatter in buildCreateTaskCommand and added translateAssignee helper that converts human to empty string; updated 5 existing test assertions and added 3 new It blocks covering human→"" translation at both watcher and per-repo maintenance override levels.'
 container: maintainer-107-spec-023-build-watcher-task-type-and-parked-assignee
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T21:00:00Z"
 queued: "2026-05-10T21:16:52Z"
 started: "2026-05-10T21:16:54Z"
+completed: "2026-05-10T21:20:01Z"
 branch: dark-factory/build-watcher-task-type-and-parked-assignee
 ---
 
