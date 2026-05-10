@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [022-pr-review-task-type-and-parked-assignee]
 summary: 'Added task_type: pr-review to all emitted task commands in buildFrontmatter, buildHumanReviewFrontmatter, and publishForcePush; corrected assignee to empty string on untrusted-author paths; updated all test assertions to pin the new field values.'
 container: maintainer-106-spec-022-task-type-and-parked-assignee
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-10T19:30:00Z"
 queued: "2026-05-10T20:21:02Z"
 started: "2026-05-10T20:21:03Z"
+completed: "2026-05-10T20:24:05Z"
 branch: dark-factory/pr-review-task-type-and-parked-assignee
 ---
 
