@@ -293,7 +293,8 @@ func (w *buildWatcher) buildCreateTaskCommand(
 	body := strings.Join(lines, "\n") + "\n"
 
 	fm := agentlib.TaskFrontmatter{
-		"assignee":    assignee,
+		"task_type":   "build-fix",
+		"assignee":    translateAssignee(assignee),
 		"repo":        owner + "/" + repo,
 		"episode_sha": episodeSHA,
 		"status":      taskStatus,
@@ -412,6 +413,16 @@ func coalesceString(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// translateAssignee converts the magic string "human" to the empty string,
+// which the operator-inbox convention treats as "unclaimed / needs human attention".
+// Any other value is returned unchanged.
+func translateAssignee(a string) string {
+	if a == "human" {
+		return ""
+	}
+	return a
 }
 
 // formatDuration formats d as a human-readable string for the task body header.
