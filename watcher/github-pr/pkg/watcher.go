@@ -274,6 +274,8 @@ func (w *watcher) publishForcePush(
 
 	if trustResult.Success() {
 		updates = agentlib.TaskFrontmatter{
+			"task_type":     "pr-review",
+			"assignee":      "pr-reviewer-agent",
 			"phase":         "planning",
 			"status":        "in_progress",
 			"trigger_count": 0,
@@ -285,6 +287,8 @@ func (w *watcher) publishForcePush(
 		}
 		glog.V(2).Infof("untrusted force-push author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
 		updates = agentlib.TaskFrontmatter{
+			"task_type":     "pr-review",
+			"assignee":      "",
 			"phase":         "human_review",
 			"status":        "todo",
 			"trigger_count": 0,
@@ -344,6 +348,7 @@ func buildFrontmatter(
 	details PRDetails,
 ) agentlib.TaskFrontmatter {
 	return agentlib.TaskFrontmatter{
+		"task_type":       "pr-review",
 		"assignee":        "pr-reviewer-agent",
 		"phase":           "planning",
 		"status":          "in_progress",
@@ -362,7 +367,8 @@ func buildHumanReviewFrontmatter(
 	details PRDetails,
 ) agentlib.TaskFrontmatter {
 	return agentlib.TaskFrontmatter{
-		"assignee":        "pr-reviewer-agent",
+		"task_type":       "pr-review",
+		"assignee":        "",
 		"phase":           "human_review",
 		"status":          "todo",
 		"stage":           stage,
