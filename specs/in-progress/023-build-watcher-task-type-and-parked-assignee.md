@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-10T20:41:27Z"
 generating: "2026-05-10T20:41:28Z"
 prompted: "2026-05-10T20:44:37Z"
+verifying: "2026-05-10T21:20:01Z"
 branch: dark-factory/build-watcher-task-type-and-parked-assignee
 ---
 
