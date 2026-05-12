@@ -98,3 +98,15 @@ Expected: exit 0; tests asserting the new frontmatter fields pass.
 ## Do-Nothing Option
 
 If we skip this, the github-pr watcher remains incompatible with the 2026-05-10 doctrine refinement: parked tasks ship with a misleading `pr-reviewer-agent` assignee that hides them from operator-inbox queries, and no emitted task carries `task_type`, blocking any operator tooling that routes by task type. Untrusted PRs in particular would languish — emitted as "claimed by an agent that will never run them." Not acceptable; this is the emitter side of the operator-visibility task that has already started shipping on the controller side.
+
+## Verification Result
+
+**Verified:** 2026-05-12T23:09:01Z (HEAD f637c04)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.156.1-1-g04f3863)
+**Scenario:** Source inspection + fresh `make precommit` in watcher/github-pr (spec explicitly unit-test scoped, no scenario file)
+**Evidence:**
+- watcher.go:351,370-371,277-278,290-291 — all four emission sites carry `task_type: "pr-review"` with correct assignee (`pr-reviewer-agent` for trusted, `""` for parked/untrusted)
+- watcher_test.go:844-845,975-976,1000-1001,918-919,1052-1053,1106-1107 — unit tests pin new field values across creation + force-push for both trust paths
+- `make precommit` → "ready to commit"; gosec 0 issues; trivy 0 vulns
+- `go test -race -cover` → pkg coverage 93.4%, all packages `ok`
+**Verdict:** PASS
