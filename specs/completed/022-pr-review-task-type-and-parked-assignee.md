@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-10T19:02:39Z"
 generating: "2026-05-10T19:24:48Z"
 prompted: "2026-05-10T19:28:06Z"
 verifying: "2026-05-10T20:24:05Z"
+completed: "2026-05-12T23:09:14Z"
 branch: dark-factory/pr-review-task-type-and-parked-assignee
 ---
 
