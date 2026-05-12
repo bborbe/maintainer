@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: 'Bumped github.com/bborbe/agent/lib from v0.57.0 to v0.61.0, added Passthrough content generator wiring regression tests in pkg/factory/factory_test.go, and added fix(pr-reviewer) entry to CHANGELOG.md under ## Unreleased.'
 container: maintainer-108-bump-agent-lib-to-v0-61-0-for-passthrough-failure-body
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-12T22:56:49Z"
 queued: "2026-05-12T22:56:49Z"
 started: "2026-05-12T22:57:42Z"
+completed: "2026-05-12T23:03:05Z"
 ---
 <summary>
 - Bump `github.com/bborbe/agent/lib` from `v0.57.0` to `lib/v0.61.0` in `agent/pr-reviewer/go.mod` so `passthroughContentGenerator` writes a `## Failure` body section on BOTH `status: failed` AND `status: needs_input` results — currently the v0.57.0 passthrough writes ONLY frontmatter (no body section at all), leaving operators no clue why a task transitioned to `phase: human_review`.
