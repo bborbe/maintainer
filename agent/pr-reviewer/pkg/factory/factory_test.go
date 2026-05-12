@@ -10,6 +10,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	"github.com/bborbe/agent/lib/delivery"
 	libkafka "github.com/bborbe/kafka"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	libtime "github.com/bborbe/time"
@@ -118,6 +119,61 @@ var _ = Describe("Factory", func() {
 				currentDateTime,
 			)
 			Expect(deliverer).NotTo(BeNil())
+		})
+	})
+
+	Describe("Passthrough content generator wiring — failure body", func() {
+		var gen delivery.ContentGenerator
+		var ctx context.Context
+
+		BeforeEach(func() {
+			gen = delivery.NewPassthroughContentGenerator()
+			ctx = context.Background()
+		})
+
+		Context("when result status is needs_input with empty Output", func() {
+			It("produces a body containing ## Failure and the message", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusNeedsInput,
+					Message: "GH_TOKEN unauthorized (HTTP 401)",
+					Output:  "",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
+			})
+		})
+
+		Context("when result status is failed with empty Output", func() {
+			It("produces a body containing ## Failure and the message", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusFailed,
+					Message: "claude CLI: 401 Invalid authentication credentials",
+					Output:  "",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(
+					generated,
+				).To(ContainSubstring("claude CLI: 401 Invalid authentication credentials"))
+			})
+		})
+
+		Context("when result status is needs_input with Output containing frontmatter", func() {
+			It("sets phase: human_review in frontmatter and writes ## Failure", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusNeedsInput,
+					Message: "GH_TOKEN unauthorized (HTTP 401)",
+					Output:  "---\nstatus: in_progress\nphase: planning\n---\n",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
+				Expect(generated).To(ContainSubstring("phase: human_review"))
+			})
 		})
 	})
 
