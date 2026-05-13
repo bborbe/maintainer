@@ -3,11 +3,11 @@ module github.com/bborbe/maintainer/watcher/github-build
 go 1.26.3
 
 require (
-	github.com/bborbe/agent/lib v0.61.1
+	github.com/bborbe/agent/lib v0.61.2
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/http v1.26.12
-	github.com/bborbe/kafka v1.22.13
+	github.com/bborbe/kafka v1.22.15
 	github.com/bborbe/log v1.6.13
 	github.com/bborbe/run v1.9.24
 	github.com/bborbe/sentry v1.9.17
@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	github.com/IBM/sarama v1.48.0 // indirect
+	github.com/IBM/sarama v1.48.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bborbe/argument/v2 v2.12.21 // indirect
 	github.com/bborbe/collection v1.20.12 // indirect
@@ -32,7 +32,7 @@ require (
 	github.com/bborbe/math v1.3.10 // indirect
 	github.com/bborbe/parse v1.10.12 // indirect
 	github.com/bborbe/strimzi v1.8.3 // indirect
-	github.com/bborbe/time v1.25.11 // indirect
+	github.com/bborbe/time v1.27.0 // indirect
 	github.com/bborbe/validation v1.4.13 // indirect
 	github.com/bborbe/vault-cli v0.58.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -61,7 +61,7 @@ require (
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -78,14 +78,14 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/term v0.42.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
