@@ -5,7 +5,9 @@ metadata:
   namespace: '{{ "NAMESPACE" | env }}'
 spec:
   assignee: pr-reviewer-agent
-  taskType: pr-review
+  taskTypes:
+    - pr-review
+    - oauth-probe
   priorityClassName: maintainer-agent-pr-reviewer
   image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
   heartbeat: 5m
