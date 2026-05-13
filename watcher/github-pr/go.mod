@@ -3,7 +3,7 @@ module github.com/bborbe/maintainer/watcher/github-pr
 go 1.26.3
 
 require (
-	github.com/bborbe/agent/lib v0.61.2
+	github.com/bborbe/agent/lib v0.61.3
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/http v1.26.12
@@ -33,7 +33,7 @@ require (
 	github.com/bborbe/parse v1.10.12 // indirect
 	github.com/bborbe/strimzi v1.8.3 // indirect
 	github.com/bborbe/validation v1.4.13 // indirect
-	github.com/bborbe/vault-cli v0.58.1 // indirect
+	github.com/bborbe/vault-cli v0.64.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
