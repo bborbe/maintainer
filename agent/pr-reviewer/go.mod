@@ -5,7 +5,7 @@ go 1.26.3
 replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
 
 require (
-	github.com/bborbe/agent/lib v0.61.3
+	github.com/bborbe/agent/lib v0.62.3
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/kafka v1.22.15
