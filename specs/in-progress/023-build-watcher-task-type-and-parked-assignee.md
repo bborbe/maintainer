@@ -102,3 +102,15 @@ Expected: exit 0; tests asserting `task_type: build-fix` and the `human` → `""
 ## Do-Nothing Option
 
 If we skip this, the github-build watcher remains incompatible with the 2026-05-10 doctrine refinement: emitted tasks carry no `task_type`, blocking any operator tooling that routes by task type, and an operator who configures the watcher with `assignee=human` to park work for human triage will instead ship tasks with the literal string `human` — invisible to inbox queries that filter on `assignee == ""`. Unacceptable; this is the build-side counterpart of the github-pr conformance work already approved as spec 022.
+
+## Verification Result
+
+**Verified:** 2026-05-13T06:47:42Z (HEAD 0a4bb05)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.156.1-1-g04f3863-dirty)
+**Scenario:** `make precommit` in `watcher/github-build` per spec's Verification block — no runtime replay required (spec line 91-92: unit-test-only behavior, no Kafka/controller/PVC).
+**Evidence:**
+- `make precommit` exit 0, "ready to commit" (gosec 0 issues, trivy 0 vulns, vet/lint/test/license all green).
+- `watcher.go:296` emits `"task_type": "build-fix"` unconditionally for every CreateCommand.
+- `watcher.go:418-422` `translateAssignee` maps `"human"` → `""`, all others pass through.
+- `watcher_test.go`: default-path task_type assertion (line 80), `human`→`""` (line 564-574), `build-fix-planner` passthrough (line 577-587), maintenance-override `human`→`""` (line 731-744), `go-deps-fixer-agent` override passthrough (line 693), existing `build-fixer-agent` assertions retained (lines 79, 468, 673).
+**Verdict:** PASS
