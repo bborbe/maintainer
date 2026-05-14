@@ -11,10 +11,12 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	delivery "github.com/bborbe/agent/lib/delivery"
+	libmetrics "github.com/bborbe/agent/lib/metrics"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
@@ -23,11 +25,15 @@ import (
 	libtime "github.com/bborbe/time"
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
 )
+
+const agentName = "pr-reviewer-agent"
 
 func main() {
 	app := &application{}
@@ -73,19 +79,41 @@ type application struct {
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
+
+	PushgatewayURL string `required:"false" arg:"pushgateway-url" env:"PUSHGATEWAY_URL" usage:"Prometheus PushGateway URL"          default:"http://pushgateway:9090"`
+	TaskType       string `required:"false" arg:"task-type"       env:"TASK_TYPE"       usage:"Task type label for metric grouping" default:"unknown"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	registry := prometheus.NewRegistry()
+	jobMetrics := libmetrics.NewJobMetrics(registry, libtime.NewCurrentDateTime())
+	pusher := push.New(a.PushgatewayURL, libmetrics.BuildJobMetricsName(agentName)).
+		Grouping("agent", agentName).
+		Grouping("task_type", a.TaskType).
+		Collector(registry)
+	defer func() {
+		if err := pusher.PushContext(ctx); err != nil {
+			glog.Warningf("prometheus push failed: %v", err)
+			return
+		}
+		glog.V(2).Infof("prometheus push completed")
+	}()
+	start := libtime.NewCurrentDateTime().Now().Time()
+
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
 
 	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return err
 	}
 	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return err
 	}
 	defer cleanup()
@@ -106,8 +134,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		Deliverer:       deliverer,
 	})
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return errors.Wrap(ctx, err, "agent run failed")
 	}
+	jobMetrics.RecordRun(result.Status)
+	jobMetrics.RecordDuration(time.Since(start))
 	return agentlib.PrintResult(result)
 }
 

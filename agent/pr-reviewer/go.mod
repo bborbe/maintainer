@@ -2,10 +2,12 @@ module github.com/bborbe/maintainer/agent/pr-reviewer
 
 go 1.26.3
 
-replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
+replace (
+	github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
+)
 
 require (
-	github.com/bborbe/agent/lib v0.62.4
+	github.com/bborbe/agent/lib v0.62.5
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/kafka v1.22.15
@@ -16,6 +18,7 @@ require (
 	github.com/golang/glog v1.2.5
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
+	github.com/prometheus/client_golang v1.23.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -29,6 +32,7 @@ require (
 	github.com/bborbe/kv v1.19.8 // indirect
 	github.com/bborbe/log v1.6.13 // indirect
 	github.com/bborbe/math v1.3.10 // indirect
+	github.com/bborbe/metrics v0.5.3 // indirect
 	github.com/bborbe/parse v1.10.12 // indirect
 	github.com/bborbe/run v1.9.24 // indirect
 	github.com/bborbe/strimzi v1.8.3 // indirect
@@ -77,7 +81,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
