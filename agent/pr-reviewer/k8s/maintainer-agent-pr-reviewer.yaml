@@ -8,6 +8,7 @@ spec:
   taskTypes:
     - pr-review
     - oauth-probe
+    - healthcheck
   priorityClassName: maintainer-agent-pr-reviewer
   image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
   heartbeat: 5m
