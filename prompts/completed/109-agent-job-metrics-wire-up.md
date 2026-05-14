@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Wired JobMetrics from agent/lib@v0.62.5 into agent/pr-reviewer Run() — registry+pusher init at top, RecordRun+RecordDuration at all 4 return paths, PushgatewayURL/TaskType struct fields added, agentName const added, prometheus/client_golang promoted to direct dep, CHANGELOG updated.
 container: maintainer-109-agent-job-metrics-wire-up
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-14T10:10:11Z"
 queued: "2026-05-14T10:10:11Z"
 started: "2026-05-14T10:13:32Z"
+completed: "2026-05-14T10:16:50Z"
 ---
 
 <summary>
