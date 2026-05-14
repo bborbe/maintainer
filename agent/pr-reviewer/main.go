@@ -30,6 +30,7 @@ import (
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
 )
 
@@ -118,6 +119,13 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer cleanup()
 
+	agent, err := a.dispatchAgent(ctx, repoAllowlist)
+	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
+		return errors.Wrap(ctx, err, "task type dispatch")
+	}
+
 	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir: a.ClaudeConfigDir,
@@ -132,6 +140,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		Phase:           a.Phase,
 		TaskContent:     a.TaskContent,
 		Deliverer:       deliverer,
+		Agent:           agent,
 	})
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
@@ -141,6 +150,36 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	jobMetrics.RecordRun(result.Status)
 	jobMetrics.RecordDuration(time.Since(start))
 	return agentlib.PrintResult(result)
+}
+
+// dispatchAgent builds the correct agent for the configured task type.
+func (a *application) dispatchAgent(
+	ctx context.Context,
+	repoAllowlist []string,
+) (*agentlib.Agent, error) {
+	env := map[string]string{}
+	if a.GHToken != "" {
+		env["GH_TOKEN"] = a.GHToken
+	}
+	repoManager := git.NewRepoManager(git.WorkdirConfig{
+		ReposPath: a.ReposPath,
+		WorkPath:  a.WorkPath,
+	})
+	provider := factory.CreateAgentProvider(
+		a.ClaudeConfigDir,
+		a.AgentDir,
+		a.Model,
+		a.GHToken,
+		env,
+		repoManager,
+		a.ReviewMode,
+		repoAllowlist,
+	)
+	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "select agent for task_type")
+	}
+	return agent, nil
 }
 
 // createDeliverer builds the Kafka result deliverer when TASK_ID is set,

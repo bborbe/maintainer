@@ -7,7 +7,7 @@ replace (
 )
 
 require (
-	github.com/bborbe/agent/lib v0.62.5
+	github.com/bborbe/agent/lib v0.62.16
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/kafka v1.22.15

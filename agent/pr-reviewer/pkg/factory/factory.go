@@ -14,11 +14,11 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	delivery "github.com/bborbe/agent/lib/delivery"
+	"github.com/bborbe/agent/lib/healthcheck"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
-	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
@@ -27,16 +27,6 @@ import (
 )
 
 const serviceName = "maintainer-agent-pr-reviewer"
-
-// AgentRunner is the minimal interface satisfied by *agentlib.Agent.
-type AgentRunner interface {
-	Run(
-		ctx context.Context,
-		phaseName domain.TaskPhase,
-		taskContent string,
-		deliverer agentlib.ResultDeliverer,
-	) (*agentlib.Result, error)
-}
 
 // Per-phase tool scopes. Principle: each phase gets the smallest set that
 // lets it do its job. Planning + Review are read-only inspection. Execution
@@ -152,7 +142,7 @@ func CreateAgent(
 	repoManager git.RepoManager,
 	reviewMode string,
 	repoAllowlist []string,
-) AgentRunner {
+) *agentlib.Agent {
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
 		Name:          "pr-plan",
@@ -180,6 +170,44 @@ func CreateAgent(
 		agentlib.NewPhase("in_progress", tokenCheck, executionStep),
 		agentlib.NewPhase("ai_review", tokenCheck, reviewStep),
 	)
+}
+
+// CreateAgentProvider wires the per-task-type dispatch table for maintainer-agent-pr-reviewer.
+// TaskTypePRReview routes to the 3-phase domain agent built by CreateAgent.
+// TaskTypeHealthcheck routes to a liveness agent that reuses the Claude runner factory.
+// Pure plumbing; no conditional, no error.
+func CreateAgentProvider(
+	claudeConfigDir claudelib.ClaudeConfigDir,
+	agentDir claudelib.AgentDir,
+	model claudelib.ClaudeModel,
+	ghToken string,
+	env map[string]string,
+	repoManager git.RepoManager,
+	reviewMode string,
+	repoAllowlist []string,
+) agentlib.AgentProvider {
+	domainAgent := CreateAgent(
+		claudeConfigDir,
+		agentDir,
+		model,
+		ghToken,
+		env,
+		repoManager,
+		reviewMode,
+		repoAllowlist,
+	)
+	healthcheckRunner := CreateClaudeRunner(
+		claudeConfigDir,
+		agentDir,
+		model,
+		env,
+		claudelib.AllowedTools{},
+	)
+	livenessAgent := healthcheck.NewAgent(healthcheck.NewClaudeStep(healthcheckRunner))
+	return agentlib.NewAgentProvider(serviceName, map[agentlib.TaskType]*agentlib.Agent{
+		agentlib.TaskTypePRReview:    domainAgent,
+		agentlib.TaskTypeHealthcheck: livenessAgent,
+	})
 }
 
 // CreateDeliverer builds the Kafka result deliverer used by the Kafka

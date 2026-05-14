@@ -48,7 +48,7 @@ var _ = Describe("Factory", func() {
 	})
 
 	Describe("CreateAgent", func() {
-		It("returns a non-nil AgentRunner with empty token and env", func() {
+		It("returns a non-nil agent with empty token and env", func() {
 			var repoManager git.RepoManager
 			agent := factory.CreateAgent(
 				"",
@@ -63,7 +63,7 @@ var _ = Describe("Factory", func() {
 			Expect(agent).NotTo(BeNil())
 		})
 
-		It("returns a non-nil AgentRunner with token set in env", func() {
+		It("returns a non-nil agent with token set in env", func() {
 			var repoManager git.RepoManager
 			agent := factory.CreateAgent(
 				"",
@@ -174,6 +174,50 @@ var _ = Describe("Factory", func() {
 				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
 				Expect(generated).To(ContainSubstring("phase: human_review"))
 			})
+		})
+	})
+
+	Describe("CreateAgentProvider", func() {
+		var (
+			ctx         context.Context
+			repoManager git.RepoManager
+			provider    agentlib.AgentProvider
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			provider = factory.CreateAgentProvider(
+				"",
+				"agent",
+				"sonnet",
+				"",
+				map[string]string{},
+				repoManager,
+				"standard",
+				nil,
+			)
+			Expect(provider).NotTo(BeNil())
+		})
+
+		It("returns a non-nil agent for pr-review task type", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskTypePRReview)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent).NotTo(BeNil())
+		})
+
+		It("returns a non-nil agent for healthcheck task type", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskTypeHealthcheck)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent).NotTo(BeNil())
+		})
+
+		It("returns an error naming the bogus value and both accepted task types", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskType("bogus"))
+			Expect(err).To(HaveOccurred())
+			Expect(agent).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("unknown task_type"))
+			Expect(err.Error()).To(ContainSubstring("bogus"))
+			Expect(err.Error()).To(ContainSubstring("pr-review"))
+			Expect(err.Error()).To(ContainSubstring("healthcheck"))
 		})
 	})
 

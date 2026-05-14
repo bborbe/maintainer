@@ -2,8 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.23.37
 
+- feat(agent/pr-reviewer): per-task-type dispatch via factory.CreateAgentProvider — healthcheck task type now routes to a dedicated liveness agent built from lib/healthcheck; unknown task_type values fail fast via lib.AgentProvider.Get; bumps agent/lib v0.62.5 → v0.62.16
 - feat(agent/pr-reviewer): add `healthcheck` to `taskTypes` list alongside `pr-review` + `oauth-probe` — prepares for healthcheck dispatch (rename of `oauth-probe`); no behavior change yet
 
 ## v0.23.36

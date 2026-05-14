@@ -32,6 +32,10 @@ type RunConfig struct {
 	Phase           domain.TaskPhase
 	TaskContent     string
 	Deliverer       agentlib.ResultDeliverer
+	// Agent overrides the agent used for execution. If nil, CreateAgent is called.
+	// Set by main.go after dispatching via CreateAgentProvider. cmd/run-task leaves
+	// this nil so CreateAgent is used for backward compatibility.
+	Agent *agentlib.Agent
 }
 
 // RunAgent performs the shared startup + execution flow for the maintainer-agent-pr-reviewer binary.
@@ -68,15 +72,18 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 		env["GH_TOKEN"] = cfg.GHToken
 	}
 
-	agent := CreateAgent(
-		cfg.ClaudeConfigDir,
-		cfg.AgentDir,
-		cfg.Model,
-		cfg.GHToken,
-		env,
-		repoManager,
-		cfg.ReviewMode,
-		cfg.RepoAllowlist,
-	)
+	agent := cfg.Agent
+	if agent == nil {
+		agent = CreateAgent(
+			cfg.ClaudeConfigDir,
+			cfg.AgentDir,
+			cfg.Model,
+			cfg.GHToken,
+			env,
+			repoManager,
+			cfg.ReviewMode,
+			cfg.RepoAllowlist,
+		)
+	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)
 }
