@@ -11,7 +11,6 @@ spec:
   assignee: pr-reviewer-agent
   taskTypes:
     - pr-review
-    - oauth-probe
     - healthcheck
   priorityClassName: maintainer-agent-pr-reviewer
   image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
