@@ -22,10 +22,6 @@ spec:
     # Defense-in-depth allowlist mirroring watcher's REPO_ALLOWLIST. Agent refuses
     # to clone tasks whose host/owner/repo is not on the list. Empty = allow-all.
     REPO_ALLOWLIST: '{{ "REPO_ALLOWLIST" | env }}'
-    # TEMPORARY (debug): bumps glog verbosity to V=3 so cmd.Dir + cmd.Env + cmd.Stdin
-    # are logged for every claude --print spawn. Remove after diagnosing the recurring
-    # OAuth 401 (tracked in vault [[Fix claude --print OAuth 401 in agent containers]]).
-    LOG_LEVEL: "3"
   trigger:
     statuses:
       - in_progress
