@@ -1,18 +1,19 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-14T13:32:23Z"
 generating: "2026-05-14T14:17:39Z"
 prompted: "2026-05-14T14:23:34Z"
+verifying: "2026-05-14T15:36:13Z"
 branch: dark-factory/maintainer-repo-task-type-dispatch
 ---
 
 ## Summary
 
 - The maintainer-repo binary `maintainer-agent-pr-reviewer` currently runs its hardcoded domain agent regardless of which `task_type` the executor injects, so liveness/healthcheck tasks land as `failed` because the domain parser rejects their minimal body.
-- This spec wires per-task-type dispatch into that one binary using the canonical `lib.AgentProvider` pattern from `~/Documents/workspaces/agent/agent/claude/pkg/factory/factory.go::CreateAgentProvider`: a new `CreateAgentProvider` factory returns an `agentlib.AgentProvider` whose dispatch table maps `TaskTypePRReview` to the existing domain agent and `TaskTypeHealthcheck` to a liveness agent. `main.go` calls `provider.Get(ctx, taskType)`.
+- This spec wires per-task-type dispatch into that one binary using the canonical `lib.AgentProvider` pattern from `agent/claude/pkg/factory/factory.go::CreateAgentProvider`: a new `CreateAgentProvider` factory returns an `agentlib.AgentProvider` whose dispatch table maps `TaskTypePRReview` to the existing domain agent and `TaskTypeHealthcheck` to a liveness agent. `main.go` calls `provider.Get(ctx, taskType)`.
 - Two accepted task types — `pr-review` (existing behavior, unchanged) and `healthcheck` (new, routes to a liveness agent that replies `ok`). Unknown values fail via `AgentProvider.Get`'s built-in error (no hand-rolled switch).
 - Reuses `lib/healthcheck` from `github.com/bborbe/agent/lib v0.62.16` (already pinned).
 - One independently deployable change, scoped to a single binary, intended as a single prompt.
