@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [024-maintainer-repo-task-type-dispatch]
 summary: Replaced CreateAgentForTaskType switch with CreateAgentProvider returning agentlib.AgentProvider; removed AgentRunner interface; updated RunConfig.Agent to *agentlib.Agent; rewrote dispatchAgent to use provider.Get; updated tests and CHANGELOG.
 container: maintainer-110-spec-024-pr-reviewer-task-type-dispatch
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-14T17:45:00Z"
 queued: "2026-05-14T15:32:21Z"
 started: "2026-05-14T15:32:22Z"
+completed: "2026-05-14T15:36:13Z"
 branch: dark-factory/maintainer-repo-task-type-dispatch
 ---
 
