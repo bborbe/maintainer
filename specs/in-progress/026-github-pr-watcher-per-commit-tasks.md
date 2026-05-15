@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-15T13:08:18Z"
 generating: "2026-05-15T13:11:56Z"
 prompted: "2026-05-15T13:29:32Z"
+verifying: "2026-05-15T13:47:38Z"
 branch: dark-factory/github-pr-watcher-per-commit-tasks
 ---
 
@@ -125,3 +126,16 @@ The rung-selection table in `docs/verifying-specs.md` would call this Rung-1 (`p
 Keep the mutate-in-place spawn model. Operators continue to perform manual six-step resets when a re-run is needed; the watcher continues to clobber prior review state on every push; the planning-short-circuit bug class remains reachable. The two failures already observed during the bborbe/coding#1 session are evidence that this is not a theoretical risk — it has fired in production-equivalent conditions.
 
 A weaker alternative would be to keep the mutation path but stop writing the "Outdated by force-push" heading and explicitly clear all stale headings on reset. This would require enumerating every heading the agent might leave behind and is a permanent maintenance burden whenever the agent's output format evolves. The per-SHA model removes the entire problem by making the file immutable from the watcher's perspective. Not recommended.
+
+## Verification Result
+
+**Verified:** 2026-05-15T15:36:11Z (HEAD d7586ee)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.156.1-1-g04f3863-dirty)
+**Scenario:** Rung-2 manual e2e — deployed to dev+prod via `make buca`; pushed two empty commits to `bborbe/maintainer#2` (`delete-this-pr-never` branch); prod watcher (`maintainer-watcher-github-pr-0`) spawned two coexisting per-(PR, SHA) task files.
+**Evidence:**
+- Two coexisting vault task files in `~/Documents/Obsidian/OpenClaw/tasks/`: `PR Review github - bborbe-maintainer - 2 - 80226917 - test-delete-this-pr-never.md` (task_identifier `bf535ba9-8910-553b-933b-dc1d5ebf95fb`) and `PR Review github - bborbe-maintainer - 2 - 19c513b8 - test-delete-this-pr-never.md` (task_identifier `3e8acd8b-585d-5a73-a456-10730d995f17`) — distinct SHAs → distinct UUID5 task_identifiers.
+- First file untouched by watcher after second commit (mtime moved only via agent's own task processing).
+- Code grep `grep -rn "publishForcePush\|Outdated by force-push" watcher/github-pr/pkg/` → 0 matches (force-push mutation path removed).
+- `make precommit` in `watcher/github-pr/`: PASS (gosec 0 issues, trivy clean, lint+test+license green, "ready to commit").
+- Vault runbook `~/Documents/Obsidian/Personal/65 Runbooks/Create PR Review Agent Task.md` contains "Per-commit spawn — no re-run mechanism" section explicitly stating "no documented mechanism for re-running a review on the same SHA — by design, each (PR, SHA) gets exactly one review"; troubleshooting row updated to "Push a new commit to the PR — watcher spawns a fresh task per (PR, SHA) on the next poll".
+**Verdict:** PASS
