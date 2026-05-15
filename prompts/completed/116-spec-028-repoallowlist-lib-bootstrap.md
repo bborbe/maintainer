@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [028-repoallowlist-lib-bootstrap]
 summary: Bootstrapped lib/ Go module at github.com/bborbe/maintainer/lib with repoallowlist package implementing IsAllowed predicate and Validate validator supporting literal, wildcard (github.com/<owner>/*), and allow-all semantics; make precommit passes with 97.6% test coverage.
 container: maintainer-116-spec-028-repoallowlist-lib-bootstrap
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T19:30:00Z"
 queued: "2026-05-15T19:09:50Z"
 started: "2026-05-15T19:09:52Z"
+completed: "2026-05-15T19:18:47Z"
 branch: dark-factory/repoallowlist-lib-bootstrap
 ---
 
