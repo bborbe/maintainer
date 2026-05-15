@@ -74,21 +74,6 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("SubmitReview", func() {
-		It("returns error for VerdictComment", func() {
-			client := github.NewGHClient("")
-			err := client.SubmitReview(
-				ctx,
-				"owner",
-				"repo",
-				123,
-				"test review",
-				prpkg.VerdictComment,
-			)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("unsupported verdict"))
-			Expect(err.Error()).To(ContainSubstring("use PostComment instead"))
-		})
-
 		It("returns error for unknown verdict", func() {
 			client := github.NewGHClient("")
 			err := client.SubmitReview(

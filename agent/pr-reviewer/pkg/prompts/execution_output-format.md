@@ -2,7 +2,7 @@ Final response MUST be a single JSON object with this schema:
 
 ```json
 {
-  "verdict": "approve | request_changes | comment",
+  "verdict": "approve | request_changes",
   "summary": "1-2 sentence overall assessment",
   "comments": [
     {

@@ -18,7 +18,7 @@ A single PR review is split across three sequential phases. Each phase is a fres
 | Phase | Reads | Writes | Emits |
 |---|---|---|---|
 | **planning** | task body (PR URL) | `## Plan` section (focus areas, concerns) | `status: needs_input / failed / done` — no verdict |
-| **execution** | task body + `## Plan` | `## Review` section (Must Fix / Should Fix / Nice to Have + JSON verdict) | **the review verdict** (`approve` / `request_changes` / `comment`) |
+| **execution** | task body + `## Plan` | `## Review` section (Must Fix / Should Fix / Nice to Have + JSON verdict) | **the review verdict** (`approve` / `request_changes`) |
 | **ai_review** | `## Plan` + `## Review` | `## Verdict` section | **a meta-verdict** (`pass` / `fail`) judging whether execution did a good job |
 
 **Key distinction:** the execution-phase verdict is the actual PR review outcome posted back to GitHub. The ai_review-phase verdict is a separate sanity check — does the executor's output have hallucinations, did it address the planning concerns, is its verdict consistent with its own comments? `pass` allows the executor's verdict through; `fail` escalates to `human_review`.
@@ -39,12 +39,14 @@ This document does not duplicate the rubric table — it would rot. Read the pro
 
 The execution phase emits the verdict as a JSON block at the end of its output. The deliverer must extract a structured verdict from free-form text the LLM produces, so two parsers run in sequence in `pkg/verdict.go`:
 
-1. **JSON-line parser** (`tryParseJSONLine` → `parseJSONVerdict`) — scans the last 50 lines for a `{"verdict": "...", "reason": "..."}` block, validates the verdict value against the allowed set. If found and valid → done.
-2. **Heuristic fallback** (`ParseVerdict`) — if no JSON block is found or it's invalid, scan section headers (`## Must Fix`, `## Should Fix`) and apply the same rubric. The "None" detector and horizontal-rule handling skip empty sections.
+1. **JSON-line parser** (`tryParseJSONLine` → `parseJSONVerdict`) — scans the last 50 lines for a `{"verdict": "...", "reason": "..."}` block, validates the verdict value against the binary set (`approve`, `request-changes`). Any other value (including the old `comment`) is rejected and falls through to the heuristic.
+2. **Heuristic fallback** (`ParseVerdict`) — if no valid JSON block is found, scan section headers (`## Must Fix`, `## Should Fix`) and apply the same rubric as the LLM prompt:
+   - Must Fix with content → `request-changes`
+   - Should Fix with content → `request-changes`
+   - Must Fix or Should Fix present but empty/None, or only Nice to Have → `approve`
+   - No recognizable sections → `request-changes` (fail-closed)
 
 The fallback exists because LLMs sometimes drop the JSON block under load or wrap it in unexpected markup. **Fail-closed default**: empty or unparseable text returns `request-changes`, never `approve` — a flaky agent run cannot silently green-light a PR.
-
-(The current heuristic fallback returns `comment` on empty/unparseable; this is the bug spec `pr-reviewer-binary-verdict.md` corrects.)
 
 ## ai_review's Consistency Check
 

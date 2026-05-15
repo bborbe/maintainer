@@ -1,6 +1,6 @@
 # Agent PR Reviewer
 
-PR review agent. Takes a GitHub or Bitbucket Server PR URL, creates a local clone, runs Claude Code review inside a `claude-yolo` container, and posts the review back as a PR comment with a verdict (approve / request-changes / comment).
+PR review agent. Takes a GitHub or Bitbucket Server PR URL, creates a local clone, runs Claude Code review inside a `claude-yolo` container, and posts the review back as a PR comment with a verdict (approve / request-changes).
 
 **Internal architecture:** see [`docs/architecture.md`](docs/architecture.md) — three phases (planning → execution → review), where the verdict rubric lives, heuristic fallback, ai_review meta-verdict.
 
@@ -90,7 +90,7 @@ After the third run the file should contain `## Plan`, `## Review`, and
 Claude Code must emit a JSON block (fenced or bare) containing:
 
 ```json
-{"verdict": "approve|request-changes|comment", "reason": "<one-liner>"}
+{"verdict": "approve|request-changes", "reason": "<one-liner>"}
 ```
 
 Fallback: heuristic section-header scan (`## Must Fix`, `## Blocking`). Horizontal rules (`---`) are not treated as must-fix content.

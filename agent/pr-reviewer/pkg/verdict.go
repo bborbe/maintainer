@@ -16,7 +16,6 @@ type Verdict string
 const (
 	VerdictApprove        Verdict = "approve"
 	VerdictRequestChanges Verdict = "request-changes"
-	VerdictComment        Verdict = "comment"
 )
 
 // Result holds the verdict and reason
@@ -53,10 +52,8 @@ func tryParseJSONLine(line string) (Result, bool) {
 		v = VerdictApprove
 	case "request-changes":
 		v = VerdictRequestChanges
-	case "comment":
-		v = VerdictComment
 	default:
-		// Unknown verdict value - fall back to heuristic
+		// Unknown verdict value (including "comment") — fall back to heuristic
 		return Result{}, false
 	}
 
@@ -96,63 +93,75 @@ func parseJSONVerdict(reviewText string) (Result, bool) {
 	return Result{}, false
 }
 
-// ParseVerdict analyzes Claude review output and determines the appropriate verdict
+// ParseVerdict analyzes Claude review output and determines the appropriate verdict.
+// The verdict is binary: approve or request-changes. No other value is returned.
+// Fail-closed: empty or unparseable output returns request-changes.
 func ParseVerdict(reviewText string) Result {
 	// First try to extract JSON verdict
 	if result, ok := parseJSONVerdict(reviewText); ok {
 		return result
 	}
 
-	// Fall back to heuristic section scanning
+	// Fail-closed: empty review text
 	if reviewText == "" {
 		return Result{
-			Verdict: VerdictComment,
+			Verdict: VerdictRequestChanges,
 			Reason:  "empty review text",
 		}
 	}
 
-	// Check if review has expected sections
-	hasReviewSections := hasExpectedReviewSections(reviewText)
-
-	// Look for Must Fix section (case-insensitive, h2 or h3)
 	mustFixPattern := regexp.MustCompile(`(?i)^##+ Must Fix`)
+	shouldFixPattern := regexp.MustCompile(`(?i)^##+ Should Fix`)
 	lines := strings.Split(reviewText, "\n")
 
 	mustFixIndex := -1
+	shouldFixIndex := -1
 	for i, line := range lines {
-		if mustFixPattern.MatchString(strings.TrimSpace(line)) {
+		trimmed := strings.TrimSpace(line)
+		if mustFixIndex == -1 && mustFixPattern.MatchString(trimmed) {
 			mustFixIndex = i
-			break
+		}
+		if shouldFixIndex == -1 && shouldFixPattern.MatchString(trimmed) {
+			shouldFixIndex = i
 		}
 	}
 
-	// No Must Fix section found
-	if mustFixIndex == -1 {
-		if hasReviewSections {
-			return Result{
-				Verdict: VerdictApprove,
-				Reason:  "no must-fix section",
-			}
-		}
-		return Result{
-			Verdict: VerdictComment,
-			Reason:  "unparseable review format",
-		}
-	}
-
-	// Must Fix section found - check if it has content
-	hasMustFixContent := checkMustFixContent(lines, mustFixIndex)
-
-	if hasMustFixContent {
+	// Must Fix with content → request-changes
+	if mustFixIndex != -1 && checkMustFixContent(lines, mustFixIndex) {
 		return Result{
 			Verdict: VerdictRequestChanges,
 			Reason:  "must-fix items found",
 		}
 	}
 
+	// Should Fix with content → request-changes
+	if shouldFixIndex != -1 && checkMustFixContent(lines, shouldFixIndex) {
+		return Result{
+			Verdict: VerdictRequestChanges,
+			Reason:  "should-fix items found",
+		}
+	}
+
+	// Must Fix section exists but is empty/None → approve
+	if mustFixIndex != -1 {
+		return Result{
+			Verdict: VerdictApprove,
+			Reason:  "no must-fix items",
+		}
+	}
+
+	// No Must Fix; has Should Fix (empty/None) or Nice to Have → approve
+	if hasExpectedReviewSections(reviewText) {
+		return Result{
+			Verdict: VerdictApprove,
+			Reason:  "no must-fix section",
+		}
+	}
+
+	// Fail-closed: no recognizable review sections
 	return Result{
-		Verdict: VerdictApprove,
-		Reason:  "no must-fix items",
+		Verdict: VerdictRequestChanges,
+		Reason:  "unparseable review format",
 	}
 }
 

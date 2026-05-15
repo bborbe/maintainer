@@ -22,7 +22,6 @@ automation acts on it.
 3. **Verdict consistency.** Does the verdict match the comments?
    - `approve` + critical/major comments → inconsistent
    - `request_changes` + only nit/minor comments → inconsistent
-   - `comment` is always consistent (informational)
 
 ## Rules
 

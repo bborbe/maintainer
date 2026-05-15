@@ -140,12 +140,11 @@ func (c *ghClient) SubmitReview(
 	body string,
 	v prpkg.Verdict,
 ) error {
-	// Only approve and request-changes are supported
-	// For comment verdict, caller should use PostComment instead
+	// Defensive: rejects out-of-enum verdict values (the binary set is approve/request-changes)
 	if v != prpkg.VerdictApprove && v != prpkg.VerdictRequestChanges {
 		return errors.Errorf(
 			ctx,
-			"unsupported verdict for SubmitReview: %s (use PostComment instead)",
+			"unsupported verdict for SubmitReview: %s",
 			v,
 		)
 	}

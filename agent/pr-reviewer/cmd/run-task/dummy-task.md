@@ -19,7 +19,7 @@ Diff main...HEAD, inspect each change for correctness, security, and style; repo
 
 I have all the information needed for the review. Let me compile the final JSON.
 
-{"verdict":"comment","summary":"The Team Health Check feature is well-structured and follows project conventions. No
+{"verdict":"approve","summary":"The Team Health Check feature is well-structured and follows project conventions. No
 critical or security issues found. Two minor bugs and a few low-priority gaps in test coverage.","
 comments":[{"file":"apps/page/src/server/api/routers/health-check.ts","line":42,"severity":"minor","message":"If all 10 retry attempts produce a colliding code, the loop exits silently and the
 `create()` call on line 42 hits the DB unique constraint, surfacing as an unhandled Prisma P2002 error rather than a meaningful TRPCError. Add
