@@ -130,3 +130,21 @@ Keep the three-verdict rubric. Every Should-Fix review continues to land as `com
 - Or the PR sits indefinitely, defeating the purpose of running the agent at all.
 
 A weaker alternative would be to keep the `comment` verdict in the code but stop emitting it (always demote `comment` → `request-changes` at the boundary). This saves a few lines of deletion but leaves a dead code path that drifts from the prompts: future maintainers see three verdict constants and assume all three are reachable, then accidentally re-introduce `comment` paths. The strict deletion enforces the contract through the compiler. Not recommended.
+
+## Verification Result
+
+**Verified:** 2026-05-15T14:41:49Z (HEAD dc1356c, change in v0.23.38 commit 36df18f)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.156.1-1-g04f3863-dirty)
+**Scenario:** Rung-1 verification per spec — code-level grep evidence + `make test` + `make precommit` in `agent/pr-reviewer/`. Both maintainer-dev and maintainer-prod clusters were redeployed with v0.23.38 by the operator before verification.
+**Evidence:**
+- `grep VerdictComment agent/pr-reviewer/{pkg/verdict.go,pkg/verdict_test.go,cmd/cli/main.go,pkg/github/client.go,pkg/github/client_test.go}` → zero matches; enum at `pkg/verdict.go:16-19` contains only `VerdictApprove` and `VerdictRequestChanges`.
+- `tryParseJSONLine` switch (`pkg/verdict.go:50-58`) accepts only `approve` / `request-changes`; `default` returns `(Result{}, false)` so `"comment"` falls through to heuristic.
+- `ParseVerdict` (`pkg/verdict.go:99-166`) implements: empty → `request-changes` "empty review text"; Should Fix detection via `shouldFixPattern` reusing `checkMustFixContent`; unparseable → `request-changes` "unparseable review format".
+- Prompts: `pkg/prompts/execution.go:44-47` roll-up "binary — exactly one of two values"; `execution_output-format.md:4` schema `"verdict": "approve | request_changes"`; `review_workflow.md` no longer special-cases `comment` verdict (only "comment" noun usage remains).
+- `docs/architecture.md:21` phase table emits `(approve / request_changes)`; heuristic-fallback section (lines 40-49) documents fail-closed default; canonical pointer to `pkg/prompts/execution.go` retained at line 34.
+- READMEs: `agent/pr-reviewer/README.md:3,93` and root `README.md:26,133` both show `approve / request-changes` only.
+- `CHANGELOG.md` v0.23.38 (released from Unreleased section) entry: "feat(agent/pr-reviewer): collapse verdict from three values to two..."
+- `pkg/verdict_test.go` has rewritten + new tests: empty → `request-changes`; unparseable → `request-changes`; JSON `"comment"` rejected → heuristic; Should-Fix-only → `request-changes` "should-fix items found".
+- `cd agent/pr-reviewer && make test` → all packages PASS, `pkg` coverage 89.1%.
+- `cd agent/pr-reviewer && make precommit` → exits 0 (gosec 0 issues, trivy 0 vulns, addlicense ready).
+**Verdict:** PASS
