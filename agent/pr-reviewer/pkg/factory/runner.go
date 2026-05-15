@@ -87,6 +87,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 			cfg.ReviewMode,
 			cfg.RepoAllowlist,
 			poster,
+			nil, // nil verifier = skip post-verification in local CLI mode
 		)
 	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)

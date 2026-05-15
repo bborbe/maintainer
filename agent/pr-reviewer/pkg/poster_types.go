@@ -7,6 +7,7 @@ package pkg
 import "context"
 
 //counterfeiter:generate -o ../mocks/pr-poster.go --fake-name PrPoster . PrPoster
+//counterfeiter:generate -o ../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
 
 // PrPoster posts a completed review verdict to GitHub as a pull-request review event.
 // The concrete implementation lives in pkg/githubposter and is wired by the factory.
@@ -56,3 +57,32 @@ const (
 	// ErrorClassSoftWarning indicates a soft warning that does not block posting.
 	ErrorClassSoftWarning ErrorClass = "soft-warning"
 )
+
+// ReviewVerifier confirms that the in_progress step's POST persisted on GitHub.
+// The concrete implementation lives in pkg/githubposter and is wired by the factory.
+// Defining the interface in pkg breaks the import cycle (githubposter already imports pkg).
+type ReviewVerifier interface {
+	VerifyReview(ctx context.Context, req VerifyRequest) VerifyResult
+}
+
+// VerifyRequest carries all inputs for a single review-existence check.
+type VerifyRequest struct {
+	PR             PRInfo
+	HeadSHA        string
+	ExpectedStates []string
+}
+
+// VerifyResult carries all diagnostic fields from the ai_review verification GET.
+type VerifyResult struct {
+	Found        bool
+	Outcome      string
+	FoundState   string
+	FailureStep  string
+	Class        ErrorClass
+	EscalateHint bool
+	Attempt      int
+	HTTPStatus   int
+	ErrorMessage string
+	ResponseBody string
+	ElapsedMs    int64
+}

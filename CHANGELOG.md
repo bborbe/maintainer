@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.42
+
+- feat(agent/pr-reviewer): add post-verification to `ai_review` phase — after `## Verdict` is written, `reviewStep` calls `ReviewVerifier.VerifyReview` (GET `/pulls/{n}/reviews`) to confirm the execution-phase review persisted on GitHub; failure appends `ai_review verify:` diagnostic line and returns `AgentStatusFailed`; skips when `## Review` absent or last diagnostics block has `class: permanent`/`class: unknown`; moves `ReviewVerifier`, `VerifyRequest`, `VerifyResult` from `pkg/githubposter` to `pkg` to break import cycle; adds `CreateReviewVerifier` factory (spec 027 prompt 3/3)
+
 ## v0.23.41
 
 - feat(agent/pr-reviewer): wire `PrPoster` into `checkoutExecutionStep` — after Claude writes `## Review` (vault-first), calls `PrPoster.Post`, appends a `## Diagnostics` block (append-only per-run, success one-liner or fenced-YAML failure), and routes to `ai_review` on success or `human_review` on posting failure; adds `CreatePrPoster` factory, updates `CreateAgent`/`CreateAgentProvider`; moves shared types (`PrPoster`, `PostRequest`, `PostResult`, `ErrorClass`) from `pkg/githubposter` to `pkg` to break import cycle (spec 027 prompt 2/3)

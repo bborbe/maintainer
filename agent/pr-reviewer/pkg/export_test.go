@@ -11,6 +11,13 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 )
 
+// ShouldVerifyPostForTest exposes reviewStep.shouldVerifyPost for unit testing
+// without exposing it to production callers.
+func ShouldVerifyPostForTest(ctx context.Context, md *agentlib.Markdown) (bool, error) {
+	s := &reviewStep{}
+	return s.shouldVerifyPost(ctx, md)
+}
+
 // VerdictPayloadForTest re-exports the unexported verdictPayload so
 // review_test.go (in the pkg_test package) can assert on the parsed
 // values without exposing the type to production callers.

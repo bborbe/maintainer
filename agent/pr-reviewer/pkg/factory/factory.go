@@ -138,13 +138,20 @@ func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
 	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
 }
 
+// CreateReviewVerifier wires a ReviewVerifier backed by net/http.DefaultClient.
+// token is the bot PAT; botLogin is the expected bot login.
+func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
+	return githubposter.NewReviewVerifier(http.DefaultClient, token, botLogin)
+}
+
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase
 // tool scopes and per-phase prompts:
 //
 //   - planning: read-only diff inspection → ## Plan (JSON)
 //   - in_progress: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
 //   - ai_review: minimal read-only fresh-context verifier → ## Verdict (JSON);
-//     verdict=pass → done, otherwise → human_review
+//     verdict=pass → done, otherwise → human_review; verifier confirms review
+//     persisted on GitHub (nil verifier skips verification)
 func CreateAgent(
 	claudeConfigDir claudelib.ClaudeConfigDir,
 	agentDir claudelib.AgentDir,
@@ -155,7 +162,9 @@ func CreateAgent(
 	reviewMode string,
 	repoAllowlist []string,
 	prPoster prpkg.PrPoster,
+	verifier prpkg.ReviewVerifier,
 ) *agentlib.Agent {
+	botLogin := env[githubposter.BotLoginEnv]
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
 		Name:          "pr-plan",
@@ -178,6 +187,9 @@ func CreateAgent(
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
 		prompts.BuildReviewInstructions(),
+		verifier,
+		ghToken,
+		botLogin,
 	)
 	return agentlib.NewAgent(
 		agentlib.NewPhase("planning", tokenCheck, planningStep),
@@ -202,6 +214,7 @@ func CreateAgentProvider(
 ) agentlib.AgentProvider {
 	botLogin := env[githubposter.BotLoginEnv] // BotLoginEnv stays in githubposter
 	poster := CreatePrPoster(ghToken, botLogin)
+	verifier := CreateReviewVerifier(ghToken, botLogin)
 	domainAgent := CreateAgent(
 		claudeConfigDir,
 		agentDir,
@@ -212,6 +225,7 @@ func CreateAgentProvider(
 		reviewMode,
 		repoAllowlist,
 		poster,
+		verifier,
 	)
 	healthcheckRunner := CreateClaudeRunner(
 		claudeConfigDir,

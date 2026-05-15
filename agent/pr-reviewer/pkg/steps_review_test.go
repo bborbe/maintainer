@@ -89,7 +89,7 @@ var _ = Describe("reviewStep", func() {
 		ctx = context.Background()
 		runner = &mocks.ClaudeRunnerMock{}
 		instructions = claudelib.Instructions{}
-		step = pkg.NewReviewStep(runner, instructions)
+		step = pkg.NewReviewStep(runner, instructions, nil, "", "")
 	})
 
 	Describe("Name", func() {
@@ -182,6 +182,232 @@ var _ = Describe("reviewStep", func() {
 				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 				Expect(result.NextPhase).To(Equal("human_review"))
 			})
+		})
+	})
+
+	Describe("verification behavior", func() {
+		const prURL = "https://github.com/bborbe/maintainer/pull/2"
+		const passVerdict = `{"verdict":"pass","reason":"all checks pass"}`
+
+		var verifier *mocks.ReviewVerifier
+
+		BeforeEach(func() {
+			verifier = &mocks.ReviewVerifier{}
+			step = pkg.NewReviewStep(runner, instructions, verifier, "test-token", "test-bot")
+			runner.RunReturns(&claudelib.ClaudeResult{Result: passVerdict}, nil)
+		})
+
+		Context("skip verification when ## Review is absent", func() {
+			It("does not call verifier; meta-verdict routes normally", func() {
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nref: abc123\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(verifier.VerifyReviewCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("skip verification when Diagnostics shows class: permanent", func() {
+			It("does not call verifier", func() {
+				diagBody := "```yaml\nclass: permanent\n```\n"
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n\n" +
+					"## Diagnostics\n\n" + diagBody
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(verifier.VerifyReviewCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("skip verification when Diagnostics shows class: unknown", func() {
+			It("does not call verifier", func() {
+				diagBody := "```yaml\nclass: unknown\n```\n"
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n\n" +
+					"## Diagnostics\n\n" + diagBody
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(verifier.VerifyReviewCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("verification runs and succeeds", func() {
+			BeforeEach(func() {
+				verifier.VerifyReviewReturns(pkg.VerifyResult{
+					Found:      true,
+					Outcome:    "success",
+					FoundState: "APPROVED",
+				})
+			})
+
+			It("calls verifier once and routes based on meta-verdict", func() {
+				diagBody := "```yaml\nclass: transient\n```\n"
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n\n" +
+					"## Diagnostics\n\n" + diagBody
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(verifier.VerifyReviewCallCount()).To(Equal(1))
+				// meta-verdict is "pass" → done
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("done"))
+			})
+		})
+
+		Context("verification runs and fails", func() {
+			BeforeEach(func() {
+				verifier.VerifyReviewReturns(pkg.VerifyResult{
+					Found:        false,
+					Outcome:      "failed",
+					Class:        pkg.ErrorClassTransient,
+					EscalateHint: false,
+					HTTPStatus:   0,
+					ErrorMessage: "review not found",
+				})
+			})
+
+			It("exits with AgentStatusFailed and writes ai_review verify diagnostic", func() {
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n"
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(result.Message).To(ContainSubstring("post verification failed"))
+				// Diagnostics section should contain the ai_review verify line
+				diagSection, exists := md.FindSection("## Diagnostics")
+				Expect(exists).To(BeTrue())
+				Expect(diagSection).NotTo(BeNil())
+				Expect(diagSection.Body).To(ContainSubstring("ai_review verify:"))
+				Expect(diagSection.Body).To(ContainSubstring("review not found"))
+			})
+		})
+
+		Context("nil verifier skips verification without panic", func() {
+			It("routes normally", func() {
+				step = pkg.NewReviewStep(runner, instructions, nil, "", "")
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n"
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			})
+		})
+	})
+})
+
+var _ = Describe("shouldVerifyPost", func() {
+	var ctx context.Context
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	const prURL = "https://github.com/bborbe/maintainer/pull/2"
+
+	taskWithReview := func(diagBody string) *agentlib.Markdown {
+		content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n## Review\n\nsome content\n"
+		if diagBody != "" {
+			content += "\n## Diagnostics\n\n" + diagBody
+		}
+		md, err := agentlib.ParseMarkdown(context.Background(), content)
+		Expect(err).NotTo(HaveOccurred())
+		return md
+	}
+
+	Describe("handles ## Diagnostics absent", func() {
+		It("returns true — verification should run", func() {
+			md := taskWithReview("")
+			result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeTrue())
+		})
+	})
+
+	Describe("selects the MOST RECENT diagnostic block when multiple exist", func() {
+		It(
+			"returns true when last block has class: transient despite older class: permanent",
+			func() {
+				diagBody := "```yaml\ntrigger_count: 0\nclass: permanent\n```\n\n" +
+					"```yaml\ntrigger_count: 1\nclass: transient\n```\n"
+				md := taskWithReview(diagBody)
+				result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeTrue())
+			},
+		)
+	})
+
+	Describe("diagnostic format round-trip with prompt 2's exact output", func() {
+		It(
+			"parses class: permanent from buildDiagnosticBlock output and skips verification",
+			func() {
+				// Exact format produced by buildDiagnosticBlock for a failure:
+				// fmt.Sprintf("```yaml\njob_run: %s\ntrigger_count: %d\n...class: %s\n...```\n", ...)
+				diagBody := "```yaml\n" +
+					"job_run: 2026-01-01T00:00:00Z\n" +
+					"trigger_count: 1\n" +
+					"outcome: failed\n" +
+					"failure_step: POST /pulls/2/reviews\n" +
+					"class: permanent\n" +
+					"escalate_hint: true\n" +
+					"attempt: 1\n" +
+					"http_status: 403\n" +
+					"error_message: \"forbidden\"\n" +
+					"response_body: \"{}\"\n" +
+					"elapsed_ms: 100\n" +
+					"```\n"
+				md := taskWithReview(diagBody)
+				result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeFalse())
+			},
+		)
+	})
+
+	Describe("returns false when ## Review is absent", func() {
+		It("skips verification without error", func() {
+			md, err := agentlib.ParseMarkdown(ctx, "# Task\n\nsome content")
+			Expect(err).NotTo(HaveOccurred())
+			result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	Describe("returns false when last block has class: unknown", func() {
+		It("skips verification", func() {
+			diagBody := "```yaml\nclass: unknown\n```\n"
+			md := taskWithReview(diagBody)
+			result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeFalse())
+		})
+	})
+
+	Describe("returns true when Diagnostics has only success one-liners", func() {
+		It("runs verification (no yaml block means no skip condition)", func() {
+			diagBody := "job_run: 2026-01-01T00:00:00Z outcome: success review_id: 12345\n"
+			md := taskWithReview(diagBody)
+			result, err := pkg.ShouldVerifyPostForTest(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeTrue())
 		})
 	})
 })

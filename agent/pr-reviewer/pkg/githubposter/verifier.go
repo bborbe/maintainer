@@ -21,8 +21,12 @@ type reviewVerifier struct {
 	botLogin   string
 }
 
-// NewReviewVerifier creates a ReviewVerifier. botLogin must already be resolved by the caller.
-func NewReviewVerifier(httpClient HTTPClient, ghToken string, botLogin string) ReviewVerifier {
+// NewReviewVerifier creates a prpkg.ReviewVerifier. botLogin must already be resolved by the caller.
+func NewReviewVerifier(
+	httpClient HTTPClient,
+	ghToken string,
+	botLogin string,
+) prpkg.ReviewVerifier {
 	return &reviewVerifier{httpClient: httpClient, ghToken: ghToken, botLogin: botLogin}
 }
 
@@ -45,7 +49,10 @@ func findReview(
 	return reviewEntry{}, false
 }
 
-func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) VerifyResult {
+func (v *reviewVerifier) VerifyReview(
+	ctx context.Context,
+	req prpkg.VerifyRequest,
+) prpkg.VerifyResult {
 	start := time.Now()
 	step := "GET /pulls/N/reviews (ai_review verify)"
 	url := fmt.Sprintf(
@@ -73,7 +80,7 @@ func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) Ve
 	})
 	elapsed := time.Since(start).Milliseconds()
 	if errors.Is(cr.Err, errPhantomPOST) {
-		return VerifyResult{
+		return prpkg.VerifyResult{
 			Found:        false,
 			Outcome:      "failed",
 			FailureStep:  step,
@@ -84,7 +91,7 @@ func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) Ve
 		}
 	}
 	if cr.Err != nil {
-		return VerifyResult{
+		return prpkg.VerifyResult{
 			Found:       false,
 			Outcome:     "failed",
 			FailureStep: step,
@@ -98,7 +105,7 @@ func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) Ve
 			ElapsedMs:    elapsed,
 		}
 	}
-	return VerifyResult{
+	return prpkg.VerifyResult{
 		Found:      true,
 		Outcome:    "success",
 		FoundState: cr.Value.State,

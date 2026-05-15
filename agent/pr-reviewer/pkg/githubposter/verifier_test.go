@@ -20,7 +20,7 @@ import (
 var _ = Describe("ReviewVerifier", func() {
 	var (
 		fakeClient *mocks.HTTPClient
-		verifier   githubposter.ReviewVerifier
+		verifier   prpkg.ReviewVerifier
 		pr         prpkg.PRInfo
 		ctx        context.Context
 	)
@@ -32,8 +32,8 @@ var _ = Describe("ReviewVerifier", func() {
 		pr = prpkg.PRInfo{Owner: "owner", Repo: "repo", Number: 1}
 	})
 
-	req := func(states ...string) githubposter.VerifyRequest {
-		return githubposter.VerifyRequest{
+	req := func(states ...string) prpkg.VerifyRequest {
+		return prpkg.VerifyRequest{
 			PR:             pr,
 			HeadSHA:        testHeadSHA,
 			ExpectedStates: states,
