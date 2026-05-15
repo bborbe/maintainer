@@ -1,11 +1,14 @@
 ---
-status: executing
+status: committing
 spec: [027-post-verdict-to-github-pr]
+summary: Built pkg/githubposter/ with PrPoster + ReviewVerifier interfaces, per-call retry policy, phantom-POST transient classification, autoApprove config reader, Counterfeiter mocks, and Ginkgo tests (88.4% coverage); make precommit exits 0.
 container: maintainer-113-spec-027-poster-package
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T18:00:00Z"
 queued: "2026-05-15T17:04:33Z"
-started: "2026-05-15T17:04:35Z"
+started: "2026-05-15T18:01:24Z"
+completed: "2026-05-15T17:37:31Z"
+lastFailReason: 'validate completion report: parse completion report: parse report tail boundary: found start marker but no valid end marker'
 ---
 
 <summary>

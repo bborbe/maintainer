@@ -2,8 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.23.40
 
+- feat(agent/pr-reviewer): add `pkg/githubposter/` — GitHub REST API client for posting PR reviews. Implements bot-identity self-check, `.pr-reviewer.yaml` autoApprove config, prior-review dismissal, POST review, verify-after-POST (catches phantom POSTs), and per-call retry policy (one retry max for transient errors; no retry for permanent). Used by `in_progress` and `ai_review` phases in subsequent prompts. (spec 027 prompt 1/3)
 - chore(agent/pr-reviewer): wrap phase-output JSON in fenced ```json blocks across `planning_output-format.md`, `execution_output-format.md`, `review_output-format.md` so the `## Plan` / `## Review` / `## Verdict` sections render readably in Obsidian; downstream parsers already accept fenced JSON (no parser change)
 
 ## v0.23.39
