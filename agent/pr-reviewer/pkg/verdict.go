@@ -16,7 +16,6 @@ type Verdict string
 const (
 	VerdictApprove        Verdict = "approve"
 	VerdictRequestChanges Verdict = "request-changes"
-	VerdictComment        Verdict = "comment"
 )
 
 // Result holds the verdict and reason
@@ -25,134 +24,200 @@ type Result struct {
 	Reason  string
 }
 
-// jsonVerdict is used for unmarshaling JSON verdict blocks
+// jsonVerdict is used for unmarshaling JSON verdict blocks (legacy use by StripJSONVerdict)
 type jsonVerdict struct {
 	Verdict string `json:"verdict"`
 	Reason  string `json:"reason"`
 }
 
-// tryParseJSONLine attempts to parse a JSON verdict from a single line
-// Returns the parsed Result and true if valid, or zero Result and false otherwise
-func tryParseJSONLine(line string) (Result, bool) {
-	// Extract JSON (remove code fence markers if present)
-	jsonStr := strings.TrimSpace(line)
-	jsonStr = strings.TrimPrefix(jsonStr, "```json")
-	jsonStr = strings.TrimSuffix(jsonStr, "```")
-	jsonStr = strings.TrimSpace(jsonStr)
-
-	// Try to parse JSON
-	var jv jsonVerdict
-	if err := json.Unmarshal([]byte(jsonStr), &jv); err != nil {
+// parseJSONVerdict finds the LAST JSON object containing a verdict field in the
+// review text and attempts to unmarshal it. Handles both the legacy single-line
+// {"verdict": "...", "reason": "..."} format AND the new spec-025 multi-line
+// fenced block format with {"verdict": "...", "summary": "...", ...}. On malformed
+// JSON or unknown verdict value, falls back to the heuristic.
+func parseJSONVerdict(reviewText string) (Result, bool) {
+	block, ok := findLastJSONVerdictBlock(reviewText)
+	if !ok {
 		return Result{}, false
 	}
-
-	// Validate verdict value
-	var v Verdict
+	var jv jsonVerdict
+	if err := json.Unmarshal([]byte(block), &jv); err != nil {
+		return Result{}, false
+	}
 	switch jv.Verdict {
 	case "approve":
-		v = VerdictApprove
+		return Result{Verdict: VerdictApprove, Reason: jv.Reason}, true
 	case "request-changes":
-		v = VerdictRequestChanges
-	case "comment":
-		v = VerdictComment
+		return Result{Verdict: VerdictRequestChanges, Reason: jv.Reason}, true
 	default:
-		// Unknown verdict value - fall back to heuristic
+		// Unknown verdict value (including "comment", typos, hallucinated words) — fall back to heuristic
 		return Result{}, false
 	}
-
-	return Result{
-		Verdict: v,
-		Reason:  jv.Reason,
-	}, true
 }
 
-// parseJSONVerdict scans the last 50 lines of review text for a JSON verdict block
-// Returns the parsed Result and true if found, or zero Result and false if not found
-func parseJSONVerdict(reviewText string) (Result, bool) {
+// findLastJSONVerdictBlock returns the LAST JSON object (string content) in
+// reviewText that contains a "verdict" field. Handles single-line objects and
+// multi-line fenced ```json blocks. Returns empty + false if none found.
+// Only the last 50 lines are scanned for the closing brace, to avoid matching
+// JSON examples quoted earlier in the review text.
+func findLastJSONVerdictBlock(reviewText string) (string, bool) {
 	lines := strings.Split(reviewText, "\n")
-
-	// Search only the last 50 lines to avoid false matches in code examples
 	startIdx := 0
 	if len(lines) > 50 {
 		startIdx = len(lines) - 50
 	}
-
-	for i := startIdx; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-
-		// Skip code fence markers
-		if line == "```json" || line == "```" {
-			continue
+	// Search backwards for the last line containing "verdict" within the window.
+	verdictLine := -1
+	for i := len(lines) - 1; i >= startIdx; i-- {
+		if strings.Contains(lines[i], `"verdict"`) {
+			verdictLine = i
+			break
 		}
+	}
+	if verdictLine < 0 {
+		return "", false
+	}
+	// Find the enclosing {...} block by walking back to the nearest '{' and
+	// forward to its matching '}'. Single-line {"verdict":"..."} works too.
+	startCh := lastIndexOfBrace(lines, verdictLine, '{')
+	if startCh.line < 0 {
+		return "", false
+	}
+	endCh := nextIndexOfMatchingClose(lines, startCh)
+	if endCh.line < 0 {
+		return "", false
+	}
+	return extractBlock(lines, startCh, endCh), true
+}
 
-		// Try to find JSON on this line
-		if strings.Contains(line, `"verdict"`) && strings.Contains(line, `"reason"`) {
-			if result, ok := tryParseJSONLine(line); ok {
-				return result, true
+type charPos struct{ line, col int }
+
+func lastIndexOfBrace(lines []string, fromLine int, b byte) charPos {
+	for li := fromLine; li >= 0; li-- {
+		s := lines[li]
+		end := len(s)
+		if li == fromLine {
+			end = strings.Index(s, `"verdict"`)
+			if end < 0 {
+				end = len(s)
+			}
+		}
+		for ci := end - 1; ci >= 0; ci-- {
+			if s[ci] == b {
+				return charPos{li, ci}
 			}
 		}
 	}
-
-	return Result{}, false
+	return charPos{-1, -1}
 }
 
-// ParseVerdict analyzes Claude review output and determines the appropriate verdict
+func nextIndexOfMatchingClose(lines []string, start charPos) charPos {
+	depth := 0
+	for li := start.line; li < len(lines); li++ {
+		s := lines[li]
+		ci := 0
+		if li == start.line {
+			ci = start.col
+		}
+		for ; ci < len(s); ci++ {
+			switch s[ci] {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return charPos{li, ci}
+				}
+			}
+		}
+	}
+	return charPos{-1, -1}
+}
+
+func extractBlock(lines []string, start, end charPos) string {
+	if start.line == end.line {
+		return lines[start.line][start.col : end.col+1]
+	}
+	var b strings.Builder
+	b.WriteString(lines[start.line][start.col:])
+	b.WriteByte('\n')
+	for i := start.line + 1; i < end.line; i++ {
+		b.WriteString(lines[i])
+		b.WriteByte('\n')
+	}
+	b.WriteString(lines[end.line][:end.col+1])
+	return b.String()
+}
+
+// ParseVerdict analyzes Claude review output and determines the appropriate verdict.
+// The verdict is binary: approve or request-changes. No other value is returned.
+// Fail-closed: empty or unparseable output returns request-changes.
 func ParseVerdict(reviewText string) Result {
 	// First try to extract JSON verdict
 	if result, ok := parseJSONVerdict(reviewText); ok {
 		return result
 	}
 
-	// Fall back to heuristic section scanning
+	// Fail-closed: empty review text
 	if reviewText == "" {
 		return Result{
-			Verdict: VerdictComment,
+			Verdict: VerdictRequestChanges,
 			Reason:  "empty review text",
 		}
 	}
 
-	// Check if review has expected sections
-	hasReviewSections := hasExpectedReviewSections(reviewText)
-
-	// Look for Must Fix section (case-insensitive, h2 or h3)
 	mustFixPattern := regexp.MustCompile(`(?i)^##+ Must Fix`)
+	shouldFixPattern := regexp.MustCompile(`(?i)^##+ Should Fix`)
 	lines := strings.Split(reviewText, "\n")
 
 	mustFixIndex := -1
+	shouldFixIndex := -1
 	for i, line := range lines {
-		if mustFixPattern.MatchString(strings.TrimSpace(line)) {
+		trimmed := strings.TrimSpace(line)
+		if mustFixIndex == -1 && mustFixPattern.MatchString(trimmed) {
 			mustFixIndex = i
-			break
+		}
+		if shouldFixIndex == -1 && shouldFixPattern.MatchString(trimmed) {
+			shouldFixIndex = i
 		}
 	}
 
-	// No Must Fix section found
-	if mustFixIndex == -1 {
-		if hasReviewSections {
-			return Result{
-				Verdict: VerdictApprove,
-				Reason:  "no must-fix section",
-			}
-		}
-		return Result{
-			Verdict: VerdictComment,
-			Reason:  "unparseable review format",
-		}
-	}
-
-	// Must Fix section found - check if it has content
-	hasMustFixContent := checkMustFixContent(lines, mustFixIndex)
-
-	if hasMustFixContent {
+	// Must Fix with content → request-changes
+	if mustFixIndex != -1 && checkMustFixContent(lines, mustFixIndex) {
 		return Result{
 			Verdict: VerdictRequestChanges,
 			Reason:  "must-fix items found",
 		}
 	}
 
+	// Should Fix with content → request-changes
+	if shouldFixIndex != -1 && checkMustFixContent(lines, shouldFixIndex) {
+		return Result{
+			Verdict: VerdictRequestChanges,
+			Reason:  "should-fix items found",
+		}
+	}
+
+	// Must Fix section exists but is empty/None → approve
+	if mustFixIndex != -1 {
+		return Result{
+			Verdict: VerdictApprove,
+			Reason:  "no must-fix items",
+		}
+	}
+
+	// No Must Fix; has Should Fix (empty/None) or Nice to Have → approve
+	if hasExpectedReviewSections(reviewText) {
+		return Result{
+			Verdict: VerdictApprove,
+			Reason:  "no must-fix section",
+		}
+	}
+
+	// Fail-closed: no recognizable review sections
 	return Result{
-		Verdict: VerdictApprove,
-		Reason:  "no must-fix items",
+		Verdict: VerdictRequestChanges,
+		Reason:  "unparseable review format",
 	}
 }
 

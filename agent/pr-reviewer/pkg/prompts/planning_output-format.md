@@ -23,4 +23,4 @@ Field rules:
 - `focus_areas`: required, ordered by priority (most important first)
 - `concerns`: required, may be empty list if nothing stands out
 
-Output raw JSON only. No code fences. No prose before or after.
+Output the JSON inside a fenced code block (```json ... ```). No prose before or after the fence. The fence renders the JSON readably in Obsidian and other markdown viewers; downstream consumers strip the fence before parsing.

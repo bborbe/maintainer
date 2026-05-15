@@ -37,14 +37,14 @@ const verdictTranslationFooter = "---\n\n" +
 	"`<output-format>`).\n\n" +
 	"Severity map (deterministic):\n" +
 	"- Must Fix finding → comment severity \"critical\", contributes to verdict \"request_changes\"\n" +
-	"- Should Fix finding → comment severity \"major\"\n" +
+	"- Should Fix finding → comment severity \"major\", contributes to verdict \"request_changes\"\n" +
 	"- Nice to Have finding → comment severity \"nit\"\n" +
 	"- The severity \"minor\" is reserved for LLM judgment on findings that\n" +
 	"  genuinely don't fit a plugin bucket; the deterministic map never emits it.\n\n" +
-	"Verdict roll-up:\n" +
+	"Verdict roll-up (binary — exactly one of two values):\n" +
 	"- Any Must Fix present → verdict \"request_changes\"\n" +
-	"- Else any Should Fix or Nice to Have present → verdict \"comment\"\n" +
-	"- All sections empty (or \"None.\") → verdict \"approve\"\n\n" +
+	"- Any Should Fix present → verdict \"request_changes\"\n" +
+	"- Only Nice to Have, or nothing flagged → verdict \"approve\"\n\n" +
 	"Each comment must pin to a real `file` and `line` from the report. If a\n" +
 	"finding has no coordinates, fold it into `summary` instead of emitting an\n" +
 	"un-pinned comment. Preserve the plugin's bucket label verbatim in the\n" +

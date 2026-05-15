@@ -53,20 +53,16 @@ var _ = Describe("ParseRepoAllowlist", func() {
 		Expect(result).To(BeNil())
 	})
 
-	It("returns error for two-segment entry (missing host)", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "bborbe/repo")
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("bborbe/repo"))
+	It("accepts wildcard entry without error", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/*")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal([]string{"github.com/bborbe/*"}))
 	})
 
-	It("returns error for four-segment entry", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "a/b/c/d")
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("returns error for host segment with underscore", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "git_hub.com/owner/repo")
-		Expect(err).To(HaveOccurred())
+	It("accepts malformed entry without error", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "bborbe/repo")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal([]string{"bborbe/repo"}))
 	})
 
 	It("parses real dev.env value (regression: startup shape)", func() {
@@ -78,6 +74,12 @@ var _ = Describe("ParseRepoAllowlist", func() {
 		Expect(
 			result,
 		).To(ConsistOf("github.com/bborbe/go-skeleton", "github.com/bborbe/jira-task-creator"))
+	})
+
+	It("parses wildcard value (future dev.env shape after env update)", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/*")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal([]string{"github.com/bborbe/*"}))
 	})
 })
 
@@ -101,5 +103,15 @@ var _ = Describe("RepoAllowlistFilter (host-qualified keys)", func() {
 	It("matches exactly — prefix match is not a match", func() {
 		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code"})
 		Expect(f.Skip("github.com/bborbe/maintainer")).To(BeTrue())
+	})
+
+	It("does not skip a repoKey that matches a wildcard allowlist entry", func() {
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/*"})
+		Expect(f.Skip("github.com/bborbe/go-skeleton")).To(BeFalse())
+	})
+
+	It("skips a repoKey whose owner does not match the wildcard entry", func() {
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/*"})
+		Expect(f.Skip("github.com/other-owner/repo")).To(BeTrue())
 	})
 })

@@ -3,6 +3,16 @@
 Polls the GitHub Search API for open pull requests and publishes a `CreateTaskCommand` to Kafka
 for each new or force-pushed PR so the `agent/pr-reviewer` picks it up automatically.
 
+## Links
+
+Dev:
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger
+
+Prod:
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger
+
 ## How It Works
 
 The watcher runs a `user:<scope>` GitHub Search query on a configurable interval. On each poll

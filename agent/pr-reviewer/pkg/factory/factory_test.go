@@ -10,6 +10,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	"github.com/bborbe/agent/lib/delivery"
 	libkafka "github.com/bborbe/kafka"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	libtime "github.com/bborbe/time"
@@ -47,7 +48,7 @@ var _ = Describe("Factory", func() {
 	})
 
 	Describe("CreateAgent", func() {
-		It("returns a non-nil AgentRunner with empty token and env", func() {
+		It("returns a non-nil agent with empty token and env", func() {
 			var repoManager git.RepoManager
 			agent := factory.CreateAgent(
 				"",
@@ -58,11 +59,13 @@ var _ = Describe("Factory", func() {
 				repoManager,
 				"standard",
 				nil,
+				nil,
+				nil,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
 
-		It("returns a non-nil AgentRunner with token set in env", func() {
+		It("returns a non-nil agent with token set in env", func() {
 			var repoManager git.RepoManager
 			agent := factory.CreateAgent(
 				"",
@@ -72,6 +75,8 @@ var _ = Describe("Factory", func() {
 				map[string]string{"GH_TOKEN": "test-token"},
 				repoManager,
 				"standard",
+				nil,
+				nil,
 				nil,
 			)
 			Expect(agent).NotTo(BeNil())
@@ -118,6 +123,105 @@ var _ = Describe("Factory", func() {
 				currentDateTime,
 			)
 			Expect(deliverer).NotTo(BeNil())
+		})
+	})
+
+	Describe("Passthrough content generator wiring — failure body", func() {
+		var gen delivery.ContentGenerator
+		var ctx context.Context
+
+		BeforeEach(func() {
+			gen = delivery.NewPassthroughContentGenerator()
+			ctx = context.Background()
+		})
+
+		Context("when result status is needs_input with empty Output", func() {
+			It("produces a body containing ## Failure and the message", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusNeedsInput,
+					Message: "GH_TOKEN unauthorized (HTTP 401)",
+					Output:  "",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
+			})
+		})
+
+		Context("when result status is failed with empty Output", func() {
+			It("produces a body containing ## Failure and the message", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusFailed,
+					Message: "claude CLI: 401 Invalid authentication credentials",
+					Output:  "",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(
+					generated,
+				).To(ContainSubstring("claude CLI: 401 Invalid authentication credentials"))
+			})
+		})
+
+		Context("when result status is needs_input with Output containing frontmatter", func() {
+			It("sets phase: human_review in frontmatter and writes ## Failure", func() {
+				result := agentlib.AgentResultInfo{
+					Status:  agentlib.AgentStatusNeedsInput,
+					Message: "GH_TOKEN unauthorized (HTTP 401)",
+					Output:  "---\nstatus: in_progress\nphase: planning\n---\n",
+				}
+				generated, err := gen.Generate(ctx, "", result)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(generated).To(ContainSubstring("## Failure"))
+				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
+				Expect(generated).To(ContainSubstring("phase: human_review"))
+			})
+		})
+	})
+
+	Describe("CreateAgentProvider", func() {
+		var (
+			ctx         context.Context
+			repoManager git.RepoManager
+			provider    agentlib.AgentProvider
+		)
+		BeforeEach(func() {
+			ctx = context.Background()
+			provider = factory.CreateAgentProvider(
+				"",
+				"agent",
+				"sonnet",
+				"",
+				map[string]string{},
+				repoManager,
+				"standard",
+				nil,
+			)
+			Expect(provider).NotTo(BeNil())
+		})
+
+		It("returns a non-nil agent for pr-review task type", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskTypePRReview)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent).NotTo(BeNil())
+		})
+
+		It("returns a non-nil agent for healthcheck task type", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskTypeHealthcheck)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(agent).NotTo(BeNil())
+		})
+
+		It("returns an error naming the bogus value and both accepted task types", func() {
+			agent, err := provider.Get(ctx, agentlib.TaskType("bogus"))
+			Expect(err).To(HaveOccurred())
+			Expect(agent).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("unknown task_type"))
+			Expect(err.Error()).To(ContainSubstring("bogus"))
+			Expect(err.Error()).To(ContainSubstring("pr-review"))
+			Expect(err.Error()).To(ContainSubstring("healthcheck"))
 		})
 	})
 

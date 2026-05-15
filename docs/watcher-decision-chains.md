@@ -22,6 +22,7 @@ See `go-filter-pattern.md` and `go-boolean-combinator-pattern.md`.
 |------|-----------|
 | `DraftFilter` | `pr.IsDraft == true` |
 | `BotAuthorFilter` | `pr.AuthorLogin` matches the configured bot allowlist |
+| `RepoAllowlistFilter` | `pr.RepoKey` (`host/owner/repo`) is not on the configured `REPO_ALLOWLIST`; empty allowlist = allow-all |
 
 **Future leaves (planned):**
 
@@ -52,7 +53,6 @@ See `go-boolean-combinator-pattern.md`.
 **Future leaves (planned):**
 
 - `IsCollaborator` — author is a repo collaborator (queries GitHub API)
-- `RepoAllowlist` — PR target repo is in the configured allowlist
 - `RequiredLabel` — PR has a specific opt-in label (`ok-to-review`)
 
 ## Decision: which chain does my new filter go in?
@@ -69,7 +69,7 @@ Two examples that have come up:
 | "WIP" in title | TaskCreationFilter | Author explicitly says "not ready" — same intent as draft |
 | "PR > 90 days old" | TaskCreationFilter | Almost certainly abandoned; reviewer attention not warranted |
 | "Author not in collaborator list" | TrustGate | Visible task with reviewer override; trust is the human's call |
-| "Repo not in allowlist" | TrustGate (or TaskCreationFilter, depending on noise tolerance) | If the operator wants to be aware of out-of-scope PRs, gate them; if they're pure spam, skip them |
+| "Repo not in allowlist" | TaskCreationFilter (shipped via `RepoAllowlistFilter`) | Out-of-scope repos are pure noise per stage — hard skip, not a visible task |
 
 The two chains are independent. A PR that survives TaskCreationFilter then
 runs through TrustGate; both must agree before the task is auto-processed.

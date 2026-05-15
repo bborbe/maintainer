@@ -13,6 +13,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 )
 
 // verdictPayload is the parsed shape of the ## Verdict JSON the ai_review
@@ -24,19 +25,32 @@ type verdictPayload struct {
 }
 
 // reviewStep runs Claude on the task with the review-phase prompt, writes
-// the LLM's response under ## Verdict, parses verdict, and routes the
-// next phase: pass → done, fail (or unparseable) → human_review.
+// the LLM's response under ## Verdict, optionally verifies the in_progress
+// post persisted on GitHub, parses verdict, and routes the next phase:
+// pass → done, fail (or unparseable) → human_review.
 type reviewStep struct {
 	runner       claudelib.ClaudeRunner
 	instructions claudelib.Instructions
+	verifier     ReviewVerifier // nil = skip verification
+	ghToken      string
+	botLogin     string
 }
 
 // NewReviewStep constructs the ai_review-phase step.
 func NewReviewStep(
 	runner claudelib.ClaudeRunner,
 	instructions claudelib.Instructions,
+	verifier ReviewVerifier,
+	ghToken string,
+	botLogin string,
 ) agentlib.Step {
-	return &reviewStep{runner: runner, instructions: instructions}
+	return &reviewStep{
+		runner:       runner,
+		instructions: instructions,
+		verifier:     verifier,
+		ghToken:      ghToken,
+		botLogin:     botLogin,
+	}
 }
 
 // Name implements agentlib.Step.
@@ -49,8 +63,9 @@ func (s *reviewStep) ShouldRun(_ context.Context, md *agentlib.Markdown) (bool, 
 }
 
 // Run calls Claude with the task body (which includes ## Plan + ## Review
-// from earlier phases), writes ## Verdict, parses the verdict, and
-// returns Done with conditional NextPhase.
+// from earlier phases), writes ## Verdict, optionally verifies the in_progress
+// post persisted on GitHub, parses the verdict, and returns Done with
+// conditional NextPhase.
 func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
 	taskContent, err := md.Marshal(ctx)
 	if err != nil {
@@ -71,6 +86,29 @@ func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.
 		Heading: "## Verdict",
 		Body:    runResult.Result,
 	})
+
+	// Post-verification: confirm the in_progress review persisted on GitHub.
+	shouldVerify, skipCheckErr := s.shouldVerifyPost(ctx, md)
+	if skipCheckErr != nil {
+		glog.Warningf(
+			"ai_review: skip-condition check failed err=%v; skipping verification",
+			skipCheckErr,
+		)
+		shouldVerify = false
+	}
+	if s.verifier != nil && shouldVerify {
+		verifyResult := s.callVerifier(ctx, md)
+		if verifyResult != nil {
+			appendVerifyDiagnostic(ctx, md, *verifyResult)
+			return &agentlib.Result{
+				Status: agentlib.AgentStatusFailed,
+				Message: fmt.Sprintf(
+					"ai_review: post verification failed: %s",
+					verifyResult.ErrorMessage,
+				),
+			}, nil
+		}
+	}
 
 	verdict, err := extractVerdict(ctx, runResult.Result)
 	if err != nil {
@@ -94,6 +132,109 @@ func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.
 		NextPhase: "human_review",
 		Message:   fmt.Sprintf("ai-review verdict=%s: %s", verdict.Verdict, verdict.Reason),
 	}, nil
+}
+
+// shouldVerifyPost returns true if post-verification should run.
+// Returns false when ## Review is absent (no post was attempted) or the
+// last diagnostics YAML block shows class: permanent or class: unknown.
+func (s *reviewStep) shouldVerifyPost(_ context.Context, md *agentlib.Markdown) (bool, error) {
+	if _, exists := md.FindSection("## Review"); !exists {
+		return false, nil
+	}
+
+	diagSection, exists := md.FindSection("## Diagnostics")
+	if !exists || diagSection == nil {
+		return true, nil
+	}
+
+	lastBlock := lastYAMLBlock(diagSection.Body)
+	if lastBlock == "" {
+		return true, nil
+	}
+
+	for _, line := range strings.Split(lastBlock, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "class: "+string(ErrorClassPermanent) ||
+			trimmed == "class: "+string(ErrorClassUnknown) {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// lastYAMLBlock returns the body of the last ```yaml...``` block in s.
+// Returns empty string if no such block exists.
+func lastYAMLBlock(s string) string {
+	const fence = "```yaml"
+	parts := strings.Split(s, fence)
+	if len(parts) < 2 {
+		return ""
+	}
+	lastPart := parts[len(parts)-1]
+	closeIdx := strings.Index(lastPart, "```")
+	if closeIdx < 0 {
+		return ""
+	}
+	return lastPart[:closeIdx]
+}
+
+// callVerifier calls the verifier for the current PR. Returns nil when
+// verification passes or is skipped; returns a non-nil VerifyResult when
+// verification fails.
+func (s *reviewStep) callVerifier(ctx context.Context, md *agentlib.Markdown) *VerifyResult {
+	prURLStr := githubPRURLPattern.FindString(md.Preamble)
+	if prURLStr == "" {
+		glog.Warningf("ai_review verify: no GitHub PR URL in preamble — skipping")
+		return nil
+	}
+
+	prInfo, err := ParsePRURL(ctx, prURLStr)
+	if err != nil {
+		glog.Warningf("ai_review verify: failed to parse PR URL %q: %v — skipping", prURLStr, err)
+		return nil
+	}
+
+	if prInfo.Platform != PlatformGitHub {
+		glog.Warningf("ai_review verify: non-GitHub platform %q — skipping", prInfo.Platform)
+		return nil
+	}
+
+	headSHA, _ := md.Frontmatter.String("ref")
+	glog.V(3).Infof(
+		"ai_review verify: PR=%s bot=%s sha=%s token_set=%v",
+		prURLStr, s.botLogin, headSHA, s.ghToken != "",
+	)
+
+	result := s.verifier.VerifyReview(ctx, VerifyRequest{
+		PR:             *prInfo,
+		HeadSHA:        headSHA,
+		ExpectedStates: []string{"APPROVED", "CHANGES_REQUESTED", "COMMENTED"},
+	})
+
+	if result.Found {
+		return nil
+	}
+	return &result
+}
+
+// appendVerifyDiagnostic appends a one-line ai_review verification failure
+// entry to ## Diagnostics. Format is distinct from in_progress's fenced YAML
+// blocks so operators can grep "ai_review verify:" specifically.
+func appendVerifyDiagnostic(_ context.Context, md *agentlib.Markdown, result VerifyResult) {
+	line := fmt.Sprintf(
+		"ai_review verify: outcome=failed class=%s escalate_hint=%v http_status=%d error=%s\n",
+		result.Class,
+		result.EscalateHint,
+		result.HTTPStatus,
+		result.ErrorMessage,
+	)
+	var existingBody string
+	if existing, ok := md.FindSection("## Diagnostics"); ok && existing != nil {
+		existingBody = existing.Body
+	}
+	newBody := strings.TrimLeft(existingBody+"\n"+line, "\n")
+	md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
 }
 
 // extractVerdict parses the verdict from the LLM's response. The prompt

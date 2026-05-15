@@ -23,7 +23,7 @@ Field rules:
 - `hallucinations`: required, may be empty list
 - `verdict_consistency`: required string
 
-Output raw JSON only. No code fences. No prose before or after.
+Output the JSON inside a fenced code block (```json ... ```). No prose before or after the fence. The fence renders the JSON readably in Obsidian and other markdown viewers; downstream consumers strip the fence before parsing.
 
 The `verdict` field drives the next-phase transition:
 - `pass` → task advances to `done`

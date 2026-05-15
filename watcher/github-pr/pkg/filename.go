@@ -19,16 +19,22 @@ const DefaultMaxTitleLen = 200
 // Bumped from 50 to 80 (2026-05-08) — 50 cut typical PR titles mid-word. Override via MAX_SLUG_LEN.
 const DefaultMaxSlugLen = 80
 
-// computePRTitle returns the human-readable title for a PR-review task.
+// Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]} - {slug}"
+// Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]}"
+// The returned string MUST NOT include the .md extension; the controller appends it.
 // maxSlug caps the slug segment alone; maxTitle is a safety cap on the full title.
 // Both are passed by the caller (read from env at startup) — see watcher/github-pr/main.go.
 func computePRTitle(
 	provider, owner, repo string,
 	number int,
-	title string,
+	sha, title string,
 	maxSlug, maxTitle int,
 ) string {
-	base := fmt.Sprintf("PR Review %s - %s-%s - %d", provider, owner, repo, number)
+	shortSHA := sha
+	if len(shortSHA) > 8 {
+		shortSHA = shortSHA[:8]
+	}
+	base := fmt.Sprintf("PR Review %s - %s-%s - %d - %s", provider, owner, repo, number, shortSHA)
 	slug := slugifyTitle(title, maxSlug)
 	var t string
 	if slug == "" {

@@ -2,10 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+Please choose versions by [Semantic Versioning](http://semver.org/).
+
+* MAJOR version when you make incompatible API changes,
+* MINOR version when you add functionality in a backwards-compatible manner, and
+* PATCH version when you make backwards-compatible bug fixes.
+
+## v0.25.0
+
+- feat: switch REPO_ALLOWLIST in dev.env and prod.env from enumerated literal repo lists to `github.com/bborbe/*` wildcard; any bborbe-owned repo now flows through the pipeline without per-repo operator intervention
+
+## v0.24.0
+
+- feat: migrate all five REPO_ALLOWLIST callers to shared `lib/repoallowlist` package; replace inline regex parsers with `IsAllowed` predicate (supporting `github.com/<owner>/*` wildcard) and `Validate` validator (aggregate error for required callers); add `replace github.com/bborbe/maintainer/lib => ../../lib` to three service go.mod files
+
+## v0.23.43
+
+- feat(lib): bootstrap new shared Go module at `lib/` (module path `github.com/bborbe/maintainer/lib`); add `repoallowlist` package with `IsAllowed` predicate and `Validate` validator supporting literal matching, `github.com/<owner>/*` wildcard, and allow-all semantics for empty/nil allowlists
+
+## v0.23.42
+
+- feat(agent/pr-reviewer): add post-verification to `ai_review` phase — after `## Verdict` is written, `reviewStep` calls `ReviewVerifier.VerifyReview` (GET `/pulls/{n}/reviews`) to confirm the execution-phase review persisted on GitHub; failure appends `ai_review verify:` diagnostic line and returns `AgentStatusFailed`; skips when `## Review` absent or last diagnostics block has `class: permanent`/`class: unknown`; moves `ReviewVerifier`, `VerifyRequest`, `VerifyResult` from `pkg/githubposter` to `pkg` to break import cycle; adds `CreateReviewVerifier` factory (spec 027 prompt 3/3)
+
+## v0.23.41
+
+- feat(agent/pr-reviewer): wire `PrPoster` into `checkoutExecutionStep` — after Claude writes `## Review` (vault-first), calls `PrPoster.Post`, appends a `## Diagnostics` block (append-only per-run, success one-liner or fenced-YAML failure), and routes to `ai_review` on success or `human_review` on posting failure; adds `CreatePrPoster` factory, updates `CreateAgent`/`CreateAgentProvider`; moves shared types (`PrPoster`, `PostRequest`, `PostResult`, `ErrorClass`) from `pkg/githubposter` to `pkg` to break import cycle (spec 027 prompt 2/3)
+
+## v0.23.40
+
+- feat(agent/pr-reviewer): add `pkg/githubposter/` — GitHub REST API client for posting PR reviews. Implements bot-identity self-check, `.pr-reviewer.yaml` autoApprove config, prior-review dismissal, POST review, verify-after-POST (catches phantom POSTs), and per-call retry policy (one retry max for transient errors; no retry for permanent). Used by `in_progress` and `ai_review` phases in subsequent prompts. (spec 027 prompt 1/3)
+- chore(agent/pr-reviewer): wrap phase-output JSON in fenced ```json blocks across `planning_output-format.md`, `execution_output-format.md`, `review_output-format.md` so the `## Plan` / `## Review` / `## Verdict` sections render readably in Obsidian; downstream parsers already accept fenced JSON (no parser change)
+
+## v0.23.39
+
+- feat(watcher/github-pr): per-(PR, SHA) spawn model — each push produces a new task file identified by the head commit SHA; the old task file is never mutated; removes `publishForcePush` and the `## Outdated by force-push` mutation path; `DeriveTaskID` now encodes full SHA in UUID5 key; `computePRTitle` adds `sha[:8]` segment between PR number and slug
+
+## v0.23.38
+
+- feat(agent/pr-reviewer): collapse verdict from three values to two — every review now ends with approve or request-changes; Should Fix findings escalate to request-changes (was comment); empty or unparseable agent output defaults to request-changes (fail-closed); comment constant removed, compiler-enforced
+
+## v0.23.37
+
+- feat(agent/pr-reviewer): per-task-type dispatch via factory.CreateAgentProvider — healthcheck task type now routes to a dedicated liveness agent built from lib/healthcheck; unknown task_type values fail fast via lib.AgentProvider.Get; bumps agent/lib v0.62.5 → v0.62.16
+- feat(agent/pr-reviewer): add `healthcheck` to `taskTypes` list alongside `pr-review` + `oauth-probe` — prepares for healthcheck dispatch (rename of `oauth-probe`); no behavior change yet
+
+## v0.23.36
+
+- feat(agent/pr-reviewer): wire `JobMetrics` from `github.com/bborbe/agent/lib/metrics@v0.62.5` into `Run()` — constructs a fresh registry + pusher at startup, defers `PushContext` for end-of-run metric delivery, records run outcome and duration at every return path; adds `PUSHGATEWAY_URL` (default `http://pushgateway:9090`) and `TASK_TYPE` (default `unknown`) env fields; bumps `agent/lib` from `v0.62.4` to `v0.62.5`
+
+## v0.23.35
+
+- fix(pr-reviewer): bump `github.com/bborbe/agent/lib` v0.57.0 → v0.61.0 so `passthroughContentGenerator` writes a `## Failure` body section on BOTH `status: failed` AND `status: needs_input` results. Fixes 2026-05-12 incident on PR `bborbe/trading#122` where a Claude CLI 401 left the task page with no failure reason, forcing operators to race the agent pod's TTL cleanup to grab `kubectl logs`. Adds a factory-level regression test guarding the version pin against future accidental downgrade.
+
+## v0.23.34
+
+- feat(watcher/github-build): add `task_type: build-fix` to all emitted task commands; translate `assignee=human` to `""` per 2026-05-10 cross-repo doctrine
+
+## v0.23.33
 
 - feat(watcher/github-pr,watcher/github-build): make filename length caps configurable via env vars `MAX_SLUG_LEN` (default `80`, was `50` const) and `MAX_TITLE_LEN` (default `200`, unchanged). Bump of slug default from 50→80 preserves typical PR-title information that previously truncated mid-word. Watchers fail-loud at startup if either value is ≤0 or if MAX_SLUG_LEN >= MAX_TITLE_LEN. github-build only honors MAX_TITLE_LEN (no slug in build-failure filenames).
 - chore(test): make `-race` flag opt-in via `RACE` Makefile variable (default `true` preserves local behaviour). CI sets `RACE=false` to sidestep ubuntu-latest+go1.26.3 segfault under `-race` in `agent/pr-reviewer` (run 25558544578). Race detection still on for local dev + can be re-enabled in CI by removing the env block when the runner issue is resolved.
+- feat(watcher/github-pr): add `task_type: pr-review` to all emitted task commands; set `assignee: ""` on untrusted-author create and force-push paths per 2026-05-10 cross-repo doctrine
 
 ## v0.23.32
 
@@ -144,12 +201,6 @@ All notable changes to this project will be documented in this file.
 ## v0.23.3
 
 - feat(watcher): add `WIPTitleFilter` (skip PRs with `WIP:` / `WIP ` title prefix) and `AgeFilter` (skip PRs older than `MAX_PR_AGE`, default 90 days). Both extend the `TaskCreationFilter` chain. Configurable via `MAX_PR_AGE` env var (libtime extended duration; empty disables age filter, negative rejected at startup).
-
-Please choose versions by [Semantic Versioning](http://semver.org/).
-
-* MAJOR version when you make incompatible API changes,
-* MINOR version when you add functionality in a backwards-compatible manner, and
-* PATCH version when you make backwards-compatible bug fixes.
 
 ## v0.23.2
 

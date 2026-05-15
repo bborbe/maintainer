@@ -336,8 +336,8 @@ func submitGitHubReview(
 		return postGitHubComment(ctx, ghClient, prInfo, reviewText)
 	}
 
-	// Handle approve verdict based on autoApprove setting
-	if result.Verdict == prpkg.VerdictApprove {
+	switch result.Verdict {
+	case prpkg.VerdictApprove:
 		return handleGitHubApprove(
 			ctx,
 			autoApprove,
@@ -346,10 +346,7 @@ func submitGitHubReview(
 			prInfo,
 			reviewText,
 		)
-	}
-
-	// Submit structured review for request-changes
-	if result.Verdict == prpkg.VerdictRequestChanges {
+	case prpkg.VerdictRequestChanges:
 		return submitGitHubStructuredReview(
 			ctx,
 			result,
@@ -357,10 +354,9 @@ func submitGitHubReview(
 			prInfo,
 			reviewText,
 		)
+	default:
+		return errors.Errorf(ctx, "unsupported verdict %q", result.Verdict)
 	}
-
-	// Fallback to plain comment for VerdictComment
-	return postGitHubComment(ctx, ghClient, prInfo, reviewText)
 }
 
 // postGitHubComment posts a plain comment to a GitHub PR.
@@ -495,7 +491,6 @@ func submitBitbucketReview(
 		return nil
 	}
 
-	// VerdictComment - no verdict action needed
 	logAlways("done")
 	return nil
 }

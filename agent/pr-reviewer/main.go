@@ -11,10 +11,12 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	delivery "github.com/bborbe/agent/lib/delivery"
+	libmetrics "github.com/bborbe/agent/lib/metrics"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
@@ -23,11 +25,17 @@ import (
 	libtime "github.com/bborbe/time"
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
+
+const agentName = "pr-reviewer-agent"
 
 func main() {
 	app := &application{}
@@ -73,22 +81,58 @@ type application struct {
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
+
+	PushgatewayURL string `required:"false" arg:"pushgateway-url" env:"PUSHGATEWAY_URL" usage:"Prometheus PushGateway URL"          default:"http://pushgateway:9090"`
+	TaskType       string `required:"false" arg:"task-type"       env:"TASK_TYPE"       usage:"Task type label for metric grouping" default:"unknown"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	registry := prometheus.NewRegistry()
+	jobMetrics := libmetrics.NewJobMetrics(registry, libtime.NewCurrentDateTime())
+	pusher := push.New(a.PushgatewayURL, libmetrics.BuildJobMetricsName(agentName)).
+		Grouping("agent", agentName).
+		Grouping("task_type", a.TaskType).
+		Collector(registry)
+	defer func() {
+		if err := pusher.PushContext(ctx); err != nil {
+			glog.Warningf("prometheus push failed: %v", err)
+			return
+		}
+		glog.V(2).Infof("prometheus push completed")
+	}()
+	start := libtime.NewCurrentDateTime().Now().Time()
+
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
 
 	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return err
+	}
+	// Warn on malformed entries; allow-all and wildcard semantics handled by IsAllowed at match time.
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		glog.Warningf(
+			"REPO_ALLOWLIST contains malformed entries (will be ignored at match time): %v",
+			validationErr,
+		)
 	}
 	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return err
 	}
 	defer cleanup()
+
+	agent, err := a.dispatchAgent(ctx, repoAllowlist)
+	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
+		return errors.Wrap(ctx, err, "task type dispatch")
+	}
 
 	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
@@ -104,11 +148,46 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		Phase:           a.Phase,
 		TaskContent:     a.TaskContent,
 		Deliverer:       deliverer,
+		Agent:           agent,
 	})
 	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
 		return errors.Wrap(ctx, err, "agent run failed")
 	}
+	jobMetrics.RecordRun(result.Status)
+	jobMetrics.RecordDuration(time.Since(start))
 	return agentlib.PrintResult(result)
+}
+
+// dispatchAgent builds the correct agent for the configured task type.
+func (a *application) dispatchAgent(
+	ctx context.Context,
+	repoAllowlist []string,
+) (*agentlib.Agent, error) {
+	env := map[string]string{}
+	if a.GHToken != "" {
+		env["GH_TOKEN"] = a.GHToken
+	}
+	repoManager := git.NewRepoManager(git.WorkdirConfig{
+		ReposPath: a.ReposPath,
+		WorkPath:  a.WorkPath,
+	})
+	provider := factory.CreateAgentProvider(
+		a.ClaudeConfigDir,
+		a.AgentDir,
+		a.Model,
+		a.GHToken,
+		env,
+		repoManager,
+		a.ReviewMode,
+		repoAllowlist,
+	)
+	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "select agent for task_type")
+	}
+	return agent, nil
 }
 
 // createDeliverer builds the Kafka result deliverer when TASK_ID is set,

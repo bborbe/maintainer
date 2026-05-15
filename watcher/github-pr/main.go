@@ -25,6 +25,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
@@ -126,6 +127,7 @@ func (a *application) validateConfig(ctx context.Context) error {
 	return validateLengthCaps(ctx, a.MaxSlugLen, a.MaxTitleLen)
 }
 
+//nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 82 lines, 2 over the 80-line cap.
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err := a.validateConfig(ctx); err != nil {
 		return err
@@ -158,12 +160,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return err
 	}
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		glog.Warningf("repo-allowlist: malformed entries ignored at match time: %v", validationErr)
+	}
 	if len(repoAllowlist) == 0 {
 		glog.V(2).Infof("repo-allowlist count=0 (allow-all)")
 	} else {
 		glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 	}
-
 	taskCreationFilter := filter.TaskCreationFilters{
 		filter.NewDraftFilter(),
 		filter.NewBotAuthorFilter(botAllowlist),

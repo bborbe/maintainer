@@ -10,39 +10,34 @@ package factory
 
 import (
 	"context"
+	"net/http"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	delivery "github.com/bborbe/agent/lib/delivery"
+	"github.com/bborbe/agent/lib/healthcheck"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
-	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
 const serviceName = "maintainer-agent-pr-reviewer"
 
-// AgentRunner is the minimal interface satisfied by *agentlib.Agent.
-type AgentRunner interface {
-	Run(
-		ctx context.Context,
-		phaseName domain.TaskPhase,
-		taskContent string,
-		deliverer agentlib.ResultDeliverer,
-	) (*agentlib.Result, error)
-}
-
 // Per-phase tool scopes. Principle: each phase gets the smallest set that
 // lets it do its job. Planning + Review are read-only inspection. Execution
-// gets broader git/gh access for cross-file reads but still cannot post
-// (no `gh pr comment` / `gh pr review`) — posting happens out-of-band
-// after the human approves the verdict.
+// gets broader git access for cross-file reads; posting happens in-process
+// via the PrPoster (Go net/http, not gh CLI) after the LLM step completes,
+// gated by bot-identity self-check (GET /user == pr-review-of-ben) and
+// per-repo .pr-reviewer.yaml (autoApprove: bool). The ai_review phase
+// independently verifies the post via GET /pulls/{n}/reviews before
+// advancing to done.
 var (
 	planningTools = claudelib.AllowedTools{
 		"Read", "Grep", "Glob",
@@ -136,13 +131,27 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
+// CreatePrPoster wires a PrPoster backed by net/http.DefaultClient.
+// token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
+// (BOT_GITHUB_LOGIN env, default "pr-review-of-ben" if empty). Pure plumbing; no logic.
+func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
+	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
+}
+
+// CreateReviewVerifier wires a ReviewVerifier backed by net/http.DefaultClient.
+// token is the bot PAT; botLogin is the expected bot login.
+func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
+	return githubposter.NewReviewVerifier(http.DefaultClient, token, botLogin)
+}
+
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase
 // tool scopes and per-phase prompts:
 //
 //   - planning: read-only diff inspection → ## Plan (JSON)
-//   - in_progress: read + cross-file inspection → ## Review (JSON)
+//   - in_progress: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
 //   - ai_review: minimal read-only fresh-context verifier → ## Verdict (JSON);
-//     verdict=pass → done, otherwise → human_review
+//     verdict=pass → done, otherwise → human_review; verifier confirms review
+//     persisted on GitHub (nil verifier skips verification)
 func CreateAgent(
 	claudeConfigDir claudelib.ClaudeConfigDir,
 	agentDir claudelib.AgentDir,
@@ -152,7 +161,10 @@ func CreateAgent(
 	repoManager git.RepoManager,
 	reviewMode string,
 	repoAllowlist []string,
-) AgentRunner {
+	prPoster prpkg.PrPoster,
+	verifier prpkg.ReviewVerifier,
+) *agentlib.Agent {
+	botLogin := ResolveBotLogin(env)
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
 		Name:          "pr-plan",
@@ -170,16 +182,63 @@ func CreateAgent(
 		executionTools,
 		reviewMode,
 		repoAllowlist,
+		prPoster,
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
 		prompts.BuildReviewInstructions(),
+		verifier,
+		ghToken,
+		botLogin,
 	)
 	return agentlib.NewAgent(
 		agentlib.NewPhase("planning", tokenCheck, planningStep),
 		agentlib.NewPhase("in_progress", tokenCheck, executionStep),
 		agentlib.NewPhase("ai_review", tokenCheck, reviewStep),
 	)
+}
+
+// CreateAgentProvider wires the per-task-type dispatch table for maintainer-agent-pr-reviewer.
+// TaskTypePRReview routes to the 3-phase domain agent built by CreateAgent.
+// TaskTypeHealthcheck routes to a liveness agent that reuses the Claude runner factory.
+// Pure plumbing; no conditional, no error.
+func CreateAgentProvider(
+	claudeConfigDir claudelib.ClaudeConfigDir,
+	agentDir claudelib.AgentDir,
+	model claudelib.ClaudeModel,
+	ghToken string,
+	env map[string]string,
+	repoManager git.RepoManager,
+	reviewMode string,
+	repoAllowlist []string,
+) agentlib.AgentProvider {
+	botLogin := ResolveBotLogin(env)
+	poster := CreatePrPoster(ghToken, botLogin)
+	verifier := CreateReviewVerifier(ghToken, botLogin)
+	domainAgent := CreateAgent(
+		claudeConfigDir,
+		agentDir,
+		model,
+		ghToken,
+		env,
+		repoManager,
+		reviewMode,
+		repoAllowlist,
+		poster,
+		verifier,
+	)
+	healthcheckRunner := CreateClaudeRunner(
+		claudeConfigDir,
+		agentDir,
+		model,
+		env,
+		claudelib.AllowedTools{},
+	)
+	livenessAgent := healthcheck.NewAgent(healthcheck.NewClaudeStep(healthcheckRunner))
+	return agentlib.NewAgentProvider(serviceName, map[agentlib.TaskType]*agentlib.Agent{
+		agentlib.TaskTypePRReview:    domainAgent,
+		agentlib.TaskTypeHealthcheck: livenessAgent,
+	})
 }
 
 // CreateDeliverer builds the Kafka result deliverer used by the Kafka

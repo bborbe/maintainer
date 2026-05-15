@@ -78,6 +78,7 @@ var _ = Describe("Watcher", func() {
 				_, cmd := createSender.SendCommandArgsForCall(0)
 				Expect(string(cmd.TaskIdentifier)).NotTo(BeEmpty())
 				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+				Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
 				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-abc"))
 				Expect(cmd.Title).To(Equal("Build Failure github - owner-repo - sha-abc"))
 
@@ -466,6 +467,7 @@ var _ = Describe("Watcher", func() {
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd := createSender.SendCommandArgsForCall(0)
 				Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+				Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
 			})
 		})
 
@@ -556,8 +558,35 @@ var _ = Describe("Watcher", func() {
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
 			Expect(cmd.Frontmatter["assignee"]).To(Equal("other-agent"))
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
 			Expect(cmd.Frontmatter["status"]).To(Equal("backlog"))
 			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
+		})
+
+		It("translates assignee=human to empty string in emitted frontmatter", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRun(20, "sha-human"), nil)
+
+			w := makeCustomWatcher([]string{"owner/repo"}, "human", "todo", "")
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, cmd := createSender.SendCommandArgsForCall(0)
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
+			Expect(cmd.Frontmatter["assignee"]).To(Equal(""))
+		})
+
+		It("passes through assignee=build-fix-planner unchanged", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRun(21, "sha-planner"), nil)
+
+			w := makeCustomWatcher([]string{"owner/repo"}, "build-fix-planner", "todo", "")
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, cmd := createSender.SendCommandArgsForCall(0)
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fix-planner"))
 		})
 
 		It("includes phase key when WATCHER_GITHUB_BUILD_TASK_PHASE is non-empty", func() {
@@ -645,6 +674,7 @@ var _ = Describe("Watcher", func() {
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
 			Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
 			Expect(cmd.Frontmatter["status"]).To(Equal("todo"))
 			Expect(cmd.Frontmatter).NotTo(HaveKey("phase"))
 		})
@@ -664,6 +694,7 @@ var _ = Describe("Watcher", func() {
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
 			Expect(cmd.Frontmatter["assignee"]).To(Equal("go-deps-fixer-agent"))
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
 			Expect(cmd.Frontmatter["status"]).To(Equal("backlog"))
 			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
 		})
@@ -698,6 +729,22 @@ var _ = Describe("Watcher", func() {
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
 			Expect(cmd.Frontmatter["assignee"]).To(Equal("build-fixer-agent"))
+		})
+
+		It("translates maintenance override assignee=human to empty string", func() {
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-human-override"), nil)
+			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{
+				Assignee: "human",
+			})
+
+			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
+			Expect(w.Poll(ctx)).To(Succeed())
+
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, cmd := createSender.SendCommandArgsForCall(0)
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("build-fix"))
+			Expect(cmd.Frontmatter["assignee"]).To(Equal(""))
 		})
 
 		It("loader is NOT called on red→red (no wasted API call)", func() {

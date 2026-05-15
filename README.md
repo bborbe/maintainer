@@ -23,7 +23,7 @@ Multi-module layout: root has no `go.mod`; each service (`agent/pr-reviewer/`, `
 
 ## Standalone CLI
 
-Takes a GitHub or Bitbucket Server PR URL, runs Claude Code review in a `claude-yolo` container against a local checkout, and posts the review back with a verdict (approve / request-changes / comment).
+Takes a GitHub or Bitbucket Server PR URL, runs Claude Code review in a `claude-yolo` container against a local checkout, and posts the review back with a verdict (approve / request-changes).
 
 ```bash
 go install github.com/bborbe/maintainer/agent/pr-reviewer/cmd/cli@latest
@@ -130,7 +130,7 @@ maintainer/
 Review output must end with a JSON block:
 
 ```json
-{"verdict": "approve|request-changes|comment", "reason": "<one-liner>"}
+{"verdict": "approve|request-changes", "reason": "<one-liner>"}
 ```
 
 Fallback: heuristic section-header scan (`## Must Fix`, `## Blocking`). See [`pkg/verdict/`](agent/pr-reviewer/pkg/verdict/).

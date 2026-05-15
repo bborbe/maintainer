@@ -17,24 +17,44 @@ var _ = Describe("TaskID", func() {
 
 	Describe("Derive", func() {
 		It("is deterministic — same inputs always produce the same UUID", func() {
-			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42)
-			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 42)
+			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "abc123def456789a")
+			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "abc123def456789a")
 			Expect(a).To(Equal(b))
 		})
 
 		It("produces different UUIDs for different owner/repo/number combos", func() {
-			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42)
-			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 43)
-			c := pkg.DeriveTaskID("bborbe", "other-repo", 42)
-			d := pkg.DeriveTaskID("other-org", "code-reviewer", 42)
+			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "abc123def456789a")
+			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 43, "abc123def456789a")
+			c := pkg.DeriveTaskID("bborbe", "other-repo", 42, "abc123def456789a")
+			d := pkg.DeriveTaskID("other-org", "code-reviewer", 42, "abc123def456789a")
 			Expect(a).NotTo(Equal(b))
 			Expect(a).NotTo(Equal(c))
 			Expect(a).NotTo(Equal(d))
 		})
 
-		It("produces the expected pinned UUID for bborbe/code-reviewer#42", func() {
-			expected := uuid.NewSHA1(prWatcherNamespace, []byte("bborbe/code-reviewer#42"))
-			Expect(pkg.DeriveTaskID("bborbe", "code-reviewer", 42)).To(Equal(expected))
+		It(
+			"produces the expected pinned UUID for bborbe/code-reviewer#42@abc123def456789a",
+			func() {
+				expected := uuid.NewSHA1(
+					prWatcherNamespace,
+					[]byte("bborbe/code-reviewer#42@abc123def456789a"),
+				)
+				Expect(
+					pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "abc123def456789a"),
+				).To(Equal(expected))
+			},
+		)
+
+		It("produces different UUIDs for same PR but different SHAs", func() {
+			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "sha-aaa")
+			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "sha-bbb")
+			Expect(a).NotTo(Equal(b))
+		})
+
+		It("two calls with identical (owner, repo, number, sha) produce the same UUID", func() {
+			a := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "sha-stable")
+			b := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "sha-stable")
+			Expect(a).To(Equal(b))
 		})
 	})
 })

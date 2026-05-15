@@ -4,6 +4,16 @@ Polls the GitHub Actions API for failed CI workflow runs on the default branches
 repo allowlist and publishes a `CreateTaskCommand` to Kafka on each `green → red` transition so a
 build-fixer agent can pick it up.
 
+## Links
+
+Dev:
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-build/setloglevel/3
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-build/trigger
+
+Prod:
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-build/setloglevel/3
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-build/trigger
+
 ## How It Works
 
 For each repo in the allowlist the watcher fetches the latest completed workflow runs on the
