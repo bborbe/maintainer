@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [027-post-verdict-to-github-pr]
 created: "2026-05-15T18:00:00Z"
+queued: "2026-05-15T17:15:23Z"
 ---
 
 <summary>
@@ -175,7 +176,7 @@ Replace step 3 with the new posting sequence. The new `runClaude` should:
    - If ParsePRURL fails: append diagnostic block (class=permanent) and escalate to human_review
 6. Get head SHA from frontmatter: `ref, _ := md.Frontmatter.String("ref")`
 7. Get GH_TOKEN from `s.env["GH_TOKEN"]`
-8. Get BOT_GITHUB_LOGIN from `s.env["BOT_GITHUB_LOGIN"]` (empty string means poster uses its default)
+8. (DROPPED) `BOT_GITHUB_LOGIN` is read ONCE in `CreateAgentProvider` (factory.go) and bound to the poster at construction time. The step does not re-read it.
 9. Get worktree path (already available as `worktreePath` parameter in `runClaude`)
 10. Build `PostRequest` and call `s.prPoster.Post(ctx, req)`
 11. Append diagnostic block to md (always — success and failure)
@@ -211,21 +212,28 @@ func buildDiagnosticBlock(jobRunTime time.Time, triggerCount int, result githubp
         httpStatusStr,
         result.ErrorMessage,
         respBody,
-        result.ElapsedMS,
+        result.ElapsedMs,
     )
 }
 ```
 
-To append to `## Diagnostics`:
+To append to `## Diagnostics` (nil-safe — `FindSection` returns `(*Section, bool)` and is nil when absent):
 ```go
-existing, _ := md.FindSection("## Diagnostics")
-newBody := existing.Body + "\n" + buildDiagnosticBlock(...)
-md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: strings.TrimLeft(newBody, "\n")})
+var existingBody string
+if existing, ok := md.FindSection("## Diagnostics"); ok && existing != nil {
+    existingBody = existing.Body
+}
+newBody := strings.TrimLeft(existingBody+"\n"+buildDiagnosticBlock(...), "\n")
+md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
 ```
 
-Get `trigger_count` from `md.Frontmatter` (key `"trigger_count"`). If the method signature returns a string, convert to int. If int method exists, use it. If the key is absent, use 0.
+Get trigger_count from frontmatter using the typed accessor: `md.Frontmatter.TriggerCount()` returns `int` (0 if absent). Do NOT scan for the raw key.
 
-**PR URL extraction fallback**: if no GitHub PR URL is found in the task content (e.g., Bitbucket URL or non-PR task), set `owner="unknown"`, `repo="unknown"`, `number=0` and let the poster fail with a permanent error at the identity-check step. Do NOT silently skip posting — the diagnostic will capture the failure clearly.
+**PR URL extraction**: cache `prURL` ONCE at the top of `runClaude`, before any `md.ReplaceSection` call mutates the body — scanning `md.Marshal()` after `## Review` is written would match a URL inside the review body itself. Extract from the preamble (task body before the first `## ` heading).
+
+**PR URL handling rules** (one consistent rule, no synthesis):
+- GitHub PR URL found → proceed with posting
+- Bitbucket URL OR no URL at all → skip posting (do NOT synthesize `owner="unknown"`); write a `class: permanent` Diagnostics entry naming the missing/non-GitHub URL; phase returns `AgentStatusFailed` → controller escalates per trigger_count cap. (Bitbucket parity is out of scope for spec 027.)
 
 ---
 
@@ -322,16 +330,17 @@ Replace the existing comment block (currently says "execution still cannot post.
 
 ---
 
-## Step 4 — Update callers of `CreateAgent` with `nil` poster
+## Step 4 — Update callers of `CreateAgent`
 
-Grep for all other callers of `CreateAgent` (besides `CreateAgentProvider`):
+Grep for all other callers (besides `CreateAgentProvider`):
 
 ```bash
 grep -rn "CreateAgent\b" agent/pr-reviewer/
 ```
 
-- `pkg/factory/factory_test.go` — The test calls `factory.CreateAgent(...)`. Add `nil` as the last argument. Tests that don't need posting should pass `nil` to skip it.
-- Any other caller: add `nil` as the last argument.
+- **`pkg/factory/runner.go` (around line 77)** — `cfg.Agent == nil` fallback constructs `CreateAgent`. **Inject a real poster** here so `cmd/run-task` actually exercises posting locally — required by spec AC line 211 ("local smoke test posts a real review"). Build `poster := CreatePrPoster(cfg.GHToken, cfg.Env["BOT_GITHUB_LOGIN"])` and pass it as the last argument. Do NOT pass nil — that disables the AC's smoke test.
+- **`pkg/factory/factory_test.go`** — pass `nil` as the last argument for tests that don't need posting; for the test exercising the end-to-end factory wiring, use a `FakePrPoster` instead.
+- Any other caller: pass `nil` if posting is irrelevant; pass a real or fake poster otherwise.
 
 ---
 
@@ -364,7 +373,7 @@ Add a new `Describe("posting behavior", func() {...})` context inside the existi
 
 4. **422 (not-a-failure) — advances to ai_review**: mock the poster to return `PostResult{Outcome:"success", Class:ErrorClassNotAFailure}` → result has `NextPhase=="ai_review"`
 
-5. **## Review vault is preserved regardless of poster outcome**: after a failed post, `md.FindSection("## Review")` should still return the review content written by runClaude
+5. **## Review vault is preserved regardless of poster outcome — table-driven across ALL ErrorClass values.** Use `DescribeTable` enumerating every `pkg.githubposter.ErrorClass` value (`transient`, `permanent`, `unknown`, `not-a-failure`, `soft-warning`). For each: run runClaude with the verdict, mock the poster to return the corresponding outcome, then assert `md.FindSection("## Review").Body` equals the canonical post-runClaude body. Prevents future ErrorClass additions from silently breaking the vault-first invariant (spec AC line 201).
 
 6. **Diagnostic blocks are append-only**: call the posting logic twice via two separate runs (or simulate two calls by pre-populating `## Diagnostics`) and assert the second block is appended after the first
 

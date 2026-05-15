@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [027-post-verdict-to-github-pr]
 created: "2026-05-15T18:00:00Z"
+queued: "2026-05-15T17:15:23Z"
 ---
 
 <summary>
@@ -10,7 +11,7 @@ created: "2026-05-15T18:00:00Z"
 - When verification fails, ai_review writes a diagnostic line to `## Diagnostics` and exits with `failed`, so the controller can re-spawn the Job — same retry loop as in_progress failures
 - The `reviewStep` accepts a `ReviewVerifier` dependency (Counterfeiter-mocked in tests); nil = skip verification (backward-compatible)
 - `docs/architecture.md` gains a 4th ai_review check in its consistency-check section
-- A scenario file `scenarios/NNN-pr-reviewer-post-verdict.md` is written as a manual verification checklist covering the full end-to-end post-verdict flow
+- A scenario file `scenarios/017-pr-reviewer-post-verdict.md` is written as a manual verification checklist covering the full end-to-end post-verdict flow (including a Rung-1 simulation where ai_review's verification triggers on an empty review list)
 - The factory wires a `ReviewVerifier` (backed by `net/http.DefaultClient` + bot PAT) into the ai_review step via `CreateAgent`
 - All existing ai_review quality checks (concerns addressed, hallucinations, verdict consistency) run unconditionally — the new verification step is additive, never a replacement
 </summary>
@@ -50,7 +51,7 @@ If any of these are missing, STOP and report `{"status":"failed","message":"prio
 
 **Scenario writing guide:**
 
-Read `docs/scenario-writing.md` in `/workspace/` for scenario file format.
+Mirror the format of `scenarios/016-build-watcher-end-to-end.md` (most recent existing scenario in this repo). There is no separate `scenario-writing.md` — the convention is established by example.
 
 **Symbol verification:**
 
@@ -166,32 +167,26 @@ if s.verifier != nil && shouldVerify {
 
 Implement `callVerifier(ctx, md) *githubposter.VerifyResult`:
 
-1. Parse PR URL from task (same approach as in_progress: find GitHub PR URL in serialized task content, call `ParsePRURL`)
-2. If not GitHub PR or parsing fails: log warning, return nil (skip — Bitbucket is out of scope)
-3. Get head SHA from `md.Frontmatter.String("ref")`
-4. Get GH_TOKEN from `md.Frontmatter` or another source — **check how the reviewStep currently accesses GH_TOKEN**. If the runner's env is not directly accessible, add a `ghToken string` field to `reviewStep` (set by `NewReviewStep`).
-5. Determine `expectedState`: read `## Review` section, call `ParseVerdict`, map verdict+autoApprove to event, convert to state (`APPROVE→APPROVED`, `REQUEST_CHANGES→CHANGES_REQUESTED`, `COMMENT→COMMENTED`). For expectedState, re-read the `.pr-reviewer.yaml` from the worktree — or simplify by accepting any non-empty state from the bot (check `user.login == botLogin && commit_id == headSHA` without asserting the state, then confirm the state matches an expected set).
-   
-   **Practical simplification**: checking that a review by `pr-review-of-ben` exists for the current head SHA (regardless of exact state) is sufficient for ai_review — the in_progress step already validated the exact state. For ai_review, call `VerifyRequest` with `ExpectedState: ""` and implement the verifier to accept any state if `ExpectedState` is empty. **Check the verifier implementation from prompt 1** — if it requires a specific state, re-read and adapt.
-   
-   Alternatively: reconstruct the expected state by reading `autoApprove` from the worktree path stored in frontmatter. The worktree path is available as `worktree_path` in frontmatter — grep for it. If not present, derive it from `task_identifier` and `repos_path`.
+1. Parse PR URL from task (same approach as in_progress: extract from task preamble BEFORE `## ` headings — do NOT scan `md.Marshal()` after the verdict is written). Call `ParsePRURL`.
+2. If not GitHub PR or parsing fails: log warning, return nil (skip — Bitbucket is out of scope).
+3. Get head SHA from `md.Frontmatter.String("ref")`.
+4. The `reviewStep` struct has new fields `ghToken string` and `botLogin string` (added in step 2d). Use `s.ghToken` and `s.botLogin`.
+5. **`ExpectedStates`: pass the full set of valid post-review states**: `[]string{"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}`. Rationale: in_progress already validated the exact state at POST time; ai_review's role here is to confirm persistence (a bot review exists for the head SHA), not to re-validate which event was used. Passing the full set avoids ai_review having to re-read `.pr-reviewer.yaml` and recompute the autoApprove demotion — a logic duplication that would race against config edits between phases. Prompt 1's verifier filters `user.login + commit_id + state ∈ ExpectedStates`; with all three states allowed, any bot review on the correct SHA matches. Do NOT modify `pkg/githubposter/` — keep the contract clean.
 
-   **Decision**: use `ExpectedState: ""` to match any review by the bot on the correct SHA. Adapt the verifier's `VerifyReview` implementation if needed (allow empty ExpectedState to skip state check). Document this simplification in `## Improvements`.
+6. Call `s.verifier.VerifyReview(ctx, req)`.
+7. If `result.Found`: return nil (success, no diagnostic needed).
+8. If not found: return `&result`.
 
-6. Call `s.verifier.VerifyReview(ctx, req)`
-7. If `result.Found`: return nil (success, no diagnostic needed)
-8. If not found: return `&result`
-
-Implement `appendVerifyDiagnostic(ctx, md, result githubposter.VerifyResult)`:
-Similar to the diagnostic writing in in_progress (prompt 2), append a line or block to `## Diagnostics`:
+Implement `appendVerifyDiagnostic(ctx context.Context, md *agentlib.Markdown, result githubposter.VerifyResult)`:
+Append a one-line entry under `## Diagnostics`, distinct from in_progress's fenced YAML blocks (so the operator can grep `ai_review verify:` for ai_review entries specifically):
 ```
-ai_review verify: outcome=failed class=<class> escalate_hint=<hint> error=<message>
+ai_review verify: outcome=failed class=<class> escalate_hint=<hint> http_status=<n> error=<message>
 ```
-Use the same append pattern as in_progress (find existing section, append, ReplaceSection).
+Use the same nil-safe append pattern as in_progress prompt 2 (`FindSection` returns `(*Section, bool)`; guard nil; `TrimLeft` newlines; `ReplaceSection`). No return value — internal errors logged via `glog`; the failed `VerifyResult` is returned by `verifyPost` regardless.
 
-### 2d. Ensure GH_TOKEN is accessible in reviewStep
+### 2d. Add ghToken + botLogin fields to reviewStep
 
-Check if `reviewStep` currently has access to the bot token. If not, add `ghToken string` and `botLogin string` fields, set them in `NewReviewStep`. Update the factory accordingly.
+Add `ghToken string` and `botLogin string` fields to the `reviewStep` struct. Extend `NewReviewStep` to accept them as the last two arguments. Update the factory's `CreateAgent` call (and `CreatePrPoster` already resolves `botLogin` — pass the same resolved value). Do NOT re-read `BOT_GITHUB_LOGIN` from env here — the factory owns the env-var resolution and binds the value to both the poster and the reviewStep at construction time.
 
 ---
 
@@ -297,6 +292,20 @@ Import `FakeReviewVerifier` from mocks. Add a new `Describe` context for verific
 - `NewReviewStep(runner, instructions, nil)`
 - No panic; step runs normally
 
+**Test: shouldVerifyPost handles ## Diagnostics absent**
+- Task has `## Review` (valid verdict) but NO `## Diagnostics` section
+- Assert `shouldVerifyPost` returns `(true, nil)` — verification should run
+
+**Test: shouldVerifyPost selects the MOST RECENT diagnostic block when multiple exist**
+- Task has `## Diagnostics` containing TWO YAML blocks: first with `class: permanent` (older — trigger_count 0), second with `class: transient` (newer — trigger_count 1)
+- Assert `shouldVerifyPost` returns `(true, nil)` — the newer block is transient, so verification proceeds despite the older permanent entry. This protects against cross-Job-respawn cases where an earlier permanent failure should NOT block verification on the current successful run.
+
+**Test: diagnostic format round-trip with prompt 2's exact output**
+- Use the literal fenced YAML block that prompt 2's `buildDiagnosticBlock` produces (copy from spec DB#9 schema): `\`\`\`yaml\njob_run: ...\ntrigger_count: 1\noutcome: failed\nfailure_step: POST /pulls/2/reviews\nclass: permanent\nescalate_hint: true\n...\n\`\`\``
+- Place it under `## Diagnostics` in a fixture task
+- Assert `shouldVerifyPost` returns `(false, nil)` — parses the YAML, extracts `class: permanent`, decides to skip
+- Critical: this is the **boundary test** that catches whitespace/tag/key-name mismatches between prompt 2's writer and prompt 3's reader. If prompt 2 changes its output format, this test fails fast.
+
 ---
 
 ## Step 6 — Update `agent/pr-reviewer/docs/architecture.md`
@@ -314,11 +323,11 @@ Change `verdict consistency)` at the end of the ai_review Emits description to:
 
 ---
 
-## Step 7 — Write `scenarios/NNN-pr-reviewer-post-verdict.md`
+## Step 7 — Write `scenarios/017-pr-reviewer-post-verdict.md`
 
-Read `docs/scenario-writing.md` first to understand the required format.
+Read `scenarios/016-build-watcher-end-to-end.md` to anchor the format (most recent existing scenario).
 
-After reading the format guide, write the scenario. The dark-factory will assign the actual number — use `NNN` as placeholder (the file will be renamed on approval). Write the scenario to `scenarios/pr-reviewer-post-verdict.md` (no number prefix; dark-factory assigns the number on scenario approval).
+Write the scenario to `scenarios/017-pr-reviewer-post-verdict.md`. The number `017` is the next free slot — confirm by `ls scenarios/ | grep -E '^[0-9]{3}-' | sort | tail -1` (should show `016-...`). The `spec` field inside the scenario frontmatter uses the full slug: `spec: 027-post-verdict-to-github-pr` (matching the convention in `016-build-watcher-end-to-end.md`).
 
 ```markdown
 ---
@@ -451,7 +460,7 @@ Must exit 0.
 - **Frozen verdict schema**: no `comment` verdict. `VerdictApprove` and `VerdictRequestChanges` are the only valid values.
 - **`CreateAgent` signature changes**: update ALL call sites found by grep. Pass `nil` verifier where appropriate.
 - **Do NOT modify `cmd/run-task/main.go`** or `cmd/cli/main.go`.
-- **Scenario file**: write to `scenarios/pr-reviewer-post-verdict.md` (no number prefix — dark-factory assigns the number). If `scenarios/` directory does not exist, create it.
+- **Scenario file**: write to `scenarios/017-pr-reviewer-post-verdict.md` (017 = next free number after `016-build-watcher-end-to-end.md`). dark-factory does NOT manage `scenarios/` numbering — the prompt picks the number explicitly.
 - Do NOT commit — dark-factory handles git.
 - `make precommit` runs from `agent/pr-reviewer/`, never at repo root.
 - Test coverage ≥80% for modified packages.
@@ -485,8 +494,8 @@ Expected: one match in the ai_review consistency check section.
 
 Confirm scenario file:
 ```bash
-ls scenarios/pr-reviewer-post-verdict.md
-grep -n "phantom\|REQUEST_CHANGES\|dismiss\|pr-review-of-ben" scenarios/pr-reviewer-post-verdict.md | wc -l
+ls scenarios/017-pr-reviewer-post-verdict.md
+grep -n "phantom\|REQUEST_CHANGES\|dismiss\|pr-review-of-ben" scenarios/017-pr-reviewer-post-verdict.md | wc -l
 ```
 Expected: file exists; at least 4 matches for the key behaviors.
 
