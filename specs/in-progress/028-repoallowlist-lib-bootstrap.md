@@ -1,10 +1,11 @@
 ---
-status: generating
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-05-15T18:54:13Z"
 generating: "2026-05-15T18:54:14Z"
+prompted: "2026-05-15T19:04:22Z"
 branch: dark-factory/repoallowlist-lib-bootstrap
 ---
 
