@@ -2,6 +2,8 @@
 
 PR review agent. Takes a GitHub or Bitbucket Server PR URL, creates a local clone, runs Claude Code review inside a `claude-yolo` container, and posts the review back as a PR comment with a verdict (approve / request-changes / comment).
 
+**Internal architecture:** see [`docs/architecture.md`](docs/architecture.md) — three phases (planning → execution → review), where the verdict rubric lives, heuristic fallback, ai_review meta-verdict.
+
 ## Entry Points
 
 | Binary | Location | Use Case |
