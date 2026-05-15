@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [029-migrate-callers-to-repoallowlist-lib-and-wildcard-rollout]
 summary: 'Switched REPO_ALLOWLIST in dev.env and prod.env from enumerated literal repo lists to github.com/bborbe/* wildcard and added ## Unreleased changelog entry.'
 container: maintainer-118-spec-029-env-update
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T20:05:00Z"
 queued: "2026-05-15T20:09:41Z"
 started: "2026-05-15T20:23:39Z"
+completed: "2026-05-15T20:24:41Z"
 branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 ---
 
