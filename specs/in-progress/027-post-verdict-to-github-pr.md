@@ -247,3 +247,19 @@ Stay with verdict-in-vault-only. The agent continues to produce reviews no devel
 A weaker alternative — post a `COMMENT` review unconditionally regardless of verdict, deferring the `APPROVE` / `REQUEST_CHANGES` mapping — saves the `autoApprove` plumbing for later. Cost: the GitHub UI's green-check / red-X signal (the most valuable artifact for PR authors at a glance) is never produced; the bot is just another commenter. The bot-identity work and verify-after-POST are required regardless (a comment posted as the human operator is the same identity-confusion problem; a phantom-COMMENT post is the same silent-failure problem), so the deferral saves only the `autoApprove` config plumbing — modest savings, large UX cost. Not recommended.
 
 A second alternative — use `gh` CLI as the posting transport instead of REST — was the original draft. Rejected after 2026-05-15 empirical verification: `gh` ignores `GH_TOKEN` when keychain auth exists, which means container hygiene (no keychain) is the only thing keeping the bot identity correct. That's a single-line-of-defense pattern; raw REST eliminates the dependency on container state entirely. The `gh` CLI also can't be reliably tested without spawning a real subprocess, whereas the HTTP client interface is straightforwardly Counterfeiter-mocked.
+
+## Verification Result
+
+**Verified:** 2026-05-15T21:38:58Z (HEAD d69fca5)
+**Binary:** `dark-factory v0.156.1-1-g04f3863-dirty` (installed); deployed agent image built from maintainer master (commits `e5536b2`, `e6743af`, `e788184`).
+**Scenario:** Real GitHub PR posting end-to-end against `bborbe/maintainer#2` from prod cluster (`pr-reviewer-agent-d2af959a-20260515212017-fxxqq`) plus local-smoke replay; reviews queried back via authenticated GitHub REST API.
+**Evidence:**
+- Bot review `4301479968` (state `COMMENTED`, login `pr-review-of-ben`, commit `f972fdd6`, 2026-05-15T21:21:26Z) posted by prod-cluster pod with body prefix `"auto-approve disabled for this repo, review submitted as comment"` (verify-after-POST recorded `outcome: success` in vault diagnostics line).
+- Local-smoke review `4300948227` (state `COMMENTED`, login `pr-review-of-ben`, commit `19c513b8`, 2026-05-15T19:47:30Z) confirms `request-changes`→`COMMENTED` demotion path and prior bot review `4300897191` reaches state `DISMISSED` (duplicate dismissal proven for non-COMMENTED prior reviews).
+- `make precommit` clean in `agent/pr-reviewer/` (gosec 0 issues, trivy 0 vulns, full `go test ./...` green across 11 packages).
+- Docs landed: `agent/pr-reviewer/docs/pr-post-back.md` covers bot identity / `.pr-reviewer.yaml` / dismissal / verify-after-POST / branch-protection; `architecture.md` execution row mentions REST post and ai_review check #4 names verify-after-POST.
+- `factory.go:33-40` comment updated to describe `PrPoster` (`net/http`, not `gh`) gated by `GET /user` self-check and `.pr-reviewer.yaml`.
+- Scenario `scenarios/017-pr-reviewer-post-verdict.md` promoted draft→active.
+**Verdict:** PASS
+
+Known limitation (in-scope, no regression): GitHub rejects `PUT .../dismissals` on reviews already in state `COMMENTED` with HTTP 422; the implementation (`e6743af`) skips dismissal of `COMMENTED` reviews. In the `autoApprove:false` path, repeated re-spawns therefore stack comment-state reviews on the same SHA (observed: `4301479968` + `4301500029` both COMMENTED on `f972fdd6`) rather than dismissing-then-replacing. Real reviewer feedback is never touched. Operator-facing impact is cosmetic.

@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 spec: 027-ai-review-verification
 ---
 
