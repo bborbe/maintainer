@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-15T16:15:37Z"
 generating: "2026-05-15T16:15:37Z"
 prompted: "2026-05-15T18:34:40Z"
 verifying: "2026-05-15T18:58:03Z"
+completed: "2026-05-15T21:39:35Z"
 branch: dark-factory/post-verdict-to-github-pr
 ---
 
