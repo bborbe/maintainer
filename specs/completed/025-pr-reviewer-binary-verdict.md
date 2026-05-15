@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-15T13:05:25Z"
 generating: "2026-05-15T13:05:26Z"
 prompted: "2026-05-15T13:11:56Z"
 verifying: "2026-05-15T13:40:28Z"
+completed: "2026-05-15T15:10:50Z"
 branch: dark-factory/pr-reviewer-binary-verdict
 ---
 
