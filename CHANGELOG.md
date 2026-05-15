@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.0
+
+- feat: switch REPO_ALLOWLIST in dev.env and prod.env from enumerated literal repo lists to `github.com/bborbe/*` wildcard; any bborbe-owned repo now flows through the pipeline without per-repo operator intervention
+
 ## v0.24.0
 
 - feat: migrate all five REPO_ALLOWLIST callers to shared `lib/repoallowlist` package; replace inline regex parsers with `IsAllowed` predicate (supporting `github.com/<owner>/*` wildcard) and `Validate` validator (aggregate error for required callers); add `replace github.com/bborbe/maintainer/lib => ../../lib` to three service go.mod files
