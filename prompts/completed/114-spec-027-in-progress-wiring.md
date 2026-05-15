@@ -1,11 +1,12 @@
 ---
-status: committing
+status: completed
 spec: [027-post-verdict-to-github-pr]
 container: maintainer-114-spec-027-in-progress-wiring
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T18:00:00Z"
 queued: "2026-05-15T17:15:23Z"
 started: "2026-05-15T18:03:57Z"
+completed: "2026-05-15T18:28:36Z"
 ---
 
 <summary>
