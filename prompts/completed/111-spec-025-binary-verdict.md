@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [025-pr-reviewer-binary-verdict]
 summary: 'Collapsed the pr-reviewer verdict enum from three values to two (approve/request-changes): removed VerdictComment constant, updated tryParseJSONLine to reject ''comment'' JSON verdict, rewrote ParseVerdict with Should Fix detection and fail-closed defaults, updated all tests, prompts, docs, READMEs, fixture files, and CHANGELOG.'
 container: maintainer-111-spec-025-binary-verdict
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T13:20:00Z"
 queued: "2026-05-15T13:27:01Z"
 started: "2026-05-15T13:32:03Z"
+completed: "2026-05-15T13:40:28Z"
 branch: dark-factory/pr-reviewer-binary-verdict
 ---
 
