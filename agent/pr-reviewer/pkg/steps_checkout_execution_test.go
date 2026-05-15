@@ -316,6 +316,34 @@ var _ = Describe("checkoutExecutionStep", func() {
 				})
 			})
 
+			Context("when allowlist contains a wildcard and clone_url matches the owner", func() {
+				It("permits the clone (wildcard match)", func() {
+					stepWithWildcard := pkg.NewCheckoutExecutionStep(
+						repoManager,
+						"",
+						"agent",
+						"sonnet",
+						map[string]string{},
+						claudelib.AllowedTools{"Read"},
+						"standard",
+						[]string{"github.com/bborbe/*"},
+						nil,
+					)
+					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
+
+					md, err := agentlib.ParseMarkdown(ctx, taskMarkdown)
+					Expect(err).NotTo(HaveOccurred())
+					result, runErr := stepWithWildcard.Run(ctx, md)
+					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(1))
+					_ = result
+					Expect(runErr).To(HaveOccurred())
+					if result != nil {
+						Expect(result.Status).NotTo(Equal(agentlib.AgentStatusNeedsInput),
+							"wildcard allowlist should permit bborbe repo but got needs_input")
+					}
+				})
+			})
+
 			Context("when allowlist is non-empty and clone_url is unparseable", func() {
 				It("returns Failed (not NeedsInput) and does not call EnsureWorktree", func() {
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(

@@ -2,6 +2,10 @@ module github.com/bborbe/maintainer/watcher/github-build
 
 go 1.26.3
 
+replace (
+	github.com/bborbe/maintainer/lib => ../../lib
+)
+
 require (
 	github.com/bborbe/agent/lib v0.62.3
 	github.com/bborbe/cqrs v0.5.1
@@ -9,6 +13,7 @@ require (
 	github.com/bborbe/http v1.26.12
 	github.com/bborbe/kafka v1.22.15
 	github.com/bborbe/log v1.6.13
+	github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000
 	github.com/bborbe/run v1.9.24
 	github.com/bborbe/sentry v1.9.17
 	github.com/bborbe/service v1.9.11

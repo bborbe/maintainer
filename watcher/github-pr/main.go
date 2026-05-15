@@ -25,6 +25,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
@@ -131,12 +132,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return err
 	}
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		glog.Warningf("repo-allowlist: malformed entries ignored at match time: %v", validationErr)
+	}
 	if len(repoAllowlist) == 0 {
 		glog.V(2).Infof("repo-allowlist count=0 (allow-all)")
 	} else {
 		glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 	}
-
 	taskCreationFilter := filter.TaskCreationFilters{
 		filter.NewDraftFilter(),
 		filter.NewBotAuthorFilter(botAllowlist),

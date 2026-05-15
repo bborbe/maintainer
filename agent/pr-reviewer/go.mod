@@ -6,11 +6,16 @@ replace (
 	github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
 )
 
+replace (
+	github.com/bborbe/maintainer/lib => ../../lib
+)
+
 require (
 	github.com/bborbe/agent/lib v0.62.16
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/kafka v1.22.15
+	github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000
 	github.com/bborbe/sentry v1.9.17
 	github.com/bborbe/service v1.10.0
 	github.com/bborbe/time v1.27.0

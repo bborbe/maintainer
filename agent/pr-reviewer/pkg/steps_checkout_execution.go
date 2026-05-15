@@ -18,6 +18,7 @@ import (
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
 // githubPRURLPattern matches a GitHub PR URL in arbitrary text.
@@ -184,10 +185,8 @@ func (s *checkoutExecutionStep) checkAllowlist(
 		}
 	}
 	repoKey := parts.Host + "/" + parts.Owner + "/" + parts.Repo
-	for _, entry := range s.repoAllowlist {
-		if entry == repoKey {
-			return nil
-		}
+	if repoallowlist.IsAllowed(s.repoAllowlist, repoKey) {
+		return nil
 	}
 	return &agentlib.Result{
 		Status: agentlib.AgentStatusNeedsInput,

@@ -32,6 +32,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
 const agentName = "pr-reviewer-agent"
@@ -108,6 +109,13 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
 		return err
+	}
+	// Warn on malformed entries; allow-all and wildcard semantics handled by IsAllowed at match time.
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		glog.Warningf(
+			"REPO_ALLOWLIST contains malformed entries (will be ignored at match time): %v",
+			validationErr,
+		)
 	}
 	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 

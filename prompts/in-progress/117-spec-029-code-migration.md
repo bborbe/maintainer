@@ -1,6 +1,7 @@
 ---
-status: executing
+status: committing
 spec: [029-migrate-callers-to-repoallowlist-lib-and-wildcard-rollout]
+summary: Migrated all five REPO_ALLOWLIST callers (agent/pr-reviewer main + run-task, watcher/github-pr main, watcher/github-build main + run-once) to use shared lib/repoallowlist package — replaced inline regex parsers with IsAllowed predicate and Validate validator, added replace directives to three go.mod files, updated all affected tests, and fixed existing filter_test.go to use 3-segment host-qualified entries.
 container: maintainer-117-spec-029-code-migration
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T20:05:00Z"

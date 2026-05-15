@@ -59,27 +59,22 @@ var _ = Describe("ParseRepoAllowlist", func() {
 		Expect(result).To(ConsistOf("github.com/bborbe/foo", "github.com/bborbe/bar"))
 	})
 
-	It("returns error for entry with only two segments (no host)", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "bborbe/code-reviewer")
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("bborbe/code-reviewer"))
-	})
-
-	It("returns error for entry with only one segment", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "code-reviewer")
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("returns error for entry with four segments", func() {
-		_, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/foo/extra")
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("returns error for empty-string-after-trim entry that is otherwise malformed", func() {
-		// A single comma produces only empty entries — all dropped, no error.
+	It("returns nil for comma-only input (all entries empty after trim)", func() {
 		result, err := filter.ParseRepoAllowlist(ctx, ",")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeNil())
+	})
+
+	It("accepts wildcard entry without error", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/*")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal([]string{"github.com/bborbe/*"}))
+	})
+
+	It("accepts malformed two-segment entry without error", func() {
+		result, err := filter.ParseRepoAllowlist(ctx, "bborbe/code-reviewer")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal([]string{"bborbe/code-reviewer"}))
 	})
 })
 
@@ -108,5 +103,15 @@ var _ = Describe("RepoAllowlistFilter", func() {
 	It("matches exactly — prefix match is not a match", func() {
 		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/code"})
 		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeTrue())
+	})
+
+	It("does not skip a PR whose RepoKey matches a wildcard allowlist entry", func() {
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/*"})
+		Expect(f.Skip(filter.PR{RepoKey: "github.com/bborbe/maintainer"})).To(BeFalse())
+	})
+
+	It("skips a PR whose RepoKey owner does not match the wildcard entry", func() {
+		f := filter.NewRepoAllowlistFilter([]string{"github.com/bborbe/*"})
+		Expect(f.Skip(filter.PR{RepoKey: "github.com/other-owner/repo"})).To(BeTrue())
 	})
 })

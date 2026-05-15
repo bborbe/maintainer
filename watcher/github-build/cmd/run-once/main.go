@@ -16,6 +16,7 @@ import (
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
 
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
@@ -43,6 +44,10 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
 		return err
+	}
+	// Validate ALL entries at startup — aggregate error names every malformed entry.
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		return errors.Wrap(ctx, validationErr, "REPO_ALLOWLIST contains malformed entries")
 	}
 	if len(repoAllowlist) == 0 {
 		return errors.Errorf(
