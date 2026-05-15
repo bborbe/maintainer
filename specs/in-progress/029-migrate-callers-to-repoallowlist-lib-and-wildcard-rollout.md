@@ -1,8 +1,11 @@
 ---
+status: generating
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-05-15T19:35:40Z"
+generating: "2026-05-15T19:35:41Z"
+branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 ---
 
 ## Summary
