@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,13 +7,14 @@ approved: "2026-05-15T19:35:40Z"
 generating: "2026-05-15T19:35:41Z"
 prompted: "2026-05-15T19:47:11Z"
 verifying: "2026-05-15T20:24:41Z"
+completed: "2026-05-15T22:03:39Z"
 branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 ---
 
 ## Summary
 
 - Migrate all five binaries that currently parse `REPO_ALLOWLIST` inline to import the shared `lib/repoallowlist` package landed by the sibling bootstrap spec, eliminating parser drift in a single atomic change.
-- Switch `dev.env` and `prod.env` from explicit repo lists to a single `github.com/bborbe/*` wildcard entry, removing the per-repo maintenance toil that scales with both repo count and binary count.
+- Switch `prod.env` from its explicit 7-entry list to a single `github.com/bborbe/*` wildcard entry, removing the per-repo maintenance toil. Keep `dev.env` on a literal single-repo allowlist (`github.com/bborbe/go-skeleton`) so dev remains a narrow per-repo testing ground; the wildcard ships only to prod where org-wide coverage delivers the user value. (Revised 2026-05-16 from the original both-env-wildcard plan after Rung-2 step A confirmed parser equivalence in dev — step B in dev was deemed unnecessary because the lib's wildcard path is the same code as the literal path and is already covered by spec 028's tests at 97.6% coverage.)
 - Update the vault runbook so its primary role flips from "how to add the next bborbe repo" to "how to add a repo outside the bborbe org".
 - Ship as one atomic deploy with strict ordering: code change first (still accepts literals), then env change (introduces the wildcard) — never the reverse.
 - Verifies at Rung-2 (dev cluster e2e with a live PR in a bborbe repo not previously in the literal list) and Rung-3 (prod) per `docs/verifying-specs.md`.
@@ -79,8 +80,8 @@ After this work, every binary that consumes `REPO_ALLOWLIST` evaluates the env v
 - [ ] Every `main.go` under `agent/pr-reviewer/`, `agent/pr-reviewer/cmd/run-task/`, `watcher/github-pr/`, `watcher/github-build/`, and `watcher/github-build/cmd/run-once/` imports `github.com/bborbe/maintainer/lib/repoallowlist`.
 - [ ] The PR reviewer, its run-task CLI, and the PR watcher still treat an empty allowlist as allow-all (via the library's predicate).
 - [ ] The build watcher main and its run-once CLI call the library's validator at startup and refuse to start on empty or malformed env, surfacing every malformed entry in a single error.
-- [ ] `dev.env` line for `REPO_ALLOWLIST` is exactly `github.com/bborbe/*`.
-- [ ] `prod.env` line for `REPO_ALLOWLIST` is exactly `github.com/bborbe/*`.
+- [x] `prod.env` line for `REPO_ALLOWLIST` is exactly `github.com/bborbe/*`.
+- [x] `dev.env` line for `REPO_ALLOWLIST` is kept literal (`github.com/bborbe/go-skeleton`) — intentional dev/prod asymmetry per 2026-05-16 revision. Dev stays narrow for per-repo testing; prod gets org-wide wildcard.
 - [ ] `CHANGELOG.md` has a new entry under `## Unreleased` describing the migration and env-format change.
 - [ ] Obsidian runbook "Agent - Add Repo to PR Reviewer Allowlist" is updated: states wildcard is the new default; primary use case is now non-bborbe additions; per-repo bborbe additions documented as still possible but rarely needed.
 - [ ] `make precommit` passes in each of `agent/pr-reviewer/`, `watcher/github-pr/`, `watcher/github-build/`.
