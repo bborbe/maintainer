@@ -4,7 +4,12 @@
 
 package pkg
 
-import "context"
+import (
+	"context"
+	"time"
+
+	agentlib "github.com/bborbe/agent/lib"
+)
 
 // VerdictPayloadForTest re-exports the unexported verdictPayload so
 // review_test.go (in the pkg_test package) can assert on the parsed
@@ -23,4 +28,20 @@ func ExtractVerdictForTest(raw string) (VerdictPayloadForTest, error) {
 // should use NewGHTokenCheckStep which hardcodes the GitHub URL.
 func NewGHTokenCheckStepWithURLForTest(token, url string) *ghTokenCheckStep {
 	return newGHTokenCheckStep(token, url)
+}
+
+// PostAndRouteForTest calls postAndRoute on a minimal checkoutExecutionStep,
+// bypassing the Claude runner entirely. The md should already have ## Review
+// populated by the test. This allows unit-testing the posting path without
+// a live Claude process.
+func PostAndRouteForTest(
+	ctx context.Context,
+	prPoster PrPoster,
+	md *agentlib.Markdown,
+	prURLStr string,
+	worktreePath string,
+	jobRunTime time.Time,
+) (*agentlib.Result, error) {
+	s := &checkoutExecutionStep{prPoster: prPoster}
+	return s.postAndRoute(ctx, md, prURLStr, worktreePath, jobRunTime)
 }

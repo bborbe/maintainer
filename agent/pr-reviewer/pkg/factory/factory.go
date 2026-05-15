@@ -10,6 +10,7 @@ package factory
 
 import (
 	"context"
+	"net/http"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -23,6 +24,7 @@ import (
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
 
@@ -30,9 +32,12 @@ const serviceName = "maintainer-agent-pr-reviewer"
 
 // Per-phase tool scopes. Principle: each phase gets the smallest set that
 // lets it do its job. Planning + Review are read-only inspection. Execution
-// gets broader git/gh access for cross-file reads but still cannot post
-// (no `gh pr comment` / `gh pr review`) — posting happens out-of-band
-// after the human approves the verdict.
+// gets broader git access for cross-file reads; posting happens in-process
+// via the PrPoster (Go net/http, not gh CLI) after the LLM step completes,
+// gated by bot-identity self-check (GET /user == pr-review-of-ben) and
+// per-repo .pr-reviewer.yaml (autoApprove: bool). The ai_review phase
+// independently verifies the post via GET /pulls/{n}/reviews before
+// advancing to done.
 var (
 	planningTools = claudelib.AllowedTools{
 		"Read", "Grep", "Glob",
@@ -126,11 +131,18 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
+// CreatePrPoster wires a PrPoster backed by net/http.DefaultClient.
+// token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
+// (BOT_GITHUB_LOGIN env, default "pr-review-of-ben" if empty). Pure plumbing; no logic.
+func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
+	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
+}
+
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase
 // tool scopes and per-phase prompts:
 //
 //   - planning: read-only diff inspection → ## Plan (JSON)
-//   - in_progress: read + cross-file inspection → ## Review (JSON)
+//   - in_progress: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
 //   - ai_review: minimal read-only fresh-context verifier → ## Verdict (JSON);
 //     verdict=pass → done, otherwise → human_review
 func CreateAgent(
@@ -142,6 +154,7 @@ func CreateAgent(
 	repoManager git.RepoManager,
 	reviewMode string,
 	repoAllowlist []string,
+	prPoster prpkg.PrPoster,
 ) *agentlib.Agent {
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
@@ -160,6 +173,7 @@ func CreateAgent(
 		executionTools,
 		reviewMode,
 		repoAllowlist,
+		prPoster,
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
@@ -186,6 +200,8 @@ func CreateAgentProvider(
 	reviewMode string,
 	repoAllowlist []string,
 ) agentlib.AgentProvider {
+	botLogin := env[githubposter.BotLoginEnv] // BotLoginEnv stays in githubposter
+	poster := CreatePrPoster(ghToken, botLogin)
 	domainAgent := CreateAgent(
 		claudeConfigDir,
 		agentDir,
@@ -195,6 +211,7 @@ func CreateAgentProvider(
 		repoManager,
 		reviewMode,
 		repoAllowlist,
+		poster,
 	)
 	healthcheckRunner := CreateClaudeRunner(
 		claudeConfigDir,

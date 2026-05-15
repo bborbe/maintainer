@@ -11,6 +11,8 @@ import (
 	"time"
 
 	errors "github.com/bborbe/errors"
+
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 type reviewVerifier struct {
@@ -75,7 +77,7 @@ func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) Ve
 			Found:        false,
 			Outcome:      "failed",
 			FailureStep:  step,
-			Class:        ErrorClassTransient,
+			Class:        prpkg.ErrorClassTransient,
 			Attempt:      cr.Attempts,
 			ErrorMessage: "no matching bot review for head SHA",
 			ElapsedMs:    elapsed,
@@ -83,11 +85,12 @@ func (v *reviewVerifier) VerifyReview(ctx context.Context, req VerifyRequest) Ve
 	}
 	if cr.Err != nil {
 		return VerifyResult{
-			Found:        false,
-			Outcome:      "failed",
-			FailureStep:  step,
-			Class:        cr.Class,
-			EscalateHint: cr.Class == ErrorClassPermanent || cr.Class == ErrorClassUnknown,
+			Found:       false,
+			Outcome:     "failed",
+			FailureStep: step,
+			Class:       cr.Class,
+			EscalateHint: cr.Class == prpkg.ErrorClassPermanent ||
+				cr.Class == prpkg.ErrorClassUnknown,
 			Attempt:      cr.Attempts,
 			HTTPStatus:   cr.HTTPStatus,
 			ErrorMessage: cr.Err.Error(),

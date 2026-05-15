@@ -5,32 +5,32 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 type PrPoster struct {
-	PostStub        func(context.Context, githubposter.PostRequest) githubposter.PostResult
+	PostStub        func(context.Context, pkg.PostRequest) pkg.PostResult
 	postMutex       sync.RWMutex
 	postArgsForCall []struct {
 		arg1 context.Context
-		arg2 githubposter.PostRequest
+		arg2 pkg.PostRequest
 	}
 	postReturns struct {
-		result1 githubposter.PostResult
+		result1 pkg.PostResult
 	}
 	postReturnsOnCall map[int]struct {
-		result1 githubposter.PostResult
+		result1 pkg.PostResult
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *PrPoster) Post(arg1 context.Context, arg2 githubposter.PostRequest) githubposter.PostResult {
+func (fake *PrPoster) Post(arg1 context.Context, arg2 pkg.PostRequest) pkg.PostResult {
 	fake.postMutex.Lock()
 	ret, specificReturn := fake.postReturnsOnCall[len(fake.postArgsForCall)]
 	fake.postArgsForCall = append(fake.postArgsForCall, struct {
 		arg1 context.Context
-		arg2 githubposter.PostRequest
+		arg2 pkg.PostRequest
 	}{arg1, arg2})
 	stub := fake.PostStub
 	fakeReturns := fake.postReturns
@@ -51,39 +51,39 @@ func (fake *PrPoster) PostCallCount() int {
 	return len(fake.postArgsForCall)
 }
 
-func (fake *PrPoster) PostCalls(stub func(context.Context, githubposter.PostRequest) githubposter.PostResult) {
+func (fake *PrPoster) PostCalls(stub func(context.Context, pkg.PostRequest) pkg.PostResult) {
 	fake.postMutex.Lock()
 	defer fake.postMutex.Unlock()
 	fake.PostStub = stub
 }
 
-func (fake *PrPoster) PostArgsForCall(i int) (context.Context, githubposter.PostRequest) {
+func (fake *PrPoster) PostArgsForCall(i int) (context.Context, pkg.PostRequest) {
 	fake.postMutex.RLock()
 	defer fake.postMutex.RUnlock()
 	argsForCall := fake.postArgsForCall[i]
 	return argsForCall.arg1, argsForCall.arg2
 }
 
-func (fake *PrPoster) PostReturns(result1 githubposter.PostResult) {
+func (fake *PrPoster) PostReturns(result1 pkg.PostResult) {
 	fake.postMutex.Lock()
 	defer fake.postMutex.Unlock()
 	fake.PostStub = nil
 	fake.postReturns = struct {
-		result1 githubposter.PostResult
+		result1 pkg.PostResult
 	}{result1}
 }
 
-func (fake *PrPoster) PostReturnsOnCall(i int, result1 githubposter.PostResult) {
+func (fake *PrPoster) PostReturnsOnCall(i int, result1 pkg.PostResult) {
 	fake.postMutex.Lock()
 	defer fake.postMutex.Unlock()
 	fake.PostStub = nil
 	if fake.postReturnsOnCall == nil {
 		fake.postReturnsOnCall = make(map[int]struct {
-			result1 githubposter.PostResult
+			result1 pkg.PostResult
 		})
 	}
 	fake.postReturnsOnCall[i] = struct {
-		result1 githubposter.PostResult
+		result1 pkg.PostResult
 	}{result1}
 }
 
@@ -109,4 +109,4 @@ func (fake *PrPoster) recordInvocation(key string, args []interface{}) {
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
-var _ githubposter.PrPoster = new(PrPoster)
+var _ pkg.PrPoster = new(PrPoster)

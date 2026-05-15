@@ -7,6 +7,9 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -16,6 +19,9 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
 )
+
+// githubPRURLPattern matches a GitHub PR URL in arbitrary text.
+var githubPRURLPattern = regexp.MustCompile(`https://github\.com/[^/\s]+/[^/\s]+/pull/\d+`)
 
 // checkoutExecutionStep is the execution phase step that checks out the
 // target ref as an on-disk worktree and runs Claude against the real files.
@@ -28,6 +34,7 @@ type checkoutExecutionStep struct {
 	allowedTools    claudelib.AllowedTools
 	reviewMode      string
 	repoAllowlist   []string
+	prPoster        PrPoster // nil = skip posting
 }
 
 // NewCheckoutExecutionStep constructs the execution-phase step that wires
@@ -41,6 +48,7 @@ func NewCheckoutExecutionStep(
 	allowedTools claudelib.AllowedTools,
 	reviewMode string,
 	repoAllowlist []string,
+	prPoster PrPoster,
 ) agentlib.Step {
 	return &checkoutExecutionStep{
 		repoManager:     repoManager,
@@ -51,6 +59,7 @@ func NewCheckoutExecutionStep(
 		allowedTools:    allowedTools,
 		reviewMode:      reviewMode,
 		repoAllowlist:   repoAllowlist,
+		prPoster:        prPoster,
 	}
 }
 
@@ -196,6 +205,10 @@ func (s *checkoutExecutionStep) runClaude(
 	worktreePath string,
 	instructions claudelib.Instructions,
 ) (*agentlib.Result, error) {
+	// Cache PR URL from preamble BEFORE any md mutations to avoid matching
+	// URLs that Claude writes inside the ## Review section body.
+	prURLStr := githubPRURLPattern.FindString(md.Preamble)
+
 	runner := claudelib.NewClaudeRunner(claudelib.ClaudeRunnerConfig{
 		ClaudeConfigDir:  s.claudeConfigDir,
 		AllowedTools:     s.allowedTools,
@@ -218,13 +231,175 @@ func (s *checkoutExecutionStep) runClaude(
 		}, nil
 	}
 
+	// Vault-first invariant: write ## Review BEFORE any API call.
 	md.ReplaceSection(agentlib.Section{
 		Heading: "## Review",
 		Body:    runResult.Result,
 	})
 
+	return s.postAndRoute(ctx, md, prURLStr, worktreePath, time.Now())
+}
+
+// postAndRoute handles the posting sequence after ## Review has been written to
+// the vault. Extracted for testability — tests call this directly without Claude.
+func (s *checkoutExecutionStep) postAndRoute(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	prURLStr string,
+	worktreePath string,
+	jobRunTime time.Time,
+) (*agentlib.Result, error) {
+	// nil poster = skip posting (backward-compatible for cmd/run-task).
+	if s.prPoster == nil {
+		return &agentlib.Result{
+			Status:    agentlib.AgentStatusDone,
+			NextPhase: "ai_review",
+		}, nil
+	}
+
+	// Extract verdict + summary from ## Review (already written to vault).
+	var reviewBody string
+	if reviewSection, ok := md.FindSection("## Review"); ok && reviewSection != nil {
+		reviewBody = reviewSection.Body
+	}
+	verdict := ParseVerdict(reviewBody)
+	summary := StripJSONVerdict(reviewBody)
+
+	prInfo, earlyResult := s.resolvePRInfo(ctx, md, prURLStr, jobRunTime)
+	if earlyResult != nil {
+		return earlyResult, nil
+	}
+
+	// Get head SHA from frontmatter.
+	ref, _ := md.Frontmatter.String("ref")
+
+	// Post the review.
+	result := s.prPoster.Post(ctx, PostRequest{
+		PR:      *prInfo,
+		HeadSHA: ref,
+		Verdict: verdict.Verdict,
+		Summary: summary,
+		WorkDir: worktreePath,
+	})
+
+	// Always append diagnostic block — one entry per Job run, append-only.
+	appendDiagnosticsSection(
+		md,
+		buildDiagnosticBlock(jobRunTime, md.Frontmatter.TriggerCount(), result),
+	)
+
+	// Route based on outcome.
+	if result.Outcome == "success" || result.Class == ErrorClassNotAFailure {
+		return &agentlib.Result{
+			Status:    agentlib.AgentStatusDone,
+			NextPhase: "ai_review",
+		}, nil
+	}
+
 	return &agentlib.Result{
 		Status:    agentlib.AgentStatusDone,
-		NextPhase: "ai_review",
+		NextPhase: "human_review",
+		Message:   "posting failed: " + result.ErrorMessage,
 	}, nil
+}
+
+// resolvePRInfo validates and parses the PR URL, writes diagnostics on failure,
+// and returns either a parsed PRInfo or an early result to return from postAndRoute.
+func (s *checkoutExecutionStep) resolvePRInfo(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	prURLStr string,
+	jobRunTime time.Time,
+) (*PRInfo, *agentlib.Result) {
+	tc := md.Frontmatter.TriggerCount()
+	if prURLStr == "" {
+		appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, tc, PostResult{
+			Outcome:      "failed",
+			FailureStep:  "pr_url_extraction",
+			Class:        ErrorClassPermanent,
+			ErrorMessage: "no GitHub PR URL found in task preamble",
+		}))
+		return nil, &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "posting skipped: no GitHub PR URL found in task preamble",
+		}
+	}
+
+	prInfo, parseErr := ParsePRURL(ctx, prURLStr)
+	if parseErr != nil {
+		appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, tc, PostResult{
+			Outcome:      "failed",
+			FailureStep:  "pr_url_parse",
+			Class:        ErrorClassPermanent,
+			ErrorMessage: fmt.Sprintf("failed to parse PR URL %q: %v", prURLStr, parseErr),
+		}))
+		return nil, &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: fmt.Sprintf("posting skipped: failed to parse PR URL: %v", parseErr),
+		}
+	}
+
+	if prInfo.Platform != PlatformGitHub {
+		glog.Warningf(
+			"posting skipped: non-GitHub platform %q for URL %q",
+			prInfo.Platform,
+			prURLStr,
+		)
+		appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, tc, PostResult{
+			Outcome:     "failed",
+			FailureStep: "pr_url_platform",
+			Class:       ErrorClassPermanent,
+			ErrorMessage: fmt.Sprintf(
+				"non-GitHub platform %q is out of scope for posting",
+				prInfo.Platform,
+			),
+		}))
+		return nil, &agentlib.Result{
+			Status:    agentlib.AgentStatusDone,
+			NextPhase: "ai_review",
+		}
+	}
+
+	return prInfo, nil
+}
+
+// appendDiagnosticsSection appends block to the ## Diagnostics section (creates
+// it if absent). Append-only — one block per Job run preserves history.
+func appendDiagnosticsSection(md *agentlib.Markdown, block string) {
+	var existingBody string
+	if existing, ok := md.FindSection("## Diagnostics"); ok && existing != nil {
+		existingBody = existing.Body
+	}
+	newBody := strings.TrimLeft(existingBody+"\n"+block, "\n")
+	md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
+}
+
+// buildDiagnosticBlock formats one posting-attempt entry for ## Diagnostics.
+// Success emits a compact one-liner; failure emits a fenced YAML block.
+func buildDiagnosticBlock(jobRunTime time.Time, triggerCount int, result PostResult) string {
+	if result.Outcome == "success" {
+		return fmt.Sprintf("job_run: %s outcome: success review_id: %d\n",
+			jobRunTime.UTC().Format(time.RFC3339), result.ReviewID)
+	}
+	httpStatusStr := "null"
+	if result.HTTPStatus != 0 {
+		httpStatusStr = fmt.Sprintf("%d", result.HTTPStatus)
+	}
+	respBody := result.ResponseBody
+	if respBody == "" {
+		respBody = "<empty>"
+	}
+	return fmt.Sprintf(
+		"```yaml\njob_run: %s\ntrigger_count: %d\noutcome: failed\nfailure_step: %s\nclass: %s\nescalate_hint: %v\nattempt: %d\nhttp_status: %s\nerror_message: %q\nresponse_body: %q\nelapsed_ms: %d\n```\n",
+		jobRunTime.UTC().Format(time.RFC3339),
+		triggerCount,
+		result.FailureStep,
+		result.Class,
+		result.EscalateHint,
+		result.Attempt,
+		httpStatusStr,
+		result.ErrorMessage,
+		respBody,
+		result.ElapsedMs,
+	)
 }

@@ -84,7 +84,7 @@ func seqStub(specs []callSpec) func(*http.Request) (*http.Response, error) {
 var _ = Describe("PrPoster", func() {
 	var (
 		fakeClient *mocks.HTTPClient
-		poster     githubposter.PrPoster
+		poster     prpkg.PrPoster
 		pr         prpkg.PRInfo
 		tmpDir     string
 		ctx        context.Context
@@ -121,7 +121,7 @@ var _ = Describe("PrPoster", func() {
 		func(verdict prpkg.Verdict, autoApprove bool, wantEvent, wantState, wantBodyPrefix string) {
 			writeYAML(autoApprove)
 			fakeClient.DoStub = seqStub(happySpecs(wantState))
-			req := githubposter.PostRequest{
+			req := prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: verdict, Summary: "looks good", WorkDir: tmpDir,
 			}
 			result := poster.Post(ctx, req)
@@ -142,23 +142,23 @@ var _ = Describe("PrPoster", func() {
 	)
 
 	DescribeTable("ErrorClass string values",
-		func(class githubposter.ErrorClass, want string) {
+		func(class prpkg.ErrorClass, want string) {
 			Expect(string(class)).To(Equal(want))
 		},
-		Entry("transient", githubposter.ErrorClassTransient, "transient"),
-		Entry("permanent", githubposter.ErrorClassPermanent, "permanent"),
-		Entry("unknown", githubposter.ErrorClassUnknown, "unknown"),
-		Entry("not-a-failure", githubposter.ErrorClassNotAFailure, "not-a-failure"),
-		Entry("soft-warning", githubposter.ErrorClassSoftWarning, "soft-warning"),
+		Entry("transient", prpkg.ErrorClassTransient, "transient"),
+		Entry("permanent", prpkg.ErrorClassPermanent, "permanent"),
+		Entry("unknown", prpkg.ErrorClassUnknown, "unknown"),
+		Entry("not-a-failure", prpkg.ErrorClassNotAFailure, "not-a-failure"),
+		Entry("soft-warning", prpkg.ErrorClassSoftWarning, "soft-warning"),
 	)
 
 	Context("bot identity mismatch", func() {
 		It("returns permanent failure without posting", func() {
 			fakeClient.DoReturns(makeHTTPResp(200, `{"login":"someone-else"}`), nil)
-			req := githubposter.PostRequest{PR: pr, HeadSHA: testHeadSHA, WorkDir: tmpDir}
+			req := prpkg.PostRequest{PR: pr, HeadSHA: testHeadSHA, WorkDir: tmpDir}
 			result := poster.Post(ctx, req)
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.FailureStep).To(Equal("GET /user"))
 			Expect(result.ErrorMessage).To(ContainSubstring("bot identity mismatch"))
@@ -177,7 +177,7 @@ var _ = Describe("PrPoster", func() {
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
@@ -204,7 +204,7 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil}, // first verify: phantom (empty list)
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
@@ -223,12 +223,12 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil}, // verify attempt 1: empty
 				{200, reviewListJSON(), nil}, // verify attempt 2: still empty
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassTransient))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassTransient))
 			Expect(result.FailureStep).To(Equal("GET /pulls/N/reviews (verify)"))
 			Expect(result.ErrorMessage).To(ContainSubstring("phantom POST"))
 		})
@@ -241,11 +241,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil},
 				{422, `{"message":"Unprocessable Entity"}`, nil},
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassNotAFailure))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassNotAFailure))
 			Expect(result.HTTPStatus).To(Equal(422))
 			Expect(fakeClient.DoCallCount()).To(Equal(3))
 		})
@@ -258,11 +258,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil},
 				{403, `{"message":"Forbidden"}`, nil},
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.Attempt).To(Equal(1))
 			Expect(fakeClient.DoCallCount()).To(Equal(3))
@@ -279,7 +279,7 @@ var _ = Describe("PrPoster", func() {
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
@@ -292,7 +292,7 @@ var _ = Describe("PrPoster", func() {
 		It("substitutes default summary and records warning but succeeds", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub(happySpecs("APPROVED"))
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "", WorkDir: tmpDir,
 			})
@@ -309,11 +309,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(priorReview), nil},
 				{403, `{"message":"Forbidden"}`, nil}, // PUT dismissal fails
 			})
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.FailureStep).To(Equal("PUT .../dismissals"))
 			Expect(fakeClient.DoCallCount()).To(Equal(3))
 		})
@@ -322,11 +322,11 @@ var _ = Describe("PrPoster", func() {
 	Context("unknown class from non-JSON /user response", func() {
 		It("returns unknown class and no retry", func() {
 			fakeClient.DoReturns(makeHTTPResp(200, "not-json-at-all"), nil)
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(githubposter.ErrorClassUnknown))
+			Expect(result.Class).To(Equal(prpkg.ErrorClassUnknown))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.Attempt).To(Equal(1))
 			Expect(fakeClient.DoCallCount()).To(Equal(1))
@@ -356,7 +356,7 @@ var _ = Describe("PrPoster", func() {
 				}
 				return nil, fmt.Errorf("unexpected call %d", idx)
 			}
-			result := poster.Post(ctx, githubposter.PostRequest{
+			result := poster.Post(ctx, prpkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
 				Summary: "my review summary", WorkDir: tmpDir,
 			})

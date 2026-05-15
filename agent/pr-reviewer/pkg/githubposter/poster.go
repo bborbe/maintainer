@@ -24,8 +24,8 @@ type prPoster struct {
 	botLogin   string
 }
 
-// NewPrPoster creates a PrPoster. botLogin must already be resolved by the caller.
-func NewPrPoster(httpClient HTTPClient, ghToken string, botLogin string) PrPoster {
+// NewPrPoster creates a prpkg.PrPoster. botLogin must already be resolved by the caller.
+func NewPrPoster(httpClient HTTPClient, ghToken string, botLogin string) prpkg.PrPoster {
 	return &prPoster{httpClient: httpClient, ghToken: ghToken, botLogin: botLogin}
 }
 
@@ -49,7 +49,7 @@ type postReviewResp struct {
 	ID int64 `json:"id"`
 }
 
-func (p *prPoster) Post(ctx context.Context, req PostRequest) PostResult {
+func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
 	start := time.Now()
 	if result, ok := p.checkBotIdentity(ctx); !ok {
 		result.ElapsedMs = time.Since(start).Milliseconds()
@@ -57,10 +57,10 @@ func (p *prPoster) Post(ctx context.Context, req PostRequest) PostResult {
 	}
 	config, err := ReadAutoApproveConfig(ctx, req.WorkDir)
 	if err != nil {
-		return PostResult{
+		return prpkg.PostResult{
 			Outcome:      "failed",
 			FailureStep:  "read .pr-reviewer.yaml",
-			Class:        ErrorClassPermanent,
+			Class:        prpkg.ErrorClassPermanent,
 			EscalateHint: true,
 			Attempt:      1,
 			ErrorMessage: err.Error(),
@@ -77,7 +77,7 @@ func (p *prPoster) Post(ctx context.Context, req PostRequest) PostResult {
 	return result
 }
 
-func (p *prPoster) checkBotIdentity(ctx context.Context) (PostResult, bool) {
+func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool) {
 	type userResp struct {
 		Login string `json:"login"`
 	}
@@ -119,10 +119,10 @@ func (p *prPoster) checkBotIdentity(ctx context.Context) (PostResult, bool) {
 		return buildFailedResult(step, cr), false
 	}
 	if cr.Value.Login != p.botLogin {
-		return PostResult{
+		return prpkg.PostResult{
 			Outcome:      "failed",
 			FailureStep:  step,
-			Class:        ErrorClassPermanent,
+			Class:        prpkg.ErrorClassPermanent,
 			EscalateHint: true,
 			Attempt:      cr.Attempts,
 			HTTPStatus:   cr.HTTPStatus,
@@ -133,14 +133,14 @@ func (p *prPoster) checkBotIdentity(ctx context.Context) (PostResult, bool) {
 			),
 		}, false
 	}
-	return PostResult{}, true
+	return prpkg.PostResult{}, true
 }
 
 func (p *prPoster) dismissPriorReviews(
 	ctx context.Context,
 	pr prpkg.PRInfo,
 	headSHA string,
-) (PostResult, bool) {
+) (prpkg.PostResult, bool) {
 	step := "GET /pulls/N/reviews (dismiss-list)"
 	reviews, result, ok := p.listBotReviews(ctx, pr, headSHA, step)
 	if !ok {
@@ -154,14 +154,14 @@ func (p *prPoster) dismissPriorReviews(
 			return result, false
 		}
 	}
-	return PostResult{}, true
+	return prpkg.PostResult{}, true
 }
 
 func (p *prPoster) listBotReviews(
 	ctx context.Context,
 	pr prpkg.PRInfo,
 	headSHA, step string,
-) ([]reviewEntry, PostResult, bool) {
+) ([]reviewEntry, prpkg.PostResult, bool) {
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",
 		pr.Owner,
@@ -197,14 +197,14 @@ func (p *prPoster) listBotReviews(
 	if cr.Err != nil {
 		return nil, buildFailedResult(step, cr), false
 	}
-	return cr.Value, PostResult{}, true
+	return cr.Value, prpkg.PostResult{}, true
 }
 
 func (p *prPoster) dismissOne(
 	ctx context.Context,
 	pr prpkg.PRInfo,
 	reviewID int64,
-) (PostResult, bool) {
+) (prpkg.PostResult, bool) {
 	step := "PUT .../dismissals"
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews/%d/dismissals",
@@ -237,7 +237,7 @@ func (p *prPoster) dismissOne(
 	if cr.Err != nil {
 		return buildFailedResult(step, cr), false
 	}
-	return PostResult{}, true
+	return prpkg.PostResult{}, true
 }
 
 func (p *prPoster) postAndVerify(
@@ -245,7 +245,7 @@ func (p *prPoster) postAndVerify(
 	pr prpkg.PRInfo,
 	headSHA, event, body string,
 	warnings []string,
-) PostResult {
+) prpkg.PostResult {
 	reviewID, result, proceed := p.postReview(ctx, pr, headSHA, event, body)
 	if !proceed {
 		result.Warnings = warnings
@@ -261,7 +261,7 @@ func (p *prPoster) postReview(
 	ctx context.Context,
 	pr prpkg.PRInfo,
 	headSHA, event, body string,
-) (int64, PostResult, bool) {
+) (int64, prpkg.PostResult, bool) {
 	const step = "POST /pulls/N/reviews"
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",
@@ -271,9 +271,9 @@ func (p *prPoster) postReview(
 	)
 	payload, err := json.Marshal(postReviewReq{Event: event, CommitID: headSHA, Body: body})
 	if err != nil {
-		return 0, PostResult{
+		return 0, prpkg.PostResult{
 			Outcome: "failed", FailureStep: step,
-			Class: ErrorClassPermanent, EscalateHint: true, Attempt: 1, ErrorMessage: err.Error(),
+			Class: prpkg.ErrorClassPermanent, EscalateHint: true, Attempt: 1, ErrorMessage: err.Error(),
 		}, false
 	}
 	cr := retryCall(ctx, step, func(ctx context.Context) (postReviewResp, int, string, error) {
@@ -305,15 +305,15 @@ func (p *prPoster) postReview(
 		return r, status, tb, nil
 	})
 	if cr.HTTPStatus == 422 {
-		return 0, PostResult{
-			Outcome: "success", Class: ErrorClassNotAFailure,
+		return 0, prpkg.PostResult{
+			Outcome: "success", Class: prpkg.ErrorClassNotAFailure,
 			FailureStep: step, HTTPStatus: 422, Attempt: cr.Attempts,
 		}, false
 	}
 	if cr.Err != nil {
 		return 0, buildFailedResult(step, cr), false
 	}
-	return cr.Value.ID, PostResult{}, true
+	return cr.Value.ID, prpkg.PostResult{}, true
 }
 
 func (p *prPoster) verifyAfterPost(
@@ -321,7 +321,7 @@ func (p *prPoster) verifyAfterPost(
 	pr prpkg.PRInfo,
 	headSHA, event string,
 	warnings []string,
-) PostResult {
+) prpkg.PostResult {
 	step := "GET /pulls/N/reviews (verify)"
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",
@@ -356,10 +356,10 @@ func (p *prPoster) verifyAfterPost(
 		return false, 200, truncateBody(body), errPhantomPOST
 	})
 	if errors.Is(cr.Err, errPhantomPOST) {
-		return PostResult{
+		return prpkg.PostResult{
 			Outcome:      "failed",
 			FailureStep:  step,
-			Class:        ErrorClassTransient,
+			Class:        prpkg.ErrorClassTransient,
 			Attempt:      cr.Attempts,
 			ErrorMessage: "phantom POST: review absent in GET after POST",
 			Warnings:     warnings,
@@ -370,7 +370,7 @@ func (p *prPoster) verifyAfterPost(
 		r.Warnings = warnings
 		return r
 	}
-	return PostResult{
+	return prpkg.PostResult{
 		Outcome:    "success",
 		HTTPStatus: cr.HTTPStatus,
 		Attempt:    cr.Attempts,
@@ -452,16 +452,16 @@ func eventToState(event string) string {
 }
 
 // buildFailedResult builds a PostResult representing a failed step from a CallResult.
-func buildFailedResult[T any](step string, cr CallResult[T]) PostResult {
+func buildFailedResult[T any](step string, cr CallResult[T]) prpkg.PostResult {
 	msg := ""
 	if cr.Err != nil {
 		msg = cr.Err.Error()
 	}
-	return PostResult{
+	return prpkg.PostResult{
 		Outcome:      "failed",
 		FailureStep:  step,
 		Class:        cr.Class,
-		EscalateHint: cr.Class == ErrorClassPermanent || cr.Class == ErrorClassUnknown,
+		EscalateHint: cr.Class == prpkg.ErrorClassPermanent || cr.Class == prpkg.ErrorClassUnknown,
 		Attempt:      cr.Attempts,
 		HTTPStatus:   cr.HTTPStatus,
 		ErrorMessage: msg,

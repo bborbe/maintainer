@@ -18,7 +18,7 @@ A single PR review is split across three sequential phases. Each phase is a fres
 | Phase | Reads | Writes | Emits |
 |---|---|---|---|
 | **planning** | task body (PR URL) | `## Plan` section (focus areas, concerns) | `status: needs_input / failed / done` — no verdict |
-| **execution** | task body + `## Plan` | `## Review` section (Must Fix / Should Fix / Nice to Have + JSON verdict) | **the review verdict** (`approve` / `request_changes`) |
+| **execution** | task body + `## Plan` | `## Review` section (vault-first); `## Diagnostics` block (posting outcome); posts review to GitHub via `PrPoster` | **the review verdict** (`approve` / `request_changes`); routes to `ai_review` on success or `human_review` on posting failure |
 | **ai_review** | `## Plan` + `## Review` | `## Verdict` section | **a meta-verdict** (`pass` / `fail`) judging whether execution did a good job |
 
 **Key distinction:** the execution-phase verdict is the actual PR review outcome posted back to GitHub. The ai_review-phase verdict is a separate sanity check — does the executor's output have hallucinations, did it address the planning concerns, is its verdict consistent with its own comments? `pass` allows the executor's verdict through; `fail` escalates to `human_review`.
@@ -57,6 +57,10 @@ The ai_review phase reads both `## Plan` and `## Review` and runs three checks (
 3. **Verdict consistency** — does the executor's verdict match the severity of its comments? `approve` with critical comments = inconsistent; `request_changes` with only nits = inconsistent.
 
 ai_review's purpose is catching the case where execution rubber-stamped its own reasoning. Its `pass` / `fail` is meta — a green light to trust the executor's verdict, not a verdict on the PR itself.
+
+## Posting Reviews Back to GitHub
+
+After Claude writes `## Review`, the execution phase calls `PrPoster.Post` to submit the verdict as a GitHub review. The full posting contract — vault-first invariant, diagnostic block format, failure routing, and `nil`-poster backward-compatibility mode — is documented in [`docs/pr-post-back.md`](pr-post-back.md).
 
 ## Result Delivery
 

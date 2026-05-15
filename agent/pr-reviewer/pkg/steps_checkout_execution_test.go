@@ -7,6 +7,7 @@ package pkg_test
 import (
 	"context"
 	"fmt"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -35,6 +36,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 			map[string]string{},
 			claudelib.AllowedTools{"Read"},
 			"standard",
+			nil,
 			nil,
 		)
 	})
@@ -253,6 +255,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						claudelib.AllowedTools{"Read"},
 						"standard",
 						nil,
+						nil,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -275,6 +278,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						claudelib.AllowedTools{"Read"},
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
+						nil,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -297,6 +301,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						claudelib.AllowedTools{"Read"},
 						"standard",
 						[]string{"github.com/bborbe/other-repo"},
+						nil,
 					)
 					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/maintainer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
@@ -322,6 +327,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						claudelib.AllowedTools{"Read"},
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
+						nil,
 					)
 					const badURLTask = "---\nclone_url: not-a-url\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
@@ -334,6 +340,153 @@ var _ = Describe("checkoutExecutionStep", func() {
 					Expect(result.Message).To(ContainSubstring("failed to parse clone_url"))
 					Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(0))
 				})
+			})
+		})
+	})
+
+	Describe("posting behavior", func() {
+		const (
+			prURL      = "https://github.com/bborbe/maintainer/pull/2"
+			reviewBody = "LGTM. All checks pass.\n\n{\"verdict\":\"approve\",\"reason\":\"LGTM\"}"
+			taskMD     = "---\nref: abc123\ntrigger_count: 1\n---\n\nReview the pull request at " + prURL + ".\n"
+		)
+
+		buildMD := func(ctx context.Context, reviewSection string) *agentlib.Markdown {
+			md, err := agentlib.ParseMarkdown(ctx, taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			if reviewSection != "" {
+				md.ReplaceSection(agentlib.Section{
+					Heading: "## Review",
+					Body:    reviewSection,
+				})
+			}
+			return md
+		}
+
+		fixedTime := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+
+		Context("when poster is nil", func() {
+			It("advances to ai_review without calling any poster", func() {
+				md := buildMD(ctx, reviewBody)
+				result, err := pkg.PostAndRouteForTest(ctx, nil, md, prURL, "", fixedTime)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("ai_review"))
+			})
+		})
+
+		Context("when post succeeds", func() {
+			It("advances to ai_review and writes a success diagnostic", func() {
+				fakePoster := &mocks.PrPoster{}
+				fakePoster.PostReturns(pkg.PostResult{Outcome: "success", ReviewID: 42})
+
+				md := buildMD(ctx, reviewBody)
+				result, err := pkg.PostAndRouteForTest(ctx, fakePoster, md, prURL, "", fixedTime)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.NextPhase).To(Equal("ai_review"))
+				Expect(fakePoster.PostCallCount()).To(Equal(1))
+
+				diagSection, ok := md.FindSection("## Diagnostics")
+				Expect(ok).To(BeTrue())
+				Expect(diagSection.Body).To(ContainSubstring("outcome: success"))
+				Expect(diagSection.Body).To(ContainSubstring("review_id: 42"))
+			})
+		})
+
+		Context("when post fails with a transient error", func() {
+			It("escalates to human_review and writes a failure diagnostic", func() {
+				fakePoster := &mocks.PrPoster{}
+				fakePoster.PostReturns(pkg.PostResult{
+					Outcome:      "failed",
+					Class:        pkg.ErrorClassTransient,
+					ErrorMessage: "timeout",
+					FailureStep:  "post",
+				})
+
+				md := buildMD(ctx, reviewBody)
+				result, err := pkg.PostAndRouteForTest(ctx, fakePoster, md, prURL, "", fixedTime)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.NextPhase).To(Equal("human_review"))
+				Expect(result.Message).To(ContainSubstring("posting failed"))
+
+				diagSection, ok := md.FindSection("## Diagnostics")
+				Expect(ok).To(BeTrue())
+				Expect(diagSection.Body).To(ContainSubstring("class: transient"))
+			})
+		})
+
+		Context("when post returns not-a-failure class (e.g. 422 PR closed)", func() {
+			It("advances to ai_review", func() {
+				fakePoster := &mocks.PrPoster{}
+				fakePoster.PostReturns(pkg.PostResult{
+					Outcome: "success",
+					Class:   pkg.ErrorClassNotAFailure,
+				})
+
+				md := buildMD(ctx, reviewBody)
+				result, err := pkg.PostAndRouteForTest(ctx, fakePoster, md, prURL, "", fixedTime)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.NextPhase).To(Equal("ai_review"))
+			})
+		})
+
+		Context("## Review vault preserved regardless of poster outcome", func() {
+			DescribeTable("review body unchanged for every ErrorClass",
+				func(class pkg.ErrorClass, outcome string) {
+					fakePoster := &mocks.PrPoster{}
+					postResult := pkg.PostResult{
+						Outcome: outcome,
+						Class:   class,
+					}
+					if outcome == "failed" {
+						postResult.ErrorMessage = "test error"
+					}
+					fakePoster.PostReturns(postResult)
+
+					md := buildMD(ctx, reviewBody)
+					_, err := pkg.PostAndRouteForTest(ctx, fakePoster, md, prURL, "", fixedTime)
+					Expect(err).NotTo(HaveOccurred())
+
+					reviewSection, ok := md.FindSection("## Review")
+					Expect(ok).To(BeTrue())
+					Expect(reviewSection.Body).To(Equal(reviewBody))
+				},
+				Entry("transient failure", pkg.ErrorClassTransient, "failed"),
+				Entry("permanent failure", pkg.ErrorClassPermanent, "failed"),
+				Entry("unknown failure", pkg.ErrorClassUnknown, "failed"),
+				Entry("not-a-failure", pkg.ErrorClassNotAFailure, "success"),
+				Entry("soft-warning", pkg.ErrorClassSoftWarning, "success"),
+			)
+		})
+
+		Context("diagnostic blocks are append-only", func() {
+			It("second run appends after the first block", func() {
+				fakePoster := &mocks.PrPoster{}
+				fakePoster.PostReturns(pkg.PostResult{Outcome: "success", ReviewID: 1})
+
+				md := buildMD(ctx, reviewBody)
+
+				// First posting attempt.
+				_, err := pkg.PostAndRouteForTest(ctx, fakePoster, md, prURL, "", fixedTime)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Second posting attempt (simulate controller re-spawn).
+				fakePoster.PostReturns(pkg.PostResult{Outcome: "success", ReviewID: 2})
+				_, err = pkg.PostAndRouteForTest(
+					ctx,
+					fakePoster,
+					md,
+					prURL,
+					"",
+					fixedTime.Add(time.Minute),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				diagSection, ok := md.FindSection("## Diagnostics")
+				Expect(ok).To(BeTrue())
+				Expect(diagSection.Body).To(ContainSubstring("review_id: 1"))
+				Expect(diagSection.Body).To(ContainSubstring("review_id: 2"))
 			})
 		})
 	})

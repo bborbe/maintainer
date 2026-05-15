@@ -12,6 +12,8 @@ import (
 	"time"
 
 	errors "github.com/bborbe/errors"
+
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 // errPhantomPOST is the sentinel returned by verify-GET closures when POST returned 200
@@ -31,35 +33,35 @@ type CallResult[T any] struct {
 	ResponseBody string
 	Err          error
 	Attempts     int
-	Class        ErrorClass
+	Class        prpkg.ErrorClass
 }
 
 // classifyError maps (httpStatus, err) to an ErrorClass.
 // The phantom-POST sentinel is treated as transient so retryCall retries the verify-GET.
-func classifyError(httpStatus int, err error) ErrorClass {
+func classifyError(httpStatus int, err error) prpkg.ErrorClass {
 	if errors.Is(err, errPhantomPOST) {
-		return ErrorClassTransient
+		return prpkg.ErrorClassTransient
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return ErrorClassTransient
+		return prpkg.ErrorClassTransient
 	}
 	var ne net.Error
 	if err != nil && stderrors.As(err, &ne) {
-		return ErrorClassTransient
+		return prpkg.ErrorClassTransient
 	}
 	if httpStatus == 0 {
-		return ErrorClassTransient
+		return prpkg.ErrorClassTransient
 	}
 	if httpStatus >= 500 || httpStatus == 429 {
-		return ErrorClassTransient
+		return prpkg.ErrorClassTransient
 	}
 	if httpStatus == 401 || httpStatus == 403 || httpStatus == 404 || httpStatus == 422 {
-		return ErrorClassPermanent
+		return prpkg.ErrorClassPermanent
 	}
 	if err != nil {
-		return ErrorClassUnknown
+		return prpkg.ErrorClassUnknown
 	}
-	return ErrorClassNotAFailure
+	return prpkg.ErrorClassNotAFailure
 }
 
 // retryCall executes call at most twice: once immediately, and once after a short
@@ -81,7 +83,7 @@ func retryCall[T any](
 			Class:        class,
 		}
 	}
-	if class != ErrorClassTransient {
+	if class != prpkg.ErrorClassTransient {
 		return CallResult[T]{
 			HTTPStatus:   status,
 			ResponseBody: body,
@@ -101,7 +103,7 @@ func retryCall[T any](
 			ResponseBody: body,
 			Err:          ctx.Err(),
 			Attempts:     1,
-			Class:        ErrorClassTransient,
+			Class:        prpkg.ErrorClassTransient,
 		}
 	case <-time.After(retryBaseDelay + jitter):
 	}

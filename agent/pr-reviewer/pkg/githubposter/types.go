@@ -16,50 +16,9 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-//counterfeiter:generate -o ../../mocks/pr-poster.go --fake-name PrPoster . PrPoster
-type PrPoster interface {
-	Post(ctx context.Context, req PostRequest) PostResult
-}
-
 //counterfeiter:generate -o ../../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
 type ReviewVerifier interface {
 	VerifyReview(ctx context.Context, req VerifyRequest) VerifyResult
-}
-
-// ErrorClass categorizes a posting failure for retry and escalation decisions.
-type ErrorClass string
-
-const (
-	ErrorClassTransient   ErrorClass = "transient"
-	ErrorClassPermanent   ErrorClass = "permanent"
-	ErrorClassUnknown     ErrorClass = "unknown"
-	ErrorClassNotAFailure ErrorClass = "not-a-failure"
-	ErrorClassSoftWarning ErrorClass = "soft-warning"
-)
-
-// PostRequest carries all inputs needed for a single posting sequence.
-type PostRequest struct {
-	PR      prpkg.PRInfo
-	HeadSHA string
-	Verdict prpkg.Verdict
-	Summary string
-	WorkDir string
-}
-
-// PostResult carries all diagnostic fields needed for the ## Diagnostics block.
-type PostResult struct {
-	Outcome      string
-	ReviewID     int64
-	PostedEvent  string
-	FailureStep  string
-	Class        ErrorClass
-	EscalateHint bool
-	Attempt      int
-	HTTPStatus   int
-	ErrorMessage string
-	ResponseBody string
-	ElapsedMs    int64
-	Warnings     []string
 }
 
 // VerifyRequest carries all inputs for a single review-existence check.
@@ -75,7 +34,7 @@ type VerifyResult struct {
 	Outcome      string
 	FoundState   string
 	FailureStep  string
-	Class        ErrorClass
+	Class        prpkg.ErrorClass
 	EscalateHint bool
 	Attempt      int
 	HTTPStatus   int
