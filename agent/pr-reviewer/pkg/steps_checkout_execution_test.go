@@ -518,4 +518,43 @@ var _ = Describe("checkoutExecutionStep", func() {
 			})
 		})
 	})
+
+	Describe("ExtractPRURL", func() {
+		DescribeTable("extracts PR URL from markdown",
+			func(body string, expected string) {
+				md, err := agentlib.ParseMarkdown(ctx, body)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pkg.ExtractPRURL(md)).To(Equal(expected))
+			},
+			// Load-bearing regression test: watcher format puts URL in H1 body, not preamble.
+			// Pre-fix code only scanned md.Preamble (always empty in this layout) and failed.
+			Entry(
+				"URL in H1 section body (watcher format — regression)",
+				"# PR Review: test\n\nhttps://github.com/bborbe/maintainer/pull/2\n## Plan\n\nbody",
+				"https://github.com/bborbe/maintainer/pull/2",
+			),
+			Entry(
+				"URL in H1 section body — generic owner/repo",
+				"# H1\n\nhttps://github.com/owner/repo/pull/42\n## Plan",
+				"https://github.com/owner/repo/pull/42",
+			),
+			// Pre-fix code handled this correctly (URL in preamble): ensure no regression.
+			Entry(
+				"URL in preamble — no H1",
+				"https://github.com/owner/repo/pull/1\n\n## Plan",
+				"https://github.com/owner/repo/pull/1",
+			),
+			// URL after the first H2 must NOT be matched (Claude-authored body).
+			Entry(
+				"URL only after H2 — not matched",
+				"# H1\n\n## Plan\n\nhttps://github.com/owner/repo/pull/1",
+				"",
+			),
+			Entry(
+				"no URL anywhere",
+				"# H1 only\n\nno url here\n## Plan",
+				"",
+			),
+		)
+	})
 })

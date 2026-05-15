@@ -333,6 +333,73 @@ var _ = Describe("PrPoster", func() {
 		})
 	})
 
+	Context("dismissal skips state=COMMENTED prior bot reviews", func() {
+		const (
+			commentedID  = int64(100)
+			approvedID   = int64(101)
+			changesReqID = int64(102)
+			newReviewID  = int64(42)
+		)
+
+		BeforeEach(func() {
+			fakeClient.DoStub = seqStub([]callSpec{
+				{200, botUserJSON(), nil},
+				// Three prior reviews by the bot on this SHA: COMMENTED, APPROVED, CHANGES_REQUESTED
+				{200, reviewListJSON(
+					reviewJSON(commentedID, testBotLogin, testHeadSHA, "COMMENTED"),
+					reviewJSON(approvedID, testBotLogin, testHeadSHA, "APPROVED"),
+					reviewJSON(changesReqID, testBotLogin, testHeadSHA, "CHANGES_REQUESTED"),
+				), nil},
+				{200, `{}`, nil}, // PUT dismissal for APPROVED
+				{200, `{}`, nil}, // PUT dismissal for CHANGES_REQUESTED
+				{201, postRespJSON(newReviewID), nil},
+				{
+					200,
+					reviewListJSON(
+						reviewJSON(newReviewID, testBotLogin, testHeadSHA, "CHANGES_REQUESTED"),
+					),
+					nil,
+				},
+			})
+		})
+
+		It(
+			"returns success and dismisses exactly APPROVED and CHANGES_REQUESTED, not COMMENTED",
+			func() {
+				result := poster.Post(ctx, prpkg.PostRequest{
+					PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictRequestChanges,
+					Summary: "issues found", WorkDir: tmpDir,
+				})
+				Expect(result.Outcome).To(Equal("success"))
+				// 6 calls: GET /user + GET /reviews (list) + 2x PUT dismissal + POST + GET /reviews (verify)
+				Expect(fakeClient.DoCallCount()).To(Equal(6))
+
+				invs := fakeClient.Invocations()["Do"]
+				var dismissedPaths []string
+				for _, call := range invs {
+					req, ok := call[0].(*http.Request)
+					Expect(ok).To(BeTrue())
+					if req.Method == "PUT" && strings.Contains(req.URL.Path, "dismissals") {
+						dismissedPaths = append(dismissedPaths, req.URL.Path)
+					}
+				}
+				// Exactly 2 PUT dismissal calls (APPROVED + CHANGES_REQUESTED)
+				Expect(dismissedPaths).To(HaveLen(2))
+				// Both approved and changes-requested review IDs appear in the dismissed paths
+				Expect(
+					dismissedPaths,
+				).To(ContainElement(ContainSubstring(fmt.Sprintf("%d", approvedID))))
+				Expect(
+					dismissedPaths,
+				).To(ContainElement(ContainSubstring(fmt.Sprintf("%d", changesReqID))))
+				// COMMENTED review ID must NOT appear in any dismissal call
+				Expect(
+					dismissedPaths,
+				).NotTo(ContainElement(ContainSubstring(fmt.Sprintf("%d", commentedID))))
+			},
+		)
+	})
+
 	Context("POST request body shape", func() {
 		It("sends correct JSON fields to GitHub", func() {
 			writeYAML(true)

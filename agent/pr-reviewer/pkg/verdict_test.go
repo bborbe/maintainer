@@ -590,6 +590,54 @@ None.
 			Expect(result.Reason).To(Equal("unparseable review format"))
 		})
 	})
+
+	Context("multi-line fenced JSON with new spec-025 schema (no reason field) — approve", func() {
+		BeforeEach(func() {
+			reviewText = "# Code Review\n\nThe PR adds an HTML comment to README.md.\n\n" +
+				"```json\n" +
+				"{\n" +
+				"  \"verdict\": \"approve\",\n" +
+				"  \"summary\": \"Trivial doc-only change, no findings.\",\n" +
+				"  \"comments\": [],\n" +
+				"  \"concerns_addressed\": [\n" +
+				"    \"correctness: no logic changes\"\n" +
+				"  ]\n" +
+				"}\n" +
+				"```"
+		})
+
+		It("returns VerdictApprove from the multi-line block", func() {
+			Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+		})
+	})
+
+	Context("multi-line fenced JSON with new spec-025 schema — request-changes", func() {
+		BeforeEach(func() {
+			reviewText = "# Code Review\n\nThe PR has critical issues.\n\n" +
+				"```json\n" +
+				"{\n" +
+				"  \"verdict\": \"request-changes\",\n" +
+				"  \"summary\": \"Critical issues found.\",\n" +
+				"  \"comments\": []\n" +
+				"}\n" +
+				"```"
+		})
+
+		It("returns VerdictRequestChanges from the multi-line block", func() {
+			Expect(result.Verdict).To(Equal(pkg.VerdictRequestChanges))
+		})
+	})
+
+	Context("malformed JSON in fenced block falls back to heuristic", func() {
+		BeforeEach(func() {
+			reviewText = "```json\n{verdict: invalid no quotes\n```\n## Must Fix\n- problem"
+		})
+
+		It("returns VerdictRequestChanges from heuristic must-fix items", func() {
+			Expect(result.Verdict).To(Equal(pkg.VerdictRequestChanges))
+			Expect(result.Reason).To(Equal("must-fix items found"))
+		})
+	})
 })
 
 var _ = Describe("StripJSONVerdict", func() {

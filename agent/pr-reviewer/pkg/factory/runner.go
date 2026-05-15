@@ -15,7 +15,6 @@ import (
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
-	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
 )
 
 // RunConfig is the input to RunAgent — everything the orchestrator needs
@@ -75,10 +74,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 
 	agent := cfg.Agent
 	if agent == nil {
-		botLogin := env[githubposter.BotLoginEnv]
-		if botLogin == "" {
-			botLogin = githubposter.DefaultBotLogin
-		}
+		botLogin := ResolveBotLogin(env)
 		poster := CreatePrPoster(cfg.GHToken, botLogin)
 		verifier := CreateReviewVerifier(cfg.GHToken, botLogin)
 		agent = CreateAgent(

@@ -164,10 +164,7 @@ func CreateAgent(
 	prPoster prpkg.PrPoster,
 	verifier prpkg.ReviewVerifier,
 ) *agentlib.Agent {
-	botLogin := env[githubposter.BotLoginEnv]
-	if botLogin == "" {
-		botLogin = githubposter.DefaultBotLogin
-	}
+	botLogin := ResolveBotLogin(env)
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
 	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
 		Name:          "pr-plan",
@@ -215,10 +212,7 @@ func CreateAgentProvider(
 	reviewMode string,
 	repoAllowlist []string,
 ) agentlib.AgentProvider {
-	botLogin := env[githubposter.BotLoginEnv] // BotLoginEnv stays in githubposter
-	if botLogin == "" {
-		botLogin = githubposter.DefaultBotLogin
-	}
+	botLogin := ResolveBotLogin(env)
 	poster := CreatePrPoster(ghToken, botLogin)
 	verifier := CreateReviewVerifier(ghToken, botLogin)
 	domainAgent := CreateAgent(

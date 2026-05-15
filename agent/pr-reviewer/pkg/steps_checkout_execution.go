@@ -198,6 +198,31 @@ func (s *checkoutExecutionStep) checkAllowlist(
 	}
 }
 
+// ExtractPRURL scans md.Preamble plus every section before the first "## "
+// (H2) heading for a GitHub PR URL. agentlib splits sections at both "# " (H1)
+// and "## " (H2), so when the watcher writes the task body as:
+//
+//	# PR Review: <title>
+//	<PR URL>
+//	## Plan
+//
+// md.Preamble is always empty and the URL sits inside the H1 section body.
+// Stopping at the first H2 prevents matching URLs Claude writes inside ## Review.
+func ExtractPRURL(md *agentlib.Markdown) string {
+	if u := githubPRURLPattern.FindString(md.Preamble); u != "" {
+		return u
+	}
+	for _, sec := range md.Sections {
+		if strings.HasPrefix(sec.Heading, "## ") {
+			break // stop at first H2 — Claude-authored body starts here
+		}
+		if u := githubPRURLPattern.FindString(sec.Heading + "\n" + sec.Body); u != "" {
+			return u
+		}
+	}
+	return ""
+}
+
 func (s *checkoutExecutionStep) runClaude(
 	ctx context.Context,
 	md *agentlib.Markdown,
@@ -206,29 +231,7 @@ func (s *checkoutExecutionStep) runClaude(
 ) (*agentlib.Result, error) {
 	// Cache PR URL BEFORE any md mutations to avoid matching URLs that Claude
 	// writes inside the ## Review section body.
-	//
-	// agentlib splits sections at BOTH "# " (H1) and "## " (H2). The watcher
-	// writes the task body as:
-	//   # PR Review: <title>
-	//   <blank>
-	//   <PR URL>
-	//   ## Plan
-	// So `md.Preamble` is empty (the H1 starts immediately) and the URL is
-	// inside the H1 section's Body. Scan the preamble PLUS every section
-	// before the first "## " (H2) — that's the watcher-authored part, never
-	// the Claude-written part.
-	prURLStr := githubPRURLPattern.FindString(md.Preamble)
-	if prURLStr == "" {
-		for _, sec := range md.Sections {
-			if strings.HasPrefix(sec.Heading, "## ") {
-				break // stop at first H2 — Claude-authored body starts here
-			}
-			prURLStr = githubPRURLPattern.FindString(sec.Heading + "\n" + sec.Body)
-			if prURLStr != "" {
-				break
-			}
-		}
-	}
+	prURLStr := ExtractPRURL(md)
 
 	runner := claudelib.NewClaudeRunner(claudelib.ClaudeRunnerConfig{
 		ClaudeConfigDir:  s.claudeConfigDir,
