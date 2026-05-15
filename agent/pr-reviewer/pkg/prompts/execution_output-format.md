@@ -27,4 +27,4 @@ Field rules:
 - `concerns_addressed`: required, lists each concern from `## Plan` with
   resolution status (addressed by code change OR raised as comment)
 
-Output raw JSON only. No code fences. No prose before or after.
+Output the JSON inside a fenced code block (```json ... ```). No prose before or after the fence. The fence renders the JSON readably in Obsidian and other markdown viewers; downstream consumers strip the fence before parsing.
