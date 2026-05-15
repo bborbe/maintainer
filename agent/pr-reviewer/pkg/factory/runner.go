@@ -80,6 +80,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 			botLogin = githubposter.DefaultBotLogin
 		}
 		poster := CreatePrPoster(cfg.GHToken, botLogin)
+		verifier := CreateReviewVerifier(cfg.GHToken, botLogin)
 		agent = CreateAgent(
 			cfg.ClaudeConfigDir,
 			cfg.AgentDir,
@@ -90,7 +91,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 			cfg.ReviewMode,
 			cfg.RepoAllowlist,
 			poster,
-			nil, // nil verifier = skip post-verification in local CLI mode
+			verifier,
 		)
 	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)
