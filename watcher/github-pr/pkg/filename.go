@@ -19,11 +19,15 @@ const maxTitleLen = 200
 const maxSlugLen = 50
 
 // computePRTitle returns the human-readable title for a PR-review task.
-// Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {slug}"
-// Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number}"
+// Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]} - {slug}"
+// Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
-func computePRTitle(provider, owner, repo string, number int, title string) string {
-	base := fmt.Sprintf("PR Review %s - %s-%s - %d", provider, owner, repo, number)
+func computePRTitle(provider, owner, repo string, number int, sha, title string) string {
+	shortSHA := sha
+	if len(shortSHA) > 8 {
+		shortSHA = shortSHA[:8]
+	}
+	base := fmt.Sprintf("PR Review %s - %s-%s - %d - %s", provider, owner, repo, number, shortSHA)
 	slug := slugifyTitle(title)
 	var t string
 	if slug == "" {

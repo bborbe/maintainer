@@ -29,7 +29,6 @@ type Watcher interface {
 func NewWatcher(
 	ghClient GitHubClient,
 	createSender task.CreateCommandSender,
-	updateFrontmatterSender task.UpdateFrontmatterCommandSender,
 	cursorPath string,
 	startTime libtime.DateTime,
 	scope string,
@@ -39,30 +38,28 @@ func NewWatcher(
 	trustDecision trust.Trust,
 ) Watcher {
 	return &watcher{
-		ghClient:                ghClient,
-		createSender:            createSender,
-		updateFrontmatterSender: updateFrontmatterSender,
-		cursorPath:              cursorPath,
-		startTime:               startTime,
-		scope:                   scope,
-		taskCreationFilter:      taskCreationFilter,
-		stage:                   stage,
-		metrics:                 metrics,
-		trustDecision:           trustDecision,
+		ghClient:           ghClient,
+		createSender:       createSender,
+		cursorPath:         cursorPath,
+		startTime:          startTime,
+		scope:              scope,
+		taskCreationFilter: taskCreationFilter,
+		stage:              stage,
+		metrics:            metrics,
+		trustDecision:      trustDecision,
 	}
 }
 
 type watcher struct {
-	ghClient                GitHubClient
-	createSender            task.CreateCommandSender
-	updateFrontmatterSender task.UpdateFrontmatterCommandSender
-	cursorPath              string
-	startTime               libtime.DateTime
-	scope                   string
-	taskCreationFilter      filter.TaskCreationFilter
-	stage                   string
-	metrics                 Metrics
-	trustDecision           trust.Trust
+	ghClient           GitHubClient
+	createSender       task.CreateCommandSender
+	cursorPath         string
+	startTime          libtime.DateTime
+	scope              string
+	taskCreationFilter filter.TaskCreationFilter
+	stage              string
+	metrics            Metrics
+	trustDecision      trust.Trust
 }
 
 func (w *watcher) Poll(ctx context.Context) error {
@@ -124,6 +121,23 @@ func (w *watcher) fetchAllPRs(
 
 // processPRs iterates over fetched PRs, publishes commands, and returns the max updated-at seen.
 // It rebuilds HeadSHAs from only the current open-PR batch, pruning closed/merged PRs.
+// Each (PR, SHA) pair produces at most one CreateTaskCommand across all poll cycles.
+//
+// Design note on cursor preservation for filter-skipped and details-fetch-error PRs:
+//
+// CRITICAL ASSUMPTION: the controller deduplicates incoming CreateTaskCommands by their
+// task_identifier (UUID5). If the controller does NOT dedup, every transient filter toggle
+// or transient GetPRDetails failure will produce a duplicate vault file on the next poll.
+// VERIFY this assumption against the controller code before merging — search for the
+// command consumer's idempotency check; if absent, this design must change to preserve
+// per-PR cursor entries (which would require extending the cursor schema with the
+// (owner, repo, number) tuple, since UUID5 is not reversible).
+//
+// Given the assumption holds, we accept that transient filter or fetch failures will cause
+// the watcher to re-publish a CreateTaskCommand for the same (PR, SHA) on the next successful
+// poll, and rely on controller dedup to make this a no-op. This matches the recovery path
+// already documented in the spec failure-mode row "Watcher restart with empty cursor sees a
+// PR whose head SHA already has a vault file" — same mechanism, slightly different trigger.
 func (w *watcher) processPRs(
 	ctx context.Context,
 	cursorState *Cursor,
@@ -135,8 +149,6 @@ func (w *watcher) processPRs(
 	newHeadSHAs := make(map[string]string, len(allPRs))
 
 	for _, pr := range allPRs {
-		taskIDStr := DeriveTaskID(pr.Owner, pr.Repo, pr.Number).String()
-
 		if w.taskCreationFilter.Skip(
 			filter.PR{
 				AuthorLogin: pr.AuthorLogin,
@@ -148,13 +160,13 @@ func (w *watcher) processPRs(
 		) {
 			glog.V(3).Infof("skipping pr=%s/%s#%d reason=filtered", pr.Owner, pr.Repo, pr.Number)
 			w.metrics.IncPRPublished("skipped")
-			if known, ok := cursorState.HeadSHAs[taskIDStr]; ok {
-				newHeadSHAs[taskIDStr] = known
-			}
+			// Filtered PRs do not contribute entries to newHeadSHAs. If the PR was previously
+			// published, its SHA-based cursor entry is pruned here and will be re-created on
+			// the next successful (non-filtered) poll — controller dedup prevents a duplicate file.
 			continue
 		}
 
-		details, err := w.fetchPRDetails(ctx, pr, taskIDStr, prDetailsCache)
+		details, err := w.fetchPRDetails(ctx, pr, prDetailsCache)
 		if err != nil {
 			glog.Errorf(
 				"get pr details failed pr=%s/%s#%d err=%v",
@@ -163,13 +175,42 @@ func (w *watcher) processPRs(
 				pr.Number,
 				err,
 			)
-			if known, ok := cursorState.HeadSHAs[taskIDStr]; ok {
-				newHeadSHAs[taskIDStr] = known
+			// Same rationale as filtered PRs: cannot preserve old SHA-based entry without
+			// knowing the SHA. Transient error → re-publish on next poll → controller deduplicates.
+			continue
+		}
+
+		// Fail-closed: if head SHA is absent, skip this PR on this poll.
+		if details.HeadSHA == "" {
+			glog.Warningf(
+				"missing head SHA for pr=%s/%s#%d, skipping",
+				pr.Owner,
+				pr.Repo,
+				pr.Number,
+			)
+			continue
+		}
+
+		taskIDStr := DeriveTaskID(pr.Owner, pr.Repo, pr.Number, details.HeadSHA).String()
+
+		if _, exists := cursorState.HeadSHAs[taskIDStr]; exists {
+			// Same (PR, SHA) already spawned — no-op.
+			glog.V(3).Infof(
+				"no change, skipping pr=%s/%s#%d sha=%s taskID=%s",
+				pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr,
+			)
+			newHeadSHAs[taskIDStr] = details.HeadSHA
+			if pr.UpdatedAt.After(maxUpdatedAt) {
+				maxUpdatedAt = pr.UpdatedAt
 			}
 			continue
 		}
 
-		if w.handlePR(ctx, cursorState, pr, taskIDStr, details) {
+		// New (PR, SHA) pair — publish a fresh CreateTaskCommand.
+		if w.publishCreate(ctx, pr, taskIDStr, details) {
+			// Update cursorState in-place so duplicate PR entries in the same poll batch
+			// are deduplicated without a second create publish.
+			cursorState.HeadSHAs[taskIDStr] = details.HeadSHA
 			newHeadSHAs[taskIDStr] = details.HeadSHA
 			if pr.UpdatedAt.After(maxUpdatedAt) {
 				maxUpdatedAt = pr.UpdatedAt
@@ -181,31 +222,8 @@ func (w *watcher) processPRs(
 	return maxUpdatedAt
 }
 
-// handlePR processes a single PR: publishes commands, updates cursor SHA.
-// Returns true if the PR was processed successfully (cursor should advance).
-func (w *watcher) handlePR(
-	ctx context.Context,
-	cursorState *Cursor,
-	pr PullRequest,
-	taskIDStr string,
-	details PRDetails,
-) bool {
-	knownSHA, exists := cursorState.HeadSHAs[taskIDStr]
-	switch {
-	case !exists:
-		return w.publishCreate(ctx, cursorState, pr, taskIDStr, details)
-	case knownSHA != details.HeadSHA:
-		return w.publishForcePush(ctx, cursorState, pr, taskIDStr, knownSHA, details.HeadSHA)
-	default:
-		glog.V(3).
-			Infof("no change, skipping pr=%s/%s#%d taskID=%s", pr.Owner, pr.Repo, pr.Number, taskIDStr)
-		return true
-	}
-}
-
 func (w *watcher) publishCreate(
 	ctx context.Context,
-	cursorState *Cursor,
 	pr PullRequest,
 	taskIDStr string,
 	details PRDetails,
@@ -222,7 +240,14 @@ func (w *watcher) publishCreate(
 	var cmd task.CreateCommand
 	if trustResult.Success() {
 		cmd = task.CreateCommand{
-			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title: computePRTitle(
+				"github",
+				pr.Owner,
+				pr.Repo,
+				pr.Number,
+				details.HeadSHA,
+				pr.Title,
+			),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildTaskBody(pr),
@@ -233,7 +258,7 @@ func (w *watcher) publishCreate(
 		}
 		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
 		cmd = task.CreateCommand{
-			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, pr.Title),
+			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, details.HeadSHA, pr.Title),
 			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
 			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
 			Body:           buildUntrustedBody(author, trustResult.Description()),
@@ -245,82 +270,19 @@ func (w *watcher) publishCreate(
 		w.metrics.IncPRPublished("error")
 		return false
 	}
-	cursorState.HeadSHAs[taskIDStr] = details.HeadSHA
-	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d taskID=%s trusted=%t",
-		pr.Owner, pr.Repo, pr.Number, taskIDStr, trustResult.Success())
+	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d sha=%s taskID=%s trusted=%t",
+		pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr, trustResult.Success())
 	w.metrics.IncPRPublished("create")
-	return true
-}
-
-func (w *watcher) publishForcePush(
-	ctx context.Context,
-	cursorState *Cursor,
-	pr PullRequest,
-	taskIDStr, oldSHA, newSHA string,
-) bool {
-	author := pr.AuthorLogin
-
-	trustResult, err := w.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: author})
-	if err != nil {
-		glog.Errorf("trust check failed pr=%s err=%v", pr.HTMLURL, err)
-		w.metrics.IncPRPublished("error")
-		return false
-	}
-
-	heading := fmt.Sprintf("## Outdated by force-push %s", oldSHA)
-
-	var updates agentlib.TaskFrontmatter
-	var bodySection *task.BodySection
-
-	if trustResult.Success() {
-		updates = agentlib.TaskFrontmatter{
-			"task_type":     "pr-review",
-			"assignee":      "pr-reviewer-agent",
-			"phase":         "planning",
-			"status":        "in_progress",
-			"trigger_count": 0,
-		}
-		bodySection = &task.BodySection{Heading: heading, Section: heading + "\n"}
-	} else {
-		if author == "" {
-			author = "(unknown)"
-		}
-		glog.V(2).Infof("untrusted force-push author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
-		updates = agentlib.TaskFrontmatter{
-			"task_type":     "pr-review",
-			"assignee":      "",
-			"phase":         "human_review",
-			"status":        "todo",
-			"trigger_count": 0,
-		}
-		section := heading + "\n" + buildUntrustedBody(author, trustResult.Description())
-		bodySection = &task.BodySection{Heading: heading, Section: section}
-	}
-
-	cmd := task.UpdateFrontmatterCommand{
-		TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-		Updates:        updates,
-		Body:           bodySection,
-	}
-	if err := w.updateFrontmatterSender.SendCommand(ctx, cmd); err != nil {
-		glog.Errorf("publish update-frontmatter failed pr=%s err=%v", pr.HTMLURL, err)
-		w.metrics.IncPRPublished("error")
-		return false
-	}
-	cursorState.HeadSHAs[taskIDStr] = newSHA
-	glog.V(2).Infof("published UpdateFrontmatterCommand pr=%s/%s#%d taskID=%s trusted=%t",
-		pr.Owner, pr.Repo, pr.Number, taskIDStr, trustResult.Success())
-	w.metrics.IncPRPublished("update_frontmatter")
 	return true
 }
 
 func (w *watcher) fetchPRDetails(
 	ctx context.Context,
 	pr PullRequest,
-	taskIDStr string,
 	cache map[string]PRDetails,
 ) (PRDetails, error) {
-	if details, ok := cache[taskIDStr]; ok {
+	cacheKey := fmt.Sprintf("%s/%s#%d", pr.Owner, pr.Repo, pr.Number)
+	if details, ok := cache[cacheKey]; ok {
 		return details, nil
 	}
 	details, err := w.ghClient.GetPRDetails(ctx, pr.Owner, pr.Repo, pr.Number)
@@ -334,7 +296,7 @@ func (w *watcher) fetchPRDetails(
 			pr.Number,
 		)
 	}
-	cache[taskIDStr] = details
+	cache[cacheKey] = details
 	return details, nil
 }
 

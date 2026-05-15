@@ -14,9 +14,10 @@ import (
 // This value is a constant — changing it invalidates all existing task identifiers.
 var prWatcherNamespace = uuid.MustParse("7d4b3e5f-8a21-4c9d-b036-2e5f7a8c1d0e")
 
-// DeriveTaskID returns a deterministic task identifier for a PR.
-// Input: "<owner>/<repo>#<number>", e.g. "bborbe/maintainer#42".
-func DeriveTaskID(owner, repo string, number int) uuid.UUID {
-	key := fmt.Sprintf("%s/%s#%d", owner, repo, number)
+// DeriveTaskID returns a deterministic task identifier for a (PR, SHA) pair.
+// Input: "<owner>/<repo>#<number>@<sha>", e.g. "bborbe/maintainer#42@abc123...".
+// The full SHA is used (not truncated) to keep the dedup keyspace collision-free.
+func DeriveTaskID(owner, repo string, number int, sha string) uuid.UUID {
+	key := fmt.Sprintf("%s/%s#%d@%s", owner, repo, number, sha)
 	return uuid.NewSHA1(prWatcherNamespace, []byte(key))
 }

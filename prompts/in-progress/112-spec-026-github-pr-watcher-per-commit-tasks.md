@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [026-github-pr-watcher-per-commit-tasks]
+summary: 'Switched github-pr watcher from per-PR to per-(PR, SHA) spawn model: DeriveTaskID now encodes full SHA in UUID5 key, computePRTitle adds sha[:8] segment, publishForcePush and updateFrontmatterSender removed entirely, factory simplified to single CreateKafkaSender, all tests rewritten to cover new behavior, CHANGELOG updated.'
+container: maintainer-112-spec-026-github-pr-watcher-per-commit-tasks
+dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T12:00:00Z"
 queued: "2026-05-15T13:39:49Z"
+started: "2026-05-15T13:40:30Z"
 branch: dark-factory/github-pr-watcher-per-commit-tasks
 ---
 

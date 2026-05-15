@@ -22,20 +22,20 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-// CreateKafkaSenders constructs typed task command senders backed by a Kafka sync producer.
+// CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
 // The cleanup function closes the underlying sync producer on shutdown.
-func CreateKafkaSenders(
+func CreateKafkaSender(
 	ctx context.Context,
 	brokers libkafka.Brokers,
 	branch base.Branch,
-) (task.CreateCommandSender, task.UpdateFrontmatterCommandSender, func(), error) {
+) (task.CreateCommandSender, func(), error) {
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		brokers,
 		"maintainer-watcher-github-pr",
 	)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(ctx, err, "create sync producer")
+		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
 	cleanup := func() {
@@ -43,10 +43,7 @@ func CreateKafkaSenders(
 			glog.Warningf("close kafka sync producer: %v", err)
 		}
 	}
-	return task.NewCreateCommandSender(sender),
-		task.NewUpdateFrontmatterCommandSender(sender),
-		cleanup,
-		nil
+	return task.NewCreateCommandSender(sender), cleanup, nil
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
@@ -61,18 +58,16 @@ func CreateWatcher(
 	trustedAuthors []string,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
-	createSender, updateFrontmatterSender, cleanup, err := CreateKafkaSenders(ctx, brokers, branch)
+	createSender, cleanup, err := CreateKafkaSender(ctx, brokers, branch)
 	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka senders")
+		return nil, nil, errors.Wrap(ctx, err, "create kafka sender")
 	}
 
 	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
-
 	ghClient := pkg.NewGitHubClient(ghToken)
 	w := pkg.NewWatcher(
 		ghClient,
 		createSender,
-		updateFrontmatterSender,
 		pkg.DefaultCursorPath,
 		startTime,
 		repoScope,

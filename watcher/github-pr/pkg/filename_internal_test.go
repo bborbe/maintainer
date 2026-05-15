@@ -50,39 +50,43 @@ var _ = Describe("slugifyTitle", func() {
 
 var _ = Describe("computePRTitle", func() {
 	DescribeTable("produces correct title",
-		func(provider, owner, repo string, number int, title, want string) {
-			Expect(computePRTitle(provider, owner, repo, number, title)).To(Equal(want))
+		func(provider, owner, repo string, number int, sha, title, want string) {
+			Expect(computePRTitle(provider, owner, repo, number, sha, title)).To(Equal(want))
 		},
 		Entry("normal PR with title",
-			"github", "bborbe", "maintainer", 2, "test: delete this PR never",
-			"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"),
+			"github", "bborbe", "maintainer", 2, "abc12345def67890", "test: delete this PR never",
+			"PR Review github - bborbe-maintainer - 2 - abc12345 - test-delete-this-pr-never"),
 		Entry("title with special chars",
-			"github", "bborbe", "trading", 110, "fix: chromium trixie",
-			"PR Review github - bborbe-trading - 110 - fix-chromium-trixie"),
+			"github", "bborbe", "trading", 110, "abc12345def67890", "fix: chromium trixie",
+			"PR Review github - bborbe-trading - 110 - abc12345 - fix-chromium-trixie"),
 		Entry("empty title → no slug segment",
-			"github", "bborbe", "x", 7, "",
-			"PR Review github - bborbe-x - 7"),
+			"github", "bborbe", "x", 7, "abc12345def67890", "",
+			"PR Review github - bborbe-x - 7 - abc12345"),
 		Entry("whitespace-only title → no slug segment",
-			"github", "bborbe", "x", 7, "   ",
-			"PR Review github - bborbe-x - 7"),
+			"github", "bborbe", "x", 7, "abc12345def67890", "   ",
+			"PR Review github - bborbe-x - 7 - abc12345"),
 		Entry("unicode-only title → no slug segment",
-			"github", "bborbe", "x", 7, "🚀🎉",
-			"PR Review github - bborbe-x - 7"),
+			"github", "bborbe", "x", 7, "abc12345def67890", "🚀🎉",
+			"PR Review github - bborbe-x - 7 - abc12345"),
 		Entry(
 			"slug truncated at 50 chars",
 			"github",
 			"org",
 			"repo",
 			1,
+			"abc12345def67890",
 			"this is a very long pull request title that exceeds the maximum slug length limit here",
-			"PR Review github - org-repo - 1 - this-is-a-very-long-pull-request-title-that-exceed",
+			"PR Review github - org-repo - 1 - abc12345 - this-is-a-very-long-pull-request-title-that-exceed",
 		),
 		Entry("future bitbucket provider",
-			"bitbucket", "team", "svc", 42, "fix auth bug",
-			"PR Review bitbucket - team-svc - 42 - fix-auth-bug"),
+			"bitbucket", "team", "svc", 42, "abc12345def67890", "fix auth bug",
+			"PR Review bitbucket - team-svc - 42 - abc12345 - fix-auth-bug"),
 		Entry("hyphenated repo name joined correctly",
-			"github", "my-org", "my-repo", 99, "bump deps",
-			"PR Review github - my-org-my-repo - 99 - bump-deps"),
+			"github", "my-org", "my-repo", 99, "abc12345def67890", "bump deps",
+			"PR Review github - my-org-my-repo - 99 - abc12345 - bump-deps"),
+		Entry("short SHA (fewer than 8 chars) — no truncation",
+			"github", "bborbe", "repo", 1, "abc", "my title",
+			"PR Review github - bborbe-repo - 1 - abc - my-title"),
 	)
 })
 
@@ -90,7 +94,7 @@ var _ = Describe("computePRTitle", func() {
 var _ = Describe("task.CreateCommand wire format", func() {
 	It("emits 'title' as the top-level key (not 'filename_hint')", func() {
 		cmd := task.CreateCommand{
-			Title:          "PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never",
+			Title:          "PR Review github - bborbe-maintainer - 2 - abc12345 - test-delete-this-pr-never",
 			TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 			Frontmatter:    agentlib.TaskFrontmatter{"assignee": "pr-reviewer-agent"},
 			Body:           "# body",
@@ -100,7 +104,7 @@ var _ = Describe("task.CreateCommand wire format", func() {
 
 		Expect(
 			string(raw),
-		).To(ContainSubstring(`"title":"PR Review github - bborbe-maintainer - 2 - test-delete-this-pr-never"`))
+		).To(ContainSubstring(`"title":"PR Review github - bborbe-maintainer - 2 - abc12345 - test-delete-this-pr-never"`))
 		Expect(string(raw)).NotTo(ContainSubstring(`"filename_hint"`))
 	})
 
@@ -108,8 +112,8 @@ var _ = Describe("task.CreateCommand wire format", func() {
 	// Prevents future drift between watcher's slug rules and lib's Title validator.
 	DescribeTable(
 		"computePRTitle output passes task.CreateCommand.Validate",
-		func(provider, owner, repo string, number int, prTitle string) {
-			title := computePRTitle(provider, owner, repo, number, prTitle)
+		func(provider, owner, repo string, number int, sha, prTitle string) {
+			title := computePRTitle(provider, owner, repo, number, sha, prTitle)
 			cmd := task.CreateCommand{
 				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 				Title:          title,
@@ -121,17 +125,50 @@ var _ = Describe("task.CreateCommand wire format", func() {
 			}
 			Expect(cmd.Validate(context.Background())).To(Succeed())
 		},
-		Entry("typical PR", "github", "bborbe", "maintainer", 2, "test: delete this PR never"),
-		Entry("hyphenated repo", "github", "my-org", "my-repo", 99, "bump deps"),
+		Entry(
+			"typical PR",
+			"github",
+			"bborbe",
+			"maintainer",
+			2,
+			"abc12345def67890",
+			"test: delete this PR never",
+		),
+		Entry(
+			"hyphenated repo",
+			"github",
+			"my-org",
+			"my-repo",
+			99,
+			"abc12345def67890",
+			"bump deps",
+		),
 		Entry(
 			"special chars in title",
 			"github",
 			"bborbe",
 			"trading",
 			110,
+			"abc12345def67890",
 			"fix: chromium @trixie [edge]",
 		),
-		Entry("empty title (slug omits segment)", "github", "bborbe", "x", 7, ""),
-		Entry("unicode-only title (slug omits segment)", "github", "bborbe", "x", 7, "🚀🎉"),
+		Entry(
+			"empty title (slug omits segment)",
+			"github",
+			"bborbe",
+			"x",
+			7,
+			"abc12345def67890",
+			"",
+		),
+		Entry(
+			"unicode-only title (slug omits segment)",
+			"github",
+			"bborbe",
+			"x",
+			7,
+			"abc12345def67890",
+			"🚀🎉",
+		),
 	)
 })

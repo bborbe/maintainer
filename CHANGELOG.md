@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.39
+
+- feat(watcher/github-pr): per-(PR, SHA) spawn model — each push produces a new task file identified by the head commit SHA; the old task file is never mutated; removes `publishForcePush` and the `## Outdated by force-push` mutation path; `DeriveTaskID` now encodes full SHA in UUID5 key; `computePRTitle` adds `sha[:8]` segment between PR number and slug
+
 ## v0.23.38
 
 - feat(agent/pr-reviewer): collapse verdict from three values to two — every review now ends with approve or request-changes; Should Fix findings escalate to request-changes (was comment); empty or unparseable agent output defaults to request-changes (fail-closed); comment constant removed, compiler-enforced
