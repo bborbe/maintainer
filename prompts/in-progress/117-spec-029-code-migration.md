@@ -1,7 +1,11 @@
 ---
-status: draft
+status: executing
 spec: [029-migrate-callers-to-repoallowlist-lib-and-wildcard-rollout]
+container: maintainer-117-spec-029-code-migration
+dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T20:05:00Z"
+queued: "2026-05-15T20:09:41Z"
+started: "2026-05-15T20:09:43Z"
 branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 ---
 
@@ -315,9 +319,15 @@ Fix all compile errors and test failures before proceeding to the next module.
 
 ## Step 10 — Add lib dependency to `watcher/github-pr/go.mod`
 
-Same pattern as step 2. Edit `watcher/github-pr/go.mod`:
-- Add replace directive: `github.com/bborbe/maintainer/lib => ../../lib`
-- Add require: `github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000`
+Similar to step 2, BUT `watcher/github-pr/go.mod` does NOT currently have a `replace (...)` block (verified before this prompt was written). Edit it:
+- **If a `replace (...)` block exists**: append `github.com/bborbe/maintainer/lib => ../../lib` to it.
+- **Otherwise (this is the current state)**: insert a new replace block ABOVE the `require (...)` block:
+  ```go
+  replace (
+  	github.com/bborbe/maintainer/lib => ../../lib
+  )
+  ```
+- In the `require (...)` block, add: `github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000`
 
 ```bash
 cd /workspace/watcher/github-pr && go mod tidy
@@ -453,8 +463,15 @@ Fix all compile errors and test failures before proceeding.
 
 ## Step 15 — Add lib dependency to `watcher/github-build/go.mod`
 
-Same pattern as step 2. Edit `watcher/github-build/go.mod`:
-- Add replace directive and require for `github.com/bborbe/maintainer/lib`.
+Same conditional handling as step 10 — `watcher/github-build/go.mod` does NOT currently have a `replace (...)` block. Edit it:
+- **If a `replace (...)` block exists**: append `github.com/bborbe/maintainer/lib => ../../lib` to it.
+- **Otherwise (current state)**: insert a new replace block above `require (...)`:
+  ```go
+  replace (
+  	github.com/bborbe/maintainer/lib => ../../lib
+  )
+  ```
+- In `require (...)`, add: `github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000`
 
 ```bash
 cd /workspace/watcher/github-build && go mod tidy
@@ -586,6 +603,44 @@ Same pattern as step 18. Read the full file first. Add the same import and Valid
 
 ---
 
+## Step 19b — Add level-1 boundary test for `Validate` aggregate-error behavior
+
+Required callers (`watcher/github-build/main.go` + `cmd/run-once/main.go`) add a NEW critical control point: `repoallowlist.Validate(ctx, allowlist)` as a fail-fast gate at the top of `Run`. This boundary needs a test that exercises the **real production path** (not just `Validate` in isolation — that's covered in spec 028's tests).
+
+Add a test in `watcher/github-build/main_test.go` (or `cmd/run-once/main_test.go` — pick whichever has the existing test scaffolding; or add in BOTH if both already have tests). Use Ginkgo + Gomega:
+
+```go
+Context("Run with malformed REPO_ALLOWLIST entries", func() {
+    It("fails fast with an aggregate error naming every malformed entry", func() {
+        app := App{
+            // ... minimal fields to reach the Validate call;
+            // do NOT spin up Kafka/HTTP — Validate is the FIRST thing in Run
+            RepoAllowlist: "github.com/bborbe/maintainer,bad-entry,also/bad",
+        }
+        err := app.Run(ctx, sentryClient)
+        Expect(err).To(HaveOccurred())
+        Expect(err.Error()).To(ContainSubstring("bad-entry"))
+        Expect(err.Error()).To(ContainSubstring("also/bad"))
+    })
+
+    It("accepts a well-formed wildcard without error from Validate", func() {
+        // Use a stub or short-circuited App that returns early after Validate succeeds,
+        // OR catch a known-later error (e.g. missing Kafka broker) and assert it is
+        // NOT the Validate error. The point: Validate alone does not reject
+        // "github.com/bborbe/*".
+        app := App{RepoAllowlist: "github.com/bborbe/*", /* ... */}
+        err := app.Run(ctx, sentryClient)
+        if err != nil {
+            Expect(err.Error()).NotTo(ContainSubstring("repo-allowlist"))
+        }
+    })
+})
+```
+
+These two cases together prove (1) `Validate`'s aggregate-error semantics propagate through the wrap, and (2) wildcard entries reach `Validate` without false rejection — directly satisfying spec 029 AC #3.
+
+---
+
 ## Step 20 — Run `make test` in watcher/github-build (fast feedback)
 
 ```bash
@@ -657,11 +712,17 @@ cd /workspace/watcher/github-build && make precommit
 ```
 Expected: all three exit 0.
 
-Confirm no inline parsing remains:
+Confirm no inline parsing remains. The current inline parsers use `regexp.MustCompile` against a named pattern variable (not `strings.Split` over `REPO_ALLOWLIST` and not `filepath.Match`). Grep for the actual patterns:
 ```bash
-grep -rn 'strings\.Split.*REPO_ALLOWLIST\|filepath\.Match.*allow' /workspace/agent/ /workspace/watcher/
+grep -rn 'repoAllowlistEntryPattern\|regexp\.MustCompile.*\\\\b\\\\[a-zA-Z0-9' /workspace/agent/ /workspace/watcher/
 ```
 Expected: zero matches.
+
+Also confirm by parser-function name (the helper this prompt removes):
+```bash
+grep -rn 'ParseRepoAllowlist' /workspace/agent/ /workspace/watcher/
+```
+Expected: matches ONLY inside `lib/repoallowlist/` (the library's own internal use) and the test files in `pkg/allowlist_test.go` where the old function is being replaced (those tests should be updated to call `repoallowlist.Validate` or `repoallowlist.IsAllowed` instead).
 
 Confirm every main.go imports repoallowlist:
 ```bash

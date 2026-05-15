@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [029-migrate-callers-to-repoallowlist-lib-and-wildcard-rollout]
 created: "2026-05-15T20:05:00Z"
+queued: "2026-05-15T20:09:41Z"
 branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 ---
 
@@ -10,7 +11,7 @@ branch: dark-factory/migrate-callers-to-repoallowlist-lib-and-wildcard-rollout
 - `dev.env` REPO_ALLOWLIST changes from `github.com/bborbe/go-skeleton` (single literal) to `github.com/bborbe/*` (org-wide wildcard)
 - `prod.env` REPO_ALLOWLIST changes from a seven-entry literal list to `github.com/bborbe/*` (org-wide wildcard)
 - After this change, any PR opened in any bborbe-owned repo automatically flows through the watcher → controller → agent pipeline without requiring an operator to add the repo explicitly
-- The Obsidian runbook "Agent - Add Repo to PR Reviewer Allowlist" cannot be updated by this container (it lives outside the workspace at `~/Documents/Obsidian/OpenClaw/`); the update is documented as a manual operator step in this prompt's completion report
+- The Obsidian runbook "Agent - Add Repo to PR Reviewer Allowlist" cannot be updated by this container (it lives outside the workspace at `~/Documents/Obsidian/Personal/65 Runbooks/Agent - Add Repo to PR Reviewer Allowlist.md`); the update is documented as a manual operator step in this prompt's completion report
 - No code changes, no `make precommit` needed — env files only
 
 </summary>
@@ -25,18 +26,22 @@ Switch `REPO_ALLOWLIST` in both env files from enumerated literal repo lists to 
 
 Read `CLAUDE.md` at the repo root for project conventions and YOLO container rules.
 
-**This prompt depends on prompt 1 (1-spec-029-code-migration.md) having been executed AND deployed.**
+**This prompt depends on prompt 1 (1-spec-029-code-migration.md) having been executed AND the new image being deployed in dev + prod clusters.**
 
-Before making changes, verify the code migration has been applied:
+Before making changes, verify the code migration has been applied across ALL 5 caller binaries (spec 029 AC #2). Missing even one would mean a partial migration that crashloops on the wildcard env value:
 
 ```bash
-grep -rn "repoallowlist\.IsAllowed" \
-  /workspace/agent/pr-reviewer/pkg/steps_checkout_execution.go \
-  /workspace/watcher/github-pr/pkg/filter/repo_allowlist_filter.go \
-  /workspace/watcher/github-build/pkg/filter/repo_allowlist_filter.go
+grep -rn "github\.com/bborbe/maintainer/lib/repoallowlist" \
+  /workspace/agent/pr-reviewer/main.go \
+  /workspace/agent/pr-reviewer/cmd/run-task/main.go \
+  /workspace/watcher/github-pr/main.go \
+  /workspace/watcher/github-build/main.go \
+  /workspace/watcher/github-build/cmd/run-once/main.go
 ```
 
-Expected: three matches (one per file). If zero matches → STOP and report `{"status":"failed","message":"code migration (prompt 1) has not been applied — deploy the code change before updating env files"}`.
+Expected: **at least 5 import-line matches** (one per main.go). If fewer than 5 → STOP and report `{"status":"failed","message":"code migration (prompt 1) is incomplete: <N>/5 main.go files import lib/repoallowlist. Partial migration will crashloop the build-watcher when env switches to wildcard."}`.
+
+**This grep verifies code is MERGED, not DEPLOYED.** Operator must confirm dev + prod pods are running the new image BEFORE approving this prompt for execution. The completion report MUST flag: "DO NOT redeploy env until pods on new image confirmed."
 
 **Files to read before making any changes:**
 
@@ -53,7 +58,7 @@ The spec's rollout order is enforced at the infrastructure level, not in this co
 
 **Obsidian runbook update (manual step, outside this container):**
 
-The runbook "Agent - Add Repo to PR Reviewer Allowlist" lives in the Obsidian vault at `~/Documents/Obsidian/OpenClaw/` which is inaccessible from this YOLO container. The operator must update it manually after this container completes. The update should:
+The runbook "Agent - Add Repo to PR Reviewer Allowlist" lives in the Obsidian vault at `~/Documents/Obsidian/Personal/65 Runbooks/Agent - Add Repo to PR Reviewer Allowlist.md` which is inaccessible from this YOLO container. The operator must update it manually after this container completes. The update should:
 - State that `github.com/bborbe/*` is now the default
 - Note that the primary use case has shifted to adding repos outside the bborbe org
 - Document that per-repo additions inside `bborbe/` are still possible by adding a literal entry alongside the wildcard, separated by comma, followed by redeploy
