@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-15T13:08:18Z"
 generating: "2026-05-15T13:11:56Z"
 prompted: "2026-05-15T13:29:32Z"
 verifying: "2026-05-15T13:47:38Z"
+completed: "2026-05-15T15:36:43Z"
 branch: dark-factory/github-pr-watcher-per-commit-tasks
 ---
 
