@@ -108,3 +108,20 @@ cd lib && make precommit
 ```
 
 Rung-1 only. No deploy, no integration, no scenario.
+
+## Verification Result
+
+**Verified:** 2026-05-15T21:52:09Z (HEAD cdfd1b2)
+**Binary:** installed `dark-factory v0.156.1-1-g04f3863-dirty`
+**Scenario:** Rung-1 (no scenario); ACs verified by code inspection at HEAD + fresh `make precommit` and `go test -cover` inside `lib/`.
+**Evidence:**
+- `lib/go.mod` line 1: `module github.com/bborbe/maintainer/lib`
+- `lib/repoallowlist/repoallowlist.go:25` `func IsAllowed(allowlist []string, target string) bool`
+- `lib/repoallowlist/repoallowlist.go:60` `func Validate(ctx context.Context, allowlist []string) error` (aggregates via `errors.Join(errs...)` line 77)
+- `cd lib && make precommit` → `ready to commit` (gosec 0 issues, trivy 0 vulns, addlicense clean)
+- `cd lib && go test -cover ./repoallowlist/...` → `coverage: 97.6% of statements` (>= 80% AC)
+- License headers present on 4/4 `.go` files (`grep Copyright` matched all)
+- No `fmt.Errorf` / stdlib `errors.New` in package (`grep` returned empty)
+- `git show 79f93c3 --stat` confirms no `*.env` and no REPO_ALLOWLIST inline-parser file modified
+- CHANGELOG entry present (section renamed from `## Unreleased` to `## v0.23.43` at release cut; substance intact)
+**Verdict:** PASS
