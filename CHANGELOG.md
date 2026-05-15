@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.43
+
+- feat(lib): bootstrap new shared Go module at `lib/` (module path `github.com/bborbe/maintainer/lib`); add `repoallowlist` package with `IsAllowed` predicate and `Validate` validator supporting literal matching, `github.com/<owner>/*` wildcard, and allow-all semantics for empty/nil allowlists
+
 ## v0.23.42
 
 - feat(agent/pr-reviewer): add post-verification to `ai_review` phase — after `## Verdict` is written, `reviewStep` calls `ReviewVerifier.VerifyReview` (GET `/pulls/{n}/reviews`) to confirm the execution-phase review persisted on GitHub; failure appends `ai_review verify:` diagnostic line and returns `AgentStatusFailed`; skips when `## Review` absent or last diagnostics block has `class: permanent`/`class: unknown`; moves `ReviewVerifier`, `VerifyRequest`, `VerifyResult` from `pkg/githubposter` to `pkg` to break import cycle; adds `CreateReviewVerifier` factory (spec 027 prompt 3/3)

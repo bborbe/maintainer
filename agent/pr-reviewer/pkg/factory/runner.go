@@ -76,6 +76,9 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	agent := cfg.Agent
 	if agent == nil {
 		botLogin := env[githubposter.BotLoginEnv]
+		if botLogin == "" {
+			botLogin = githubposter.DefaultBotLogin
+		}
 		poster := CreatePrPoster(cfg.GHToken, botLogin)
 		agent = CreateAgent(
 			cfg.ClaudeConfigDir,
