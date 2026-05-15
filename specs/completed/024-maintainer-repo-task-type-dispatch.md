@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-14T13:32:23Z"
 generating: "2026-05-14T14:17:39Z"
 prompted: "2026-05-14T14:23:34Z"
 verifying: "2026-05-14T15:36:13Z"
+completed: "2026-05-15T14:31:25Z"
 branch: dark-factory/maintainer-repo-task-type-dispatch
 ---
 
@@ -105,3 +106,18 @@ Manual post-deploy check (operator, not gated): after the binary is rolled to de
 ## Do-Nothing Option
 
 If we skip this work, the maintainer binary continues to fail every healthcheck task its executor dispatches. Probe coverage of this binary stays at zero, and operators must rely on indirect signals (deploy success, log grepping) to confirm the binary is healthy. The failed probe tasks also add noise to the parked-assignee queue. This is not acceptable now that the rest of the fleet (3 agent-repo binaries) reports clean probe results — the maintainer binary becomes the only blind spot. The cost of the change is low: a single binary, one prompt, no schema or API surface change.
+
+## Verification Result
+
+**Verified:** 2026-05-15T14:30:19Z (HEAD 49bb2e6)
+**Binary:** installed `dark-factory v0.156.1-1-g04f3863-dirty` (spec target is maintainer agent, not dark-factory)
+**Scenario:** Rung-1 precommit + dispatch unit tests in `agent/pr-reviewer/`; rung-2 live dev cluster healthcheck probe through `maintainer-agent-pr-reviewer` dispatch.
+**Evidence:**
+- `make precommit` in `agent/pr-reviewer/`: `ready to commit` (gosec 0 issues, trivy clean, all tests green)
+- factory_test.go:201-221 asserts `provider.Get(TaskTypePRReview/TaskTypeHealthcheck/"bogus")` paths — passed
+- `factory.go:179-211` `CreateAgentProvider` wires `agentlib.NewAgentProvider(serviceName, map{TaskTypePRReview: domain, TaskTypeHealthcheck: liveness})`; `main.go:168-182` dispatchAgent calls `provider.Get(ctx, TaskType(a.TaskType))` with `RecordRun(Failed)+RecordDuration` on the dispatch-error path (main.go:124-126)
+- `agent/pr-reviewer/go.mod`: `github.com/bborbe/agent/lib v0.62.16` (matches spec)
+- Config CR `dev/maintainer-agent-pr-reviewer`: `taskTypes: [pr-review, healthcheck]` (oauth-probe removed per spec line 59)
+- Live probe `4f206885-9096-5c19-96f3-9ccc3ed97575` at 2026-05-15T07:05:35Z: `phase: done`, `status: completed`, `task_type: healthcheck` in `~/Documents/Obsidian/OpenClaw/tasks/probe-pr-reviewer-agent-dev.md`; executor log: `job dev/pr-reviewer-agent-4f206885-20260515070535 succeeded ... trusting agent publish` — bug pre-fix would have produced `human_review`/`failed`
+- CHANGELOG.md v0.23.37 contains the spec'd bullet `feat(agent/pr-reviewer): per-task-type dispatch via factory.CreateAgentProvider …`
+**Verdict:** PASS
