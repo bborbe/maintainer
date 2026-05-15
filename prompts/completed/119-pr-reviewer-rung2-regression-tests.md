@@ -1,13 +1,12 @@
 ---
-status: committing
+status: completed
 summary: 'Added 4 regression tests locking in spec-027 bugs: extracted ResolveBotLogin helper with DescribeTable test, added COMMENTED-dismissal filter test in poster_test.go, added multi-line fenced JSON verdict tests against spec-025 schema, and extracted ExtractPRURL helper with 5-entry table test covering the watcher H1-section-body regression.'
 container: maintainer-119-pr-reviewer-rung2-regression-tests
 dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-15T20:30:00Z"
 queued: "2026-05-15T20:56:55Z"
 started: "2026-05-15T21:02:24Z"
-completed: "2026-05-15T20:59:31Z"
-lastFailReason: 'setup workflow: git fetch origin: fetch from origin: exit status 128'
+completed: "2026-05-15T21:14:30Z"
 ---
 
 <summary>
