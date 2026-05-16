@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [031-bug-pr-reviewer-dismisses-current-head-review]
 summary: Inverted SHA filter in listBotReviews from == to != so dismissal removes only prior-commit reviews, never the current-head review; added invariant comment and Dismissal Contract doc section; updated three existing tests and added DescribeTable with 6 rows covering the full dismissal eligibility matrix.
 container: maintainer-121-fix-031-dismissal-sha-filter
@@ -7,6 +7,7 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-16T10:45:00Z"
 queued: "2026-05-16T11:53:12Z"
 started: "2026-05-16T11:56:22Z"
+completed: "2026-05-16T12:03:36Z"
 branch: dark-factory/bug-pr-reviewer-dismisses-current-head-review
 ---
 
