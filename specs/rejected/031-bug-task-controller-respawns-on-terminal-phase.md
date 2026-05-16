@@ -1,10 +1,12 @@
 ---
-status: generating
+status: rejected
 tags:
     - dark-factory
     - spec
 approved: "2026-05-16T10:26:43Z"
 generating: "2026-05-16T11:06:19Z"
+rejected: "2026-05-16T11:40:20Z"
+rejected_reason: duplicate of 032, created by unapprove+re-approve cycle
 branch: dark-factory/bug-task-controller-respawns-on-terminal-phase
 ---
 

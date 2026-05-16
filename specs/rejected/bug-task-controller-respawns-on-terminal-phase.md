@@ -1,8 +1,10 @@
 ---
-status: draft
+status: rejected
 tags:
     - dark-factory
     - spec
+rejected: "2026-05-16T11:42:24Z"
+rejected_reason: duplicate of in-progress 032
 ---
 
 ## Summary
