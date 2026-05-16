@@ -20,6 +20,10 @@ The poster receives:
 - **HeadSHA** — the `ref` frontmatter field, used to anchor the review to the exact commit.
 - **WorkDir** — the worktree path, used by the poster to read `.pr-reviewer.yaml` for `autoApprove` config.
 
+### GitHub body length limit (65,536 chars)
+
+GitHub's API rejects PR review bodies, issue comments, and PR descriptions longer than **65,536 characters** with HTTP 422 "Body is too long" (per [REST API docs](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request)). The poster truncates over-length bodies just below the limit and appends a one-line notice pointing to the full content in the vault `## Review` section. The truncation event is recorded as a `soft-warning` in the diagnostics block so the operator can audit without crashing the agent. In practice, agent reviews run 2-8 KiB; the truncation is a defensive guardrail, not a routine code path.
+
 ## The Posting Flow
 
 ```

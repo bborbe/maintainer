@@ -419,8 +419,23 @@ func truncateBody(b []byte) string {
 	return string(b)
 }
 
+// maxGitHubCommentBody is the GitHub API's hard limit for PR review body /
+// issue comment / PR description text: 65,536 characters. Bodies longer than
+// this are rejected with HTTP 422 "Body is too long". We truncate one
+// character below the limit and append a trailing notice so the operator can
+// see the truncation happened in-band (the rest is captured in the vault
+// `## Review` section).
+//
+// Reference: https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
+const maxGitHubCommentBody = 65536
+
+// maxGitHubCommentBodyNotice is appended when truncation fires. Kept short so
+// the truncation budget for the actual review content is maximized.
+const maxGitHubCommentBodyNotice = "\n\n…[truncated to 65 KiB GitHub limit; full review in vault task ## Review section]"
+
 // mapVerdictAndSummary maps verdict + autoApprove to a GitHub review event and body.
 // Empty summary is substituted with a default and recorded as a soft-warning.
+// Over-length bodies are truncated to 65,536 chars (the GitHub API limit).
 func mapVerdictAndSummary(
 	verdict prpkg.Verdict,
 	autoApprove bool,
@@ -440,6 +455,18 @@ func mapVerdictAndSummary(
 		warnings = []string{"soft-warning: empty summary substituted with default"}
 	}
 	body += summary
+
+	if len(body) > maxGitHubCommentBody {
+		// Truncate the body so prefix + content + notice ≤ 65,536 chars.
+		// Reserve space for the notice; cut summary content from the end (the
+		// JSON verdict block at the end is parseable independently from vault).
+		keep := maxGitHubCommentBody - len(maxGitHubCommentBodyNotice)
+		if keep < 0 {
+			keep = 0
+		}
+		body = body[:keep] + maxGitHubCommentBodyNotice
+		warnings = append(warnings, "soft-warning: body truncated to GitHub's 65536-char limit")
+	}
 	return event, body, warnings
 }
 
