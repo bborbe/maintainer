@@ -25,6 +25,7 @@ import (
 const (
 	testBotLogin = "pr-review-of-ben"
 	testHeadSHA  = "sha123abc"
+	testPriorSHA = "sha-prior"
 )
 
 func makeHTTPResp(status int, body string) *http.Response {
@@ -169,7 +170,7 @@ var _ = Describe("PrPoster", func() {
 	Context("dismissal before POST", func() {
 		It("dismisses prior bot review then POSTs in that order", func() {
 			writeYAML(true)
-			priorReview := reviewJSON(99, testBotLogin, testHeadSHA, "APPROVED")
+			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
 				{200, botUserJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
@@ -303,7 +304,7 @@ var _ = Describe("PrPoster", func() {
 
 	Context("permanent dismissal failure", func() {
 		It("stops after PUT dismissal fails and does not POST", func() {
-			priorReview := reviewJSON(99, testBotLogin, testHeadSHA, "APPROVED")
+			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
 				{200, botUserJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
@@ -346,9 +347,9 @@ var _ = Describe("PrPoster", func() {
 				{200, botUserJSON(), nil},
 				// Three prior reviews by the bot on this SHA: COMMENTED, APPROVED, CHANGES_REQUESTED
 				{200, reviewListJSON(
-					reviewJSON(commentedID, testBotLogin, testHeadSHA, "COMMENTED"),
-					reviewJSON(approvedID, testBotLogin, testHeadSHA, "APPROVED"),
-					reviewJSON(changesReqID, testBotLogin, testHeadSHA, "CHANGES_REQUESTED"),
+					reviewJSON(commentedID, testBotLogin, "sha-prior", "COMMENTED"),
+					reviewJSON(approvedID, testBotLogin, "sha-prior", "APPROVED"),
+					reviewJSON(changesReqID, testBotLogin, "sha-prior", "CHANGES_REQUESTED"),
 				), nil},
 				{200, `{}`, nil}, // PUT dismissal for APPROVED
 				{200, `{}`, nil}, // PUT dismissal for CHANGES_REQUESTED
@@ -436,4 +437,104 @@ var _ = Describe("PrPoster", func() {
 			Expect(body["body"]).To(Equal("my review summary"))
 		})
 	})
+
+	DescribeTable("listBotReviews SHA filter — dismissal eligibility",
+		func(inputReviews []string, expectedDismissedIDs []int64) {
+			// Build the full HTTP call sequence:
+			//   GET /user + GET dismiss-list + N×PUT dismissal + POST + GET verify
+			specs := make([]callSpec, 0, 2+len(expectedDismissedIDs)+2)
+			specs = append(specs,
+				callSpec{200, botUserJSON(), nil},
+				callSpec{200, reviewListJSON(inputReviews...), nil},
+			)
+			for range expectedDismissedIDs {
+				specs = append(specs, callSpec{200, `{}`, nil})
+			}
+			specs = append(specs, callSpec{201, postRespJSON(999), nil})
+			specs = append(specs, callSpec{200, reviewListJSON(
+				reviewJSON(999, testBotLogin, testHeadSHA, "CHANGES_REQUESTED"),
+			), nil})
+
+			fakeClient.DoStub = seqStub(specs)
+
+			result := poster.Post(ctx, prpkg.PostRequest{
+				PR:      pr,
+				HeadSHA: testHeadSHA,
+				Verdict: prpkg.VerdictRequestChanges,
+				Summary: "test",
+				WorkDir: tmpDir,
+			})
+			Expect(result.Outcome).To(Equal("success"),
+				"expected full posting sequence to complete; got outcome=%s class=%s step=%s msg=%s",
+				result.Outcome, result.Class, result.FailureStep, result.ErrorMessage,
+			)
+
+			// Collect dismissed review IDs from PUT /dismissals calls
+			invs := fakeClient.Invocations()["Do"]
+			var dismissedIDs []int64
+			for _, call := range invs {
+				req, ok := call[0].(*http.Request)
+				Expect(ok).To(BeTrue())
+				if req.Method == "PUT" && strings.Contains(req.URL.Path, "dismissals") {
+					// URL.Path: /repos/owner/repo/pulls/1/reviews/<id>/dismissals
+					// Split: ["", "repos", "owner", "repo", "pulls", "1", "reviews", "<id>", "dismissals"]
+					parts := strings.Split(req.URL.Path, "/")
+					if len(parts) == 9 && parts[8] == "dismissals" {
+						var id int64
+						_, _ = fmt.Sscanf(parts[7], "%d", &id)
+						dismissedIDs = append(dismissedIDs, id)
+					}
+				}
+			}
+			if len(expectedDismissedIDs) == 0 {
+				Expect(dismissedIDs).To(BeEmpty(),
+					"expected no dismissals but got %v", dismissedIDs)
+			} else {
+				Expect(dismissedIDs).To(ConsistOf(expectedDismissedIDs))
+			}
+		},
+		// Row A: two bot reviews — one at older SHA (dismissable), one at head SHA (preserved)
+		Entry("Row A: older-SHA+head-SHA reviews → only older-SHA dismissed",
+			[]string{
+				reviewJSON(10, testBotLogin, testPriorSHA, "APPROVED"),
+				reviewJSON(20, testBotLogin, testHeadSHA, "APPROVED"),
+			},
+			[]int64{10},
+		),
+		// Row B: single review at head SHA → nothing dismissed
+		Entry("Row B: single review at head SHA → nothing dismissed",
+			[]string{
+				reviewJSON(30, testBotLogin, testHeadSHA, "APPROVED"),
+			},
+			[]int64{},
+		),
+		// Row C: two reviews both at head SHA → neither dismissed
+		Entry("Row C: two reviews at head SHA → neither dismissed",
+			[]string{
+				reviewJSON(40, testBotLogin, testHeadSHA, "APPROVED"),
+				reviewJSON(41, testBotLogin, testHeadSHA, "CHANGES_REQUESTED"),
+			},
+			[]int64{},
+		),
+		// Row D: COMMENTED at older SHA excluded by state filter; CHANGES_REQUESTED at older SHA dismissed
+		Entry("Row D: COMMENTED+CHANGES_REQUESTED at older SHA → only CHANGES_REQUESTED dismissed",
+			[]string{
+				reviewJSON(50, testBotLogin, testPriorSHA, "COMMENTED"),
+				reviewJSON(51, testBotLogin, testPriorSHA, "CHANGES_REQUESTED"),
+			},
+			[]int64{51},
+		),
+		// Row E: non-bot review at older SHA → never dismissed (botLogin filter)
+		Entry("Row E: non-bot review at older SHA → nothing dismissed",
+			[]string{
+				reviewJSON(60, "someone-else", testPriorSHA, "APPROVED"),
+			},
+			[]int64{},
+		),
+		// Row F: empty review list → nothing dismissed
+		Entry("Row F: empty review list → nothing dismissed",
+			[]string{},
+			[]int64{},
+		),
+	)
 })
