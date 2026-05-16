@@ -192,7 +192,11 @@ func (p *prPoster) listBotReviews(
 			// reviews with HTTP 422 "Can not dismiss a commented pull request review".
 			// Comment reviews don't block merges anyway, so leaving them stacked is harmless.
 			// Only APPROVED / CHANGES_REQUESTED affect the merge gate and require dismissal.
-			if r.User.Login == p.botLogin && r.CommitID == headSHA && r.State != "COMMENTED" {
+			// Invariant (spec 031, docs/pr-post-back.md §Dismissal Contract):
+			// reviews at the current head SHA are NEVER dismissed — only reviews at
+			// superseded (prior) SHAs are eligible. A re-spawned pod must not wipe the
+			// review that a previous pod left at the same head.
+			if r.User.Login == p.botLogin && r.CommitID != headSHA && r.State != "COMMENTED" {
 				filtered = append(filtered, r)
 			}
 		}

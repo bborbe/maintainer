@@ -10,27 +10,26 @@ import (
 	"github.com/golang/glog"
 )
 
-// maxTitleLen is the maximum byte length of a title value.
-// Titles that exceed this limit are truncated with a WARN log to prevent filesystem aliasing.
-const maxTitleLen = 200
+// DefaultMaxTitleLen is the default safety cap for build-failure filenames. Override via MAX_TITLE_LEN.
+const DefaultMaxTitleLen = 200
 
 // computeBuildTitle returns the human-readable title for a build-failure task.
 // Format: "Build Failure {provider} - {slugifySegment(owner)}-{slugifySegment(repo)} - {sha7}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
-func computeBuildTitle(provider, owner, repo, episodeSHA string) string {
+func computeBuildTitle(provider, owner, repo, episodeSHA string, maxTitle int) string {
 	sha7 := episodeSHA
 	if len(sha7) > 7 {
 		sha7 = sha7[:7]
 	}
 	ownerRepo := slugifySegment(owner) + "-" + slugifySegment(repo)
 	title := "Build Failure " + provider + " - " + ownerRepo + " - " + sha7
-	if len(title) > maxTitleLen {
+	if len(title) > maxTitle {
 		glog.Warningf(
 			"build task title exceeds max length: len=%d max=%d — truncating",
 			len(title),
-			maxTitleLen,
+			maxTitle,
 		)
-		title = title[:maxTitleLen]
+		title = title[:maxTitle]
 	}
 	return title
 }

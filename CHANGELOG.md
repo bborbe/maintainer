@@ -8,6 +8,18 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.3
+
+- fix(agent/pr-reviewer): invert SHA filter in `listBotReviews` from `==` to `!=`; dismissal now removes only prior-commit reviews and never the current-head review; add Dismissal Contract invariant comment and doc section (spec 031)
+
+## v0.25.2
+
+- fix(agent/pr-reviewer): verdict parser normalises spelling drift (request_changes → request-changes, case variants); deletes markdown-heading fallback heuristic; any non-approve or absent JSON verdict fails closed to request-changes
+
+## v0.25.1
+
+- feat(watcher/github-pr,watcher/github-build): vault task bodies now include a clickable GitHub repo link. github-build's H1 becomes a link to https://github.com/{owner}/{repo}; github-pr adds a **Repo:** line under the existing PR-URL line. Operators triaging tasks no longer need to URL-type to reach the repo top-level.
+
 ## v0.25.0
 
 - feat: switch REPO_ALLOWLIST in dev.env and prod.env from enumerated literal repo lists to `github.com/bborbe/*` wildcard; any bborbe-owned repo now flows through the pipeline without per-repo operator intervention
@@ -60,6 +72,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## v0.23.33
 
+- feat(watcher/github-pr,watcher/github-build): make filename length caps configurable via env vars `MAX_SLUG_LEN` (default `80`, was `50` const) and `MAX_TITLE_LEN` (default `200`, unchanged). Bump of slug default from 50→80 preserves typical PR-title information that previously truncated mid-word. Watchers fail-loud at startup if either value is ≤0 or if MAX_SLUG_LEN >= MAX_TITLE_LEN. github-build only honors MAX_TITLE_LEN (no slug in build-failure filenames).
 - chore(test): make `-race` flag opt-in via `RACE` Makefile variable (default `true` preserves local behaviour). CI sets `RACE=false` to sidestep ubuntu-latest+go1.26.3 segfault under `-race` in `agent/pr-reviewer` (run 25558544578). Race detection still on for local dev + can be re-enabled in CI by removing the env block when the runner issue is resolved.
 - feat(watcher/github-pr): add `task_type: pr-review` to all emitted task commands; set `assignee: ""` on untrusted-author create and force-push paths per 2026-05-10 cross-repo doctrine
 

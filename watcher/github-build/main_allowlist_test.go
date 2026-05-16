@@ -23,6 +23,7 @@ var _ = Describe("application Run — allowlist Validate boundary", func() {
 			app := application{
 				PollInterval:  "5m",
 				RepoAllowlist: "github.com/bborbe/maintainer,bad-entry,also/bad",
+				MaxTitleLen:   200,
 			}
 			err := app.Run(ctx, nil)
 			Expect(err).To(HaveOccurred())
@@ -36,6 +37,7 @@ var _ = Describe("application Run — allowlist Validate boundary", func() {
 			app := application{
 				PollInterval:  "5m",
 				RepoAllowlist: "github.com/bborbe/*",
+				MaxTitleLen:   200,
 			}
 			err := app.Run(ctx, nil)
 			// Validate passes for wildcards; error comes from a later step (e.g. Kafka).

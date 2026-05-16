@@ -92,6 +92,22 @@ The `not-a-failure` class covers expected non-error states: 422 Unprocessable En
 
 `prPoster` is `nil` when using `cmd/run-task` (local test runner). A nil poster skips the entire posting flow and advances directly to `ai_review` without writing any diagnostic. This preserves backward compatibility with the local CLI mode.
 
+## Dismissal Contract
+
+`dismissPriorReviews` removes bot reviews that were left at **superseded** (older) commit SHAs as a PR accumulates new commits. It never removes a review whose `commit_id` equals the PR's current head SHA.
+
+**Invariant:** a bot review at the current head SHA is always preserved by the dismissal step. The verifier (`verifier.go`) looks for a review at the current head SHA to confirm the POST succeeded — the dismissal step must not remove that artifact.
+
+**SHA filter rule** (source: `pkg/githubposter/poster.go` `listBotReviews`, spec 031):
+
+- Review `commit_id == current head SHA` → **never dismissed** (preserves the just-posted review)
+- Review `commit_id != current head SHA` → eligible for dismissal, subject to:
+  - bot identity filter: `user.login == BOT_GITHUB_LOGIN`
+  - state filter: `COMMENTED` reviews are never dismissed — the GitHub API rejects their dismissal with HTTP 422
+  - state filter: `DISMISSED` reviews are skipped in the caller loop (already inactive)
+
+**Re-spawn safety:** if a controller re-spawns a pod on the same head SHA, the second pod's dismissal step returns an empty list (the first pod's review is at the current head SHA, which is preserved). The second pod short-circuits on vault idempotency and the PR ends with the first pod's review intact. This is the intended behavior; the original bug (`commit_id == headSHA` instead of `!=`) caused the second pod to wipe the first pod's review, leaving the PR with zero reviews despite a successful agent run.
+
 ## Key Files
 
 | File | Purpose |

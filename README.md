@@ -141,3 +141,4 @@ BSD 2-Clause License. See [LICENSE](LICENSE).
 
 <!-- 2026-05-03: prod e2e validation marker — first usable code reviewer agent shipped -->
 <!-- 2026-05-05: renamed code-reviewer → maintainer; multi-agent suite -->
+

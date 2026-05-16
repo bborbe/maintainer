@@ -30,6 +30,13 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
 
+func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
+	if maxTitleLen <= 0 {
+		return errors.Errorf(ctx, "MAX_TITLE_LEN must be > 0; got %d", maxTitleLen)
+	}
+	return nil
+}
+
 func main() {
 	app := &application{}
 	os.Exit(service.Main(context.Background(), app, &app.SentryDSN, &app.SentryProxy))
@@ -46,12 +53,17 @@ type application struct {
 	PollInterval  string           `required:"false" arg:"poll-interval"  env:"POLL_INTERVAL"  usage:"Poll interval (Go duration)"                                                        default:"5m"`
 	RepoAllowlist string           `required:"true"  arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
 
-	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                  default:"build-fixer-agent"`
-	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                    default:"todo"`
+	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                    default:"build-fixer-agent"`
+	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                      default:"todo"`
 	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
+	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)" default:"200"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	if err := validateMaxTitleLen(ctx, a.MaxTitleLen); err != nil {
+		return err
+	}
+
 	pollInterval, err := time.ParseDuration(a.PollInterval)
 	if err != nil {
 		return errors.Wrapf(ctx, err, "parse poll interval %q", a.PollInterval)
@@ -83,6 +95,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.BuildAssignee,
 		a.BuildTaskStatus,
 		a.BuildTaskPhase,
+		a.MaxTitleLen,
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")

@@ -41,6 +41,7 @@ func NewWatcher(
 	taskStatus string,
 	taskPhase string,
 	maintenanceLoader maintenance.Loader,
+	maxTitleLen int,
 ) Watcher {
 	return &buildWatcher{
 		githubClient:      githubClient,
@@ -53,6 +54,7 @@ func NewWatcher(
 		taskStatus:        taskStatus,
 		taskPhase:         taskPhase,
 		maintenanceLoader: maintenanceLoader,
+		maxTitleLen:       maxTitleLen,
 	}
 }
 
@@ -67,6 +69,7 @@ type buildWatcher struct {
 	taskStatus        string
 	taskPhase         string
 	maintenanceLoader maintenance.Loader
+	maxTitleLen       int
 }
 
 func (w *buildWatcher) Poll(ctx context.Context) error {
@@ -125,7 +128,7 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 
 	runs, err := w.githubClient.GetWorkflowRuns(ctx, owner, repo, repoState.DefaultBranch)
 	if err != nil {
-		if err == ErrRateLimited {
+		if errors.Is(err, ErrRateLimited) {
 			w.metrics.IncPollError("rate_limited")
 			return true
 		}
@@ -303,7 +306,7 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		fm["phase"] = taskPhase
 	}
 	return task.CreateCommand{
-		Title:          computeBuildTitle("github", owner, repo, episodeSHA),
+		Title:          computeBuildTitle("github", owner, repo, episodeSHA, w.maxTitleLen),
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
 		Frontmatter:    fm,
 		Body:           body,
@@ -313,7 +316,11 @@ func (w *buildWatcher) buildCreateTaskCommand(
 // buildBodyHeader builds the markdown header lines for a build-failure task body.
 func (w *buildWatcher) buildBodyHeader(firstRun WorkflowRun, owner, repo string) []string {
 	lines := make([]string, 0, 10)
-	lines = append(lines, fmt.Sprintf("# Build Failure: %s/%s", owner, repo), "")
+	lines = append(
+		lines,
+		fmt.Sprintf("# Build Failure: [%s/%s](https://github.com/%s/%s)", owner, repo, owner, repo),
+		"",
+	)
 	if firstRun.DisplayTitle != "" {
 		lines = append(lines, fmt.Sprintf("**Commit:** %s", firstRun.DisplayTitle))
 	}
@@ -458,24 +465,36 @@ func formatDuration(d time.Duration) string {
 // Pattern 5 (40+-char hex) WILL redact the episode SHA if it appears verbatim in
 // log output. Acceptable: the SHA is already shown in plain text in the body header,
 // so the operator hasn't lost recoverable context. False positives < leaked tokens.
+// Compiled once at init — calling regexp.MustCompile inside redactLogSnippet
+// recompiles the patterns on every invocation (the function runs once per
+// failed-build episode). Hoisting saves the compile cost per call.
+var (
+	redactGitHubTokenRE  = regexp.MustCompile(`gh[opsu]_[a-zA-Z0-9]{16,}`)
+	redactBearerAuthRE   = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]{16,}`)
+	redactAWSAccessKeyRE = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	redactAWSSecretKeyRE = regexp.MustCompile(
+		`(aws_secret_access_key[\s=:]+["']?)[A-Za-z0-9/+]{40}["']?`,
+	)
+	redactOpaqueHexRE = regexp.MustCompile(`\b[a-f0-9]{40,}\b`)
+)
+
 func redactLogSnippet(s string) string {
 	// 1. GitHub tokens: gho_, ghp_, ghs_, ghu_ followed by ≥16 alphanumerics
-	s = regexp.MustCompile(`gh[opsu]_[a-zA-Z0-9]{16,}`).ReplaceAllString(s, "[REDACTED]")
+	s = redactGitHubTokenRE.ReplaceAllString(s, "[REDACTED]")
 
 	// 2. Bearer auth headers: "Bearer " followed by ≥16 token chars
-	s = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]{16,}`).ReplaceAllString(s, "Bearer [REDACTED]")
+	s = redactBearerAuthRE.ReplaceAllString(s, "Bearer [REDACTED]")
 
 	// 3. AWS access key IDs: AKIA followed by 16 uppercase alphanumerics
-	s = regexp.MustCompile(`AKIA[0-9A-Z]{16}`).ReplaceAllString(s, "[REDACTED]")
+	s = redactAWSAccessKeyRE.ReplaceAllString(s, "[REDACTED]")
 
 	// 4. AWS secret access keys: keep the key= prefix, redact the 40-char base64 secret
-	s = regexp.MustCompile(`(aws_secret_access_key[\s=:]+["']?)[A-Za-z0-9/+]{40}["']?`).
-		ReplaceAllString(s, "${1}[REDACTED]")
+	s = redactAWSSecretKeyRE.ReplaceAllString(s, "${1}[REDACTED]")
 
 	// 5. Long opaque hex strings (≥40 chars) — generic auth hashes catch-all.
 	//    Will also match the episode SHA if present in log output — acceptable per spec.
 	//    MUST run last so the specific patterns above (1-4) match their tokens first.
-	s = regexp.MustCompile(`\b[a-f0-9]{40,}\b`).ReplaceAllString(s, "[REDACTED]")
+	s = redactOpaqueHexRE.ReplaceAllString(s, "[REDACTED]")
 
 	return s
 }
