@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [032-bug-task-controller-respawns-on-terminal-phase]
 created: "2026-05-16T12:00:00Z"
+queued: "2026-05-16T11:53:12Z"
 branch: dark-factory/bug-task-controller-respawns-on-terminal-phase
 ---
 
@@ -52,18 +53,29 @@ const (
     TaskPhaseDone        TaskPhase = "done"
 )
 ```
-There is NO `IsTerminal()` method and NO `TaskPhaseAborted` constant in vault-cli v0.64.0.
-You CANNOT add methods to external types in Go — use a local `isTerminalPhase` helper in the executor package.
-Terminal-phase set for this fix: `{human_review, done}`.
-If an `aborted` phase constant IS found in the actual running bborbe/agent version (grep before assuming),
-include it; do NOT fabricate constants that don't exist.
+There is NO `IsTerminal()` method on the vault-cli type. You CANNOT add methods to external types in Go — use a local `isTerminalPhase` helper in the executor package.
 
-Verify with:
+**Terminal-phase discovery (mandatory before Step 4):** spec 032 mandates the set `{human_review, done, aborted}`. Verify which of these constants exist in the actual running `bborbe/agent` codebase (and its vault-cli dependency) — do not fabricate constants. Grep all three locations:
+
 ```bash
-grep -n "Aborted\|aborted" \
-  "$(go env GOPATH)/pkg/mod/github.com/bborbe/vault-cli@v0.64.0/pkg/domain/task_phase.go"
-# Expected: zero matches → omit aborted from the terminal set
+# 1. The cloned bborbe/agent itself
+grep -rnE 'TaskPhaseAborted|"aborted"|PhaseAborted' /tmp/bborbe-agent/ 2>/dev/null | head -5
+
+# 2. The vault-cli module pinned in bborbe/agent's go.mod (find the exact version first)
+cd /tmp/bborbe-agent && VAULT_CLI_VER=$(grep 'bborbe/vault-cli' go.mod | head -1 | awk '{print $2}')
+echo "vault-cli version: ${VAULT_CLI_VER}"
+go mod download github.com/bborbe/vault-cli@${VAULT_CLI_VER}
+grep -nE 'Aborted|"aborted"' "$(go env GOPATH)/pkg/mod/github.com/bborbe/vault-cli@${VAULT_CLI_VER}/pkg/domain/task_phase.go" 2>/dev/null
+
+# 3. Anywhere else under the cloned agent that defines phase constants
+grep -rnE 'TaskPhase[A-Z]\w+\s+TaskPhase\s*=' /tmp/bborbe-agent/ 2>/dev/null | head -10
 ```
+
+**Decision tree (record the outcome verbatim in spec 032's Reproduction section in Step 10):**
+- If `aborted` constant found in agent OR vault-cli → terminal set is `{human_review, done, aborted}` (matches spec AC verbatim).
+- If `aborted` constant NOT found anywhere → terminal set is `{human_review, done}` AND record in the spec: "Spec AC enumerated `aborted` but no such constant exists in agent@<sha> or vault-cli@<ver>; deviation acknowledged. The Ginkgo Entry row for `phase=aborted` is included as a Pending entry (`PEntry`) so the row name exists for AC traceability and lights up automatically if the constant is added later."
+
+**Test-row coverage rule (unconditional):** the DescribeTable in Step 5a MUST include 6 rows by name to satisfy spec 032 AC L133. If `aborted` is omitted from the runtime set per the decision tree above, its Entry is added as `PEntry` (pending) with the row name `status=in_progress phase=aborted => no spawn` — this preserves AC traceability while not asserting on a non-existent constant.
 </context>
 
 <requirements>
@@ -204,6 +216,13 @@ DescribeTable("spawn predicate terminal-phase gate",
         domain.TaskStatusInProgress, domain.TaskPhaseHumanReview, false),
     Entry("status=in_progress phase=done => no spawn",
         domain.TaskStatusInProgress, domain.TaskPhaseDone, false),
+    // aborted row — per the decision tree in <context>:
+    //   if TaskPhaseAborted constant exists in agent/vault-cli, use the real Entry below
+    //   if it does NOT exist, comment-out the real Entry and uncomment the PEntry below for AC traceability
+    Entry("status=in_progress phase=aborted => no spawn",
+        domain.TaskStatusInProgress, domain.TaskPhaseAborted, false),
+    // PEntry("status=in_progress phase=aborted => no spawn (pending: constant not in this version)",
+    //     domain.TaskStatusInProgress, domain.TaskPhase("aborted"), false),
     Entry("status=in_progress phase=ai_review => spawn",
         domain.TaskStatusInProgress, domain.TaskPhaseAIReview, true),
     Entry("status=completed phase=in_progress => no spawn",
@@ -256,11 +275,7 @@ their `wantTerminal: true` assertion). It directly encodes the spec's terminal-p
 
 ### 5d. Parse-error-path test (failure-mode row 4)
 
-Add a test that verifies the parse-error path does NOT trigger the `spawn suppressed` log.
-If the executor already has error handling for unreadable/unparseable tasks, write a test that:
-1. Feeds the reconciler a task with nil/empty phase (or a task object that triggers early return in the predicate)
-2. Asserts spawn count remains 0
-3. Asserts (via spawn-count only, not log-string matching) that the code path hit is the parse-error path, not the terminal-phase gate
+Add a test that verifies the parse-error path takes a different code path than terminal-phase suppression.
 
 ```go
 Context("nil or missing phase does not masquerade as terminal-phase suppression", func() {
@@ -274,10 +289,53 @@ Context("nil or missing phase does not masquerade as terminal-phase suppression"
 })
 ```
 
-Note: do NOT use `glog.SetOutput` to capture log strings — `glog.SetOutput` does not exist on
-`github.com/golang/glog` v1.2.x. Assert via spawn-count behavior only for the parse-error test.
-If the project provides a log-capture helper (check existing tests in the file), use it — but only
-if it's already present; do not introduce new log-capture infrastructure.
+### 5e. Log-assertion strategy (spec 032 AC L136 + L137)
+
+Spec 032 requires two log-related assertions: (L136) `spawn_suppressed` IS emitted exactly once per suppressed terminal-phase reconcile; (L137) it is NOT emitted on the parse-error path. Resolve as follows:
+
+**Step 5e.1 — Discover the project's log-capture mechanism:**
+
+```bash
+# Look for an existing log-capture helper in the executor's test suite
+grep -rn 'SetOutput\|captureLog\|logBuffer\|bytes.Buffer.*glog\|klog\|zaptest' \
+  /tmp/bborbe-agent/ 2>/dev/null | head -10
+```
+
+**Step 5e.2 — Choose the right path based on findings:**
+
+- **(a) If a log-capture helper already exists** (e.g. test helper that swaps `glog`/`klog` output to a buffer, or the project uses a structured logger like `zap` with `zaptest.NewLogger`): use it. Add two tests:
+  - Terminal-phase suppression case → buffer contains exactly one line matching `spawn suppressed` AND `phase=human_review` AND the task id.
+  - Parse-error case → buffer does NOT contain `spawn suppressed` (assert with `Not(ContainSubstring(...))`).
+- **(b) If NO existing log-capture infrastructure** is present (likely, since `github.com/golang/glog` v1.2.x has no `SetOutput`):
+  1. Refactor the log emission to go through a small injectable function variable in the package — e.g. `var logSuppressedSpawn = func(phase domain.TaskPhase, taskID string) { glog.Infof("controller: spawn suppressed phase=%s task=%s", phase, taskID) }`. Production code is unchanged in behaviour; tests can swap `logSuppressedSpawn` with a recorder.
+  2. In tests, replace `logSuppressedSpawn` with a closure that pushes to a slice; assert slice contents at the end of each case.
+  3. This refactor is allowed under the spec's constraints because no public API of the executor changes (the package-level var is unexported).
+- **(c) Document the decision** in the spec: in Step 10, add a line under "Predicate location" naming which path (a or b) was taken and why. This satisfies AC traceability.
+
+Tests to add when path (a) or (b) is wired:
+
+```go
+Context("log emission on suppressed spawn", func() {
+    It("emits exactly one 'spawn suppressed' line with phase + task id", func() {
+        // ... after reconciling a task with phase=human_review ...
+        Expect(loggedLines).To(HaveLen(1))
+        Expect(loggedLines[0]).To(ContainSubstring("spawn suppressed"))
+        Expect(loggedLines[0]).To(ContainSubstring("phase=human_review"))
+        Expect(loggedLines[0]).To(ContainSubstring("task=" + taskID))
+    })
+})
+
+Context("log NOT emitted on parse-error path", func() {
+    It("does not emit 'spawn suppressed'", func() {
+        // ... after reconciling a task with corrupted frontmatter ...
+        for _, line := range loggedLines {
+            Expect(line).NotTo(ContainSubstring("spawn suppressed"))
+        }
+    })
+})
+```
+
+**If neither (a) nor (b) is feasible** (e.g. existing code structure forbids both): STOP execution and report this back to the operator as a structured JSON message — do NOT silently downgrade to spawn-count-only proof. Spec 032 explicitly requires the log assertions.
 
 ---
 
@@ -294,9 +352,12 @@ otherwise create it above the most recent `## vX.Y.Z` heading:
 
 ## Step 7 — Run `make test` in the executor service dir (fast feedback)
 
+Substitute `<executor-service-dir>` with the EXACT path found in Step 1 (e.g. `task/executor` or `cmd/task-executor` — record the value once at the top of your run-log and reuse it).
+
 ```bash
-# Run tests in the executor's service directory (exact path found in Step 1)
-cd /tmp/bborbe-agent/<executor-service-dir> && make test
+# Run tests in the executor's service directory
+EXECUTOR_DIR="<replace-with-step-1-path>"
+cd "/tmp/bborbe-agent/${EXECUTOR_DIR}" && make test
 ```
 
 All tests must pass. Fix compilation errors and test failures before proceeding.
@@ -306,7 +367,7 @@ All tests must pass. Fix compilation errors and test failures before proceeding.
 ## Step 8 — Run `make precommit` in the executor service dir
 
 ```bash
-cd /tmp/bborbe-agent/<executor-service-dir> && make precommit
+cd "/tmp/bborbe-agent/${EXECUTOR_DIR}" && make precommit
 ```
 
 Must exit 0. If any target fails: fix the issue, re-run ONLY the failing target
@@ -422,7 +483,7 @@ grep -n "human_review.*no spawn\|done.*no spawn\|sequential reconcile\|isTermina
 # Expected: entries matching all 6 row names
 
 # 6. make precommit passes in the executor service dir
-cd /tmp/bborbe-agent/<executor-service-dir> && make precommit
+cd "/tmp/bborbe-agent/${EXECUTOR_DIR}" && make precommit
 # Expected: exit 0
 
 # 7. PR created for bborbe/agent

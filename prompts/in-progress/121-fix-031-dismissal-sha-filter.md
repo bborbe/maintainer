@@ -1,7 +1,11 @@
 ---
-status: draft
+status: executing
 spec: [031-bug-pr-reviewer-dismisses-current-head-review]
+container: maintainer-121-fix-031-dismissal-sha-filter
+dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-16T10:45:00Z"
+queued: "2026-05-16T11:53:12Z"
+started: "2026-05-16T11:56:22Z"
 branch: dark-factory/bug-pr-reviewer-dismisses-current-head-review
 ---
 
@@ -27,10 +31,14 @@ Read these files in full before writing any code:
 - `agent/pr-reviewer/pkg/githubposter/poster_test.go` — understand every existing `Context` and fixture before touching any test. Three tests placed prior reviews at `testHeadSHA` and will fail after the fix without remediation (details in requirements).
 - `agent/pr-reviewer/docs/pr-post-back.md` — understand the existing section structure before adding the new section.
 
-Read these guides in `~/.claude/plugins/marketplaces/coding/docs/`:
+Read these coding-guideline files (the `bborbe/coding` plugin is mounted in the container at `/home/node/.claude/plugins/marketplaces/coding/docs/`; if not at that path, locate via `find / -name go-testing-guide.md 2>/dev/null | head -1`):
 - `go-testing-guide.md` — Ginkgo v2 `DescribeTable`/`Entry`, external `*_test` package, coverage ≥80%.
 - `go-filter-pattern.md` — predicate filter patterns for Go.
 - `test-pyramid-triggers.md` — which test types to write for each code change kind.
+
+Inline summary (sufficient even if the guide files cannot be read):
+- Tests live in external `*_test` package (`package githubposter_test`), use Ginkgo v2 + Gomega, prefer `DescribeTable`/`Entry` for table-driven cases.
+- Filter predicate semantics: return `true` to KEEP an item in the output set, return `false` to EXCLUDE. Match the variable/comment direction to that convention.
 
 **Key fact — the bug location:** in `poster.go`, inside `listBotReviews`, inside the `for _, r := range all {` loop:
 
