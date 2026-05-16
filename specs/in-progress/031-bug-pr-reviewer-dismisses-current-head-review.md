@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-16T10:32:03Z"
 generating: "2026-05-16T10:32:04Z"
 prompted: "2026-05-16T10:39:02Z"
+verifying: "2026-05-16T12:03:36Z"
 branch: dark-factory/bug-pr-reviewer-dismisses-current-head-review
 ---
 
