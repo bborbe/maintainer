@@ -1,5 +1,5 @@
 ---
-status: failed
+status: approved
 spec: [030-bug-pr-reviewer-verdict-parser-silently-inverts-request-changes]
 created: "2026-05-16T10:30:00Z"
 queued: "2026-05-16T11:05:23Z"

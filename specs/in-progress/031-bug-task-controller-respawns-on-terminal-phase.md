@@ -1,5 +1,5 @@
 ---
-status: approved
+status: generating
 tags:
     - dark-factory
     - spec

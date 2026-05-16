@@ -1,7 +1,11 @@
 ---
-status: approved
+status: committing
+summary: 'Added clickable GitHub repo links to both watcher task bodies: github-build H1 now uses markdown-link form, github-pr adds a **Repo:** line after the PR URL; tests updated and added; CHANGELOG updated.'
+container: maintainer-107-add-repo-link-to-watcher-task-bodies
+dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-08T15:31:49Z"
 queued: "2026-05-08T15:31:49Z"
+started: "2026-05-16T11:20:47Z"
 ---
 
 <summary>

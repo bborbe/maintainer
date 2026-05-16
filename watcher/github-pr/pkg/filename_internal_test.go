@@ -239,3 +239,17 @@ var _ = Describe("task.CreateCommand wire format", func() {
 		),
 	)
 })
+
+var _ = Describe("buildTaskBody", func() {
+	It("includes a clickable repo link and the PR URL", func() {
+		pr := PullRequest{
+			Owner:   "bborbe",
+			Repo:    "foo",
+			Title:   "feat: my feature",
+			HTMLURL: "https://github.com/bborbe/foo/pull/1",
+		}
+		body := buildTaskBody(pr)
+		Expect(body).To(ContainSubstring("https://github.com/bborbe/foo/pull/1"))
+		Expect(body).To(ContainSubstring("**Repo:** [bborbe/foo](https://github.com/bborbe/foo)"))
+	})
+})

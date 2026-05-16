@@ -500,7 +500,9 @@ var _ = Describe("Watcher", func() {
 					Expect(createSender.SendCommandCallCount()).To(Equal(1))
 					_, cmd := createSender.SendCommandArgsForCall(0)
 					Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
-					Expect(cmd.Body).To(ContainSubstring("# Build Failure: owner/repo"))
+					Expect(
+						cmd.Body,
+					).To(ContainSubstring("# Build Failure: [owner/repo](https://github.com/owner/repo)"))
 					Expect(
 						cmd.Title,
 					).To(Equal("Build Failure github - owner-repo - sha-abc"))

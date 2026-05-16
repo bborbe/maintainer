@@ -316,7 +316,11 @@ func (w *buildWatcher) buildCreateTaskCommand(
 // buildBodyHeader builds the markdown header lines for a build-failure task body.
 func (w *buildWatcher) buildBodyHeader(firstRun WorkflowRun, owner, repo string) []string {
 	lines := make([]string, 0, 10)
-	lines = append(lines, fmt.Sprintf("# Build Failure: %s/%s", owner, repo), "")
+	lines = append(
+		lines,
+		fmt.Sprintf("# Build Failure: [%s/%s](https://github.com/%s/%s)", owner, repo, owner, repo),
+		"",
+	)
 	if firstRun.DisplayTitle != "" {
 		lines = append(lines, fmt.Sprintf("**Commit:** %s", firstRun.DisplayTitle))
 	}

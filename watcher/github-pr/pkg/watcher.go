@@ -309,7 +309,15 @@ func (w *watcher) fetchPRDetails(
 }
 
 func buildTaskBody(pr PullRequest) string {
-	return fmt.Sprintf("# PR Review: %s\n\n%s\n", pr.Title, pr.HTMLURL)
+	repoLink := fmt.Sprintf("https://github.com/%s/%s", pr.Owner, pr.Repo)
+	return fmt.Sprintf(
+		"# PR Review: %s\n\n%s\n\n**Repo:** [%s/%s](%s)\n",
+		pr.Title,
+		pr.HTMLURL,
+		pr.Owner,
+		pr.Repo,
+		repoLink,
+	)
 }
 
 func buildFrontmatter(
