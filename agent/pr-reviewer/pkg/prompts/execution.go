@@ -36,14 +36,14 @@ const verdictTranslationFooter = "---\n\n" +
 	"produced, ALSO emit a JSON verdict matching the agent's frozen schema (see\n" +
 	"`<output-format>`).\n\n" +
 	"Severity map (deterministic):\n" +
-	"- Must Fix finding → comment severity \"critical\", contributes to verdict \"request_changes\"\n" +
-	"- Should Fix finding → comment severity \"major\", contributes to verdict \"request_changes\"\n" +
+	"- Must Fix finding → comment severity \"critical\", contributes to verdict \"request-changes\"\n" +
+	"- Should Fix finding → comment severity \"major\", contributes to verdict \"request-changes\"\n" +
 	"- Nice to Have finding → comment severity \"nit\"\n" +
 	"- The severity \"minor\" is reserved for LLM judgment on findings that\n" +
 	"  genuinely don't fit a plugin bucket; the deterministic map never emits it.\n\n" +
 	"Verdict roll-up (binary — exactly one of two values):\n" +
-	"- Any Must Fix present → verdict \"request_changes\"\n" +
-	"- Any Should Fix present → verdict \"request_changes\"\n" +
+	"- Any Must Fix present → verdict \"request-changes\"\n" +
+	"- Any Should Fix present → verdict \"request-changes\"\n" +
 	"- Only Nice to Have, or nothing flagged → verdict \"approve\"\n\n" +
 	"Each comment must pin to a real `file` and `line` from the report. If a\n" +
 	"finding has no coordinates, fold it into `summary` instead of emitting an\n" +

@@ -18,7 +18,7 @@ A single PR review is split across three sequential phases. Each phase is a fres
 | Phase | Reads | Writes | Emits |
 |---|---|---|---|
 | **planning** | task body (PR URL) | `## Plan` section (focus areas, concerns) | `status: needs_input / failed / done` — no verdict |
-| **execution** | task body + `## Plan` | `## Review` section (vault-first); `## Diagnostics` block (posting outcome); posts review to GitHub via `PrPoster` | **the review verdict** (`approve` / `request_changes`); routes to `ai_review` on success or `human_review` on posting failure |
+| **execution** | task body + `## Plan` | `## Review` section (vault-first); `## Diagnostics` block (posting outcome); posts review to GitHub via `PrPoster` | **the review verdict** (`approve` / `request-changes`); routes to `ai_review` on success or `human_review` on posting failure |
 | **ai_review** | `## Plan` + `## Review` | `## Verdict` section | **a meta-verdict** (`pass` / `fail`) judging whether execution did a good job |
 
 **Key distinction:** the execution-phase verdict is the actual PR review outcome posted back to GitHub. The ai_review-phase verdict is a separate sanity check — does the executor's output have hallucinations, did it address the planning concerns, is its verdict consistent with its own comments? `pass` allows the executor's verdict through; `fail` escalates to `human_review`.
@@ -54,7 +54,7 @@ The ai_review phase reads both `## Plan` and `## Review` and runs four checks (`
 
 1. **Concerns addressed** — every concern from `## Plan` either has a corresponding comment in `## Review` or appears in `concerns_addressed` as explicitly non-issue.
 2. **No hallucinations** — every comment in `## Review` cites a file + line that actually exists in `gh pr diff`.
-3. **Verdict consistency** — does the executor's verdict match the severity of its comments? `approve` with critical comments = inconsistent; `request_changes` with only nits = inconsistent.
+3. **Verdict consistency** — does the executor's verdict match the severity of its comments? `approve` with critical comments = inconsistent; `request-changes` with only nits = inconsistent.
 4. **Post verification** — after the LLM writes `## Verdict`, the step calls `ReviewVerifier.VerifyReview` (GET `/pulls/{n}/reviews`) to confirm the execution-phase review actually persisted on GitHub. If absent, the step returns `AgentStatusFailed` and appends a diagnostic line (`ai_review verify: ...`) to `## Diagnostics`. Verification is skipped when `## Review` is absent (no post was attempted) or when the last `## Diagnostics` YAML block contains `class: permanent` or `class: unknown` (retry would not help). A `nil` verifier disables the check for local/test runs.
 
 ai_review's purpose is catching the case where execution rubber-stamped its own reasoning. Its `pass` / `fail` is meta — a green light to trust the executor's verdict, not a verdict on the PR itself.

@@ -6,7 +6,6 @@ package pkg
 
 import (
 	"encoding/json"
-	"regexp"
 	"strings"
 )
 
@@ -28,31 +27,6 @@ type Result struct {
 type jsonVerdict struct {
 	Verdict string `json:"verdict"`
 	Reason  string `json:"reason"`
-}
-
-// parseJSONVerdict finds the LAST JSON object containing a verdict field in the
-// review text and attempts to unmarshal it. Handles both the legacy single-line
-// {"verdict": "...", "reason": "..."} format AND the new spec-025 multi-line
-// fenced block format with {"verdict": "...", "summary": "...", ...}. On malformed
-// JSON or unknown verdict value, falls back to the heuristic.
-func parseJSONVerdict(reviewText string) (Result, bool) {
-	block, ok := findLastJSONVerdictBlock(reviewText)
-	if !ok {
-		return Result{}, false
-	}
-	var jv jsonVerdict
-	if err := json.Unmarshal([]byte(block), &jv); err != nil {
-		return Result{}, false
-	}
-	switch jv.Verdict {
-	case "approve":
-		return Result{Verdict: VerdictApprove, Reason: jv.Reason}, true
-	case "request-changes":
-		return Result{Verdict: VerdictRequestChanges, Reason: jv.Reason}, true
-	default:
-		// Unknown verdict value (including "comment", typos, hallucinated words) — fall back to heuristic
-		return Result{}, false
-	}
 }
 
 // findLastJSONVerdictBlock returns the LAST JSON object (string content) in
@@ -153,12 +127,6 @@ func extractBlock(lines []string, start, end charPos) string {
 // The verdict is binary: approve or request-changes. No other value is returned.
 // Fail-closed: empty or unparseable output returns request-changes.
 func ParseVerdict(reviewText string) Result {
-	// First try to extract JSON verdict
-	if result, ok := parseJSONVerdict(reviewText); ok {
-		return result
-	}
-
-	// Fail-closed: empty review text
 	if reviewText == "" {
 		return Result{
 			Verdict: VerdictRequestChanges,
@@ -166,131 +134,33 @@ func ParseVerdict(reviewText string) Result {
 		}
 	}
 
-	mustFixPattern := regexp.MustCompile(`(?i)^##+ Must Fix`)
-	shouldFixPattern := regexp.MustCompile(`(?i)^##+ Should Fix`)
-	lines := strings.Split(reviewText, "\n")
-
-	mustFixIndex := -1
-	shouldFixIndex := -1
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if mustFixIndex == -1 && mustFixPattern.MatchString(trimmed) {
-			mustFixIndex = i
-		}
-		if shouldFixIndex == -1 && shouldFixPattern.MatchString(trimmed) {
-			shouldFixIndex = i
-		}
-	}
-
-	// Must Fix with content → request-changes
-	if mustFixIndex != -1 && checkMustFixContent(lines, mustFixIndex) {
+	block, ok := findLastJSONVerdictBlock(reviewText)
+	if !ok {
 		return Result{
 			Verdict: VerdictRequestChanges,
-			Reason:  "must-fix items found",
+			Reason:  "no verdict block",
 		}
 	}
 
-	// Should Fix with content → request-changes
-	if shouldFixIndex != -1 && checkMustFixContent(lines, shouldFixIndex) {
+	var jv jsonVerdict
+	if err := json.Unmarshal([]byte(block), &jv); err != nil {
 		return Result{
 			Verdict: VerdictRequestChanges,
-			Reason:  "should-fix items found",
+			Reason:  "malformed JSON: " + err.Error(),
 		}
 	}
 
-	// Must Fix section exists but is empty/None → approve
-	if mustFixIndex != -1 {
-		return Result{
-			Verdict: VerdictApprove,
-			Reason:  "no must-fix items",
-		}
+	// Normalise: lowercase + replace underscores with hyphens
+	// so "request_changes", "REQUEST-CHANGES", "Request-Changes" all parse correctly.
+	normalized := strings.ToLower(strings.ReplaceAll(jv.Verdict, "_", "-"))
+	switch normalized {
+	case "approve":
+		return Result{Verdict: VerdictApprove, Reason: jv.Reason}
+	case "request-changes":
+		return Result{Verdict: VerdictRequestChanges, Reason: jv.Reason}
+	default:
+		return Result{Verdict: VerdictRequestChanges, Reason: "unknown verdict: " + jv.Verdict}
 	}
-
-	// No Must Fix; has Should Fix (empty/None) or Nice to Have → approve
-	if hasExpectedReviewSections(reviewText) {
-		return Result{
-			Verdict: VerdictApprove,
-			Reason:  "no must-fix section",
-		}
-	}
-
-	// Fail-closed: no recognizable review sections
-	return Result{
-		Verdict: VerdictRequestChanges,
-		Reason:  "unparseable review format",
-	}
-}
-
-// hasExpectedReviewSections checks if the review has expected sections like Should Fix or Nice to Have
-func hasExpectedReviewSections(reviewText string) bool {
-	text := strings.ToLower(reviewText)
-	return strings.Contains(text, "should fix") || strings.Contains(text, "nice to have")
-}
-
-// checkMustFixContent determines if Must Fix section has actual content (not just "None")
-func checkMustFixContent(lines []string, mustFixIndex int) bool {
-	nextHeadingPattern := regexp.MustCompile(`^##+ `)
-	hasNonEmptyContent := false
-
-	// Look at lines after the Must Fix heading
-	for i := mustFixIndex + 1; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-
-		// Stop at next heading
-		if nextHeadingPattern.MatchString(line) {
-			break
-		}
-
-		// Skip empty lines and horizontal rules
-		if line == "" || isHorizontalRule(line) {
-			continue
-		}
-
-		// Check if line is a "None" indicator (case-insensitive)
-		if isNoneIndicator(line) {
-			continue
-		}
-
-		// Found non-empty, non-"None" content
-		hasNonEmptyContent = true
-		break
-	}
-
-	return hasNonEmptyContent
-}
-
-// isHorizontalRule checks if a line is a markdown horizontal rule (---, ***, ___).
-func isHorizontalRule(line string) bool {
-	cleaned := strings.TrimSpace(line)
-	if len(cleaned) < 3 {
-		return false
-	}
-	for _, ch := range cleaned {
-		if ch != '-' && ch != '*' && ch != '_' {
-			return false
-		}
-	}
-	return true
-}
-
-// isNoneIndicator checks if a line indicates "no issues" (e.g., "None", "*None*", "None identified.")
-func isNoneIndicator(line string) bool {
-	// Remove markdown formatting and punctuation
-	cleaned := strings.Trim(line, "*_~` .")
-	cleaned = strings.ToLower(strings.TrimSpace(cleaned))
-
-	// Check for common "none" patterns
-	if cleaned == "none" {
-		return true
-	}
-	if strings.HasPrefix(cleaned, "none ") {
-		return true
-	}
-	if strings.Contains(cleaned, "no issues") {
-		return true
-	}
-
-	return false
 }
 
 // StripJSONVerdict removes the JSON verdict line (and surrounding code fence if present)
