@@ -55,6 +55,36 @@ var _ = DescribeTable("parseBackfillDuration",
 	Entry("garbage input returns parse error", "not-a-duration", libtime.Duration(0), true, ""),
 )
 
+var _ = DescribeTable(
+	"validateLengthCaps",
+	func(maxSlugLen, maxTitleLen int, expectError bool, errContains string) {
+		ctx := context.Background()
+		err := validateLengthCaps(ctx, maxSlugLen, maxTitleLen)
+		if expectError {
+			Expect(err).To(HaveOccurred())
+			if errContains != "" {
+				Expect(err.Error()).To(ContainSubstring(errContains))
+			}
+		} else {
+			Expect(err).NotTo(HaveOccurred())
+		}
+	},
+	Entry("valid defaults", 80, 200, false, ""),
+	Entry("custom valid values", 30, 100, false, ""),
+	Entry("MaxSlugLen=0 is rejected", 0, 200, true, "MAX_SLUG_LEN must be > 0"),
+	Entry("MaxSlugLen=-5 is rejected", -5, 200, true, "MAX_SLUG_LEN must be > 0"),
+	Entry("MaxTitleLen=0 is rejected", 80, 0, true, "MAX_TITLE_LEN must be > 0"),
+	Entry("MaxTitleLen=-1 is rejected", 80, -1, true, "MAX_TITLE_LEN must be > 0"),
+	Entry("MaxSlugLen equal to MaxTitleLen is rejected", 200, 200, true, "must be < MAX_TITLE_LEN"),
+	Entry(
+		"MaxSlugLen greater than MaxTitleLen is rejected",
+		300,
+		200,
+		true,
+		"must be < MAX_TITLE_LEN",
+	),
+)
+
 var _ = DescribeTable("validateRepoScope",
 	func(scope string, expectError bool) {
 		ctx := context.Background()

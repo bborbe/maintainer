@@ -44,6 +44,8 @@ func newTestWatcher(
 		"dev",
 		fakeMetrics,
 		trustDecision,
+		pkg.DefaultMaxSlugLen,
+		pkg.DefaultMaxTitleLen,
 	)
 }
 
