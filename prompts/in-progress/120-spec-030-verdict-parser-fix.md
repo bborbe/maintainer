@@ -1,8 +1,11 @@
 ---
-status: draft
+status: failed
 spec: [030-bug-pr-reviewer-verdict-parser-silently-inverts-request-changes]
 created: "2026-05-16T10:30:00Z"
+queued: "2026-05-16T11:05:23Z"
+completed: "2026-05-16T11:06:19Z"
 branch: dark-factory/bug-pr-reviewer-verdict-parser-silently-inverts-request-changes
+lastFailReason: 'setup workflow: git merge origin default branch: merge origin/master: exit status 2'
 ---
 
 <summary>
@@ -475,7 +478,8 @@ Must exit 0. If any linter or errcheck target fails, fix it, then re-run only th
 - No scenario file. This fix is pure `pkg/` code: unit tests are the correct test pyramid tier per `test-pyramid-triggers.md`.
 - Do NOT commit — dark-factory handles git.
 - `make precommit` runs from `agent/pr-reviewer/`, never repo root.
-- Changes are confined to: `agent/pr-reviewer/pkg/verdict.go`, `agent/pr-reviewer/pkg/verdict_test.go`, `agent/pr-reviewer/pkg/prompts/execution_output-format.md`, root `CHANGELOG.md`. No other files.
+- Changes are confined to: `agent/pr-reviewer/pkg/verdict.go`, `agent/pr-reviewer/pkg/verdict_test.go`, `agent/pr-reviewer/pkg/prompts/execution_output-format.md`, `agent/pr-reviewer/pkg/prompts/execution.go`, `agent/pr-reviewer/pkg/prompts/review_workflow.md`, `agent/pr-reviewer/docs/architecture.md`, root `CHANGELOG.md`. No other files.
+- After step 1b, `grep -rn 'request_changes' agent/pr-reviewer/` returns 0 matches across the entire subtree. The canonical spelling `request-changes` is the only form present in source.
 </constraints>
 
 <verification>
@@ -486,12 +490,15 @@ cd agent/pr-reviewer && make precommit
 Then sanity-grep:
 
 ```bash
-# Prompt fix — no underscore spelling in model-facing schema:
-grep -n 'request_changes' agent/pr-reviewer/pkg/prompts/execution_output-format.md
+# Prompt fix — no underscore spelling anywhere in pr-reviewer subtree:
+grep -rn 'request_changes' agent/pr-reviewer/
 # Expected: 0 matches
 
 grep -n 'request-changes' agent/pr-reviewer/pkg/prompts/execution_output-format.md
 # Expected: ≥1 match
+
+grep -rn 'request-changes' agent/pr-reviewer/pkg/prompts/ agent/pr-reviewer/docs/
+# Expected: ≥7 matches (execution_output-format.md, execution.go x4, review_workflow.md, architecture.md x2)
 
 # Heuristic helpers deleted:
 grep -nE 'mustFixPattern|shouldFixPattern|checkMustFixContent|hasExpectedReviewSections' agent/pr-reviewer/pkg/verdict.go
