@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [030-bug-pr-reviewer-verdict-parser-silently-inverts-request-changes]
 summary: Fixed the request_changes→request-changes spelling drift in all model-facing prompts, rewrote ParseVerdict to be JSON-only with normalisation (no heuristic fallback), deleted all heuristic helper functions, and updated verdict_test.go with 25+ assertion changes plus a new DescribeTable regression block covering 9 normalisation cases.
 container: maintainer-120-spec-030-verdict-parser-fix
@@ -7,9 +7,8 @@ dark-factory-version: v0.156.1-1-g04f3863-dirty
 created: "2026-05-16T10:30:00Z"
 queued: "2026-05-16T11:05:23Z"
 started: "2026-05-16T11:25:11Z"
-completed: "2026-05-16T11:06:19Z"
+completed: "2026-05-16T11:33:31Z"
 branch: dark-factory/bug-pr-reviewer-verdict-parser-silently-inverts-request-changes
-lastFailReason: 'setup workflow: git merge origin default branch: merge origin/master: exit status 2'
 ---
 
 <summary>
