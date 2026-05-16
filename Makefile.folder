@@ -1,4 +1,4 @@
-DIRS += $(shell find . -mindepth 2 -name Makefile -not -path '*/vendor/*' -not -path '*/node_modules/*' -exec dirname "{}" \; | sed 's|^\./||')
+DIRS += $(shell find */* -maxdepth 0 -name Makefile -exec dirname "{}" \;)
 
 default: precommit
 
@@ -63,6 +63,13 @@ buca:
 	@for i in $(DIRS); do \
 		echo "buca $${i}"; \
 		(cd $(CURDIR)/$$i && make buca) || exit 1; \
+	done
+
+.PHONY: apply
+apply:
+	@for i in $(DIRS); do \
+		echo "apply $${i}"; \
+		(cd $(CURDIR)/$$i && make apply) || exit 1; \
 	done
 
 gomodtidy:

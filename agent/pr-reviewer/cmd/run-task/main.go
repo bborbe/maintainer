@@ -1,540 +1,143 @@
-// Copyright (c) 2025 Benjamin Borbe All rights reserved.
+// Copyright (c) 2026 Benjamin Borbe All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Command run-task is the local-CLI entry point for maintainer-agent-pr-reviewer.
+//
+// Reads a markdown task file from disk, runs the agent against it, and
+// writes the updated content back to the same file. Mirrors the Kafka
+// entry point (../../main.go) but uses file I/O instead of Kafka/CQRS.
 package main
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
+	"path/filepath"
 
+	agentlib "github.com/bborbe/agent/lib"
+	claudelib "github.com/bborbe/agent/lib/claude"
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
+	libsentry "github.com/bborbe/sentry"
+	"github.com/bborbe/service"
+	"github.com/bborbe/vault-cli/pkg/domain"
+	"github.com/golang/glog"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/bitbucket"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/config"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/github"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/prurl"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/review"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/verdict"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/version"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
 func main() {
-	// Parse flags
-	verbose := flag.Bool("v", false, "enable verbose output")
-	commentOnly := flag.Bool("comment-only", false, "skip verdict, post as plain comment")
-	versionFlag := flag.Bool("version", false, "print version and exit")
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: code-reviewer [--version] [-v] [--comment-only] <pr-url>\n")
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-
-	if *versionFlag {
-		fmt.Printf("code-reviewer %s\n", version.Version)
-		os.Exit(0)
-	}
-
-	ctx, cancel := signal.NotifyContext(
-		context.Background(),
-		syscall.SIGINT,
-		syscall.SIGTERM,
-	)
-	defer cancel()
-
-	if err := run(ctx, *verbose, *commentOnly); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
+	app := &application{}
+	os.Exit(service.Main(context.Background(), app, &app.SentryDSN, &app.SentryProxy))
 }
 
-func run(ctx context.Context, verbose bool, commentOnly bool) error {
-	// Parse args
-	if flag.NArg() < 1 {
-		return fmt.Errorf("usage: code-reviewer [-v] [--comment-only] <pr-url>")
-	}
-	rawURL := flag.Arg(0)
+type application struct {
+	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
+	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	// Log version
-	logVerbose(verbose, "code-reviewer %s", version.Version)
+	// Claude Code CLI configuration
+	ClaudeConfigDir claudelib.ClaudeConfigDir `required:"false" arg:"claude-config-dir" env:"CLAUDE_CONFIG_DIR" usage:"Claude Code config directory" default:"~/.claude"`
 
-	// Parse PR URL
-	logVerbose(verbose, "parsing URL: %s", rawURL)
-	prInfo, err := prurl.Parse(rawURL)
-	if err != nil {
-		return err
-	}
+	// Agent directory (contains .claude/ with CLAUDE.md and commands)
+	AgentDir claudelib.AgentDir `required:"false" arg:"agent-dir" env:"AGENT_DIR" usage:"Agent directory with .claude/ config" default:"agent"`
 
-	// Load config
-	configPath := "~/.code-reviewer.yaml"
-	logVerbose(verbose, "loading config: %s", configPath)
-	loader := config.NewFileLoader(configPath)
-	cfg, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
+	// Model selection
+	Model claudelib.ClaudeModel `required:"false" arg:"model" env:"MODEL" usage:"Claude model to use (sonnet, opus)" default:"sonnet"`
 
-	// Find local repo information
-	repoInfo, err := cfg.FindRepo(prInfo.RepoURL)
-	if err != nil {
-		return err
-	}
+	// Workdir paths for bare-clone cache and per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/*)
+	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache (default: ~/.cache/maintainer/pr-reviewer/repos)"`
+	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/work)"`
 
-	// Expand home directory in path
-	repoPath := config.ExpandHome(repoInfo.Path)
-	logVerbose(verbose, "repo: %s", repoPath)
+	// Review depth passed to /coding:pr-review (short | standard | full)
+	ReviewMode string `required:"false" arg:"review-mode" env:"REVIEW_MODE" usage:"Review depth: short | standard | full" default:"standard"`
 
-	// Route based on platform
-	switch prInfo.Platform {
-	case prurl.PlatformGitHub:
-		return runGitHub(ctx, verbose, commentOnly, cfg, prInfo, repoPath, repoInfo)
-	case prurl.PlatformBitbucket:
-		return runBitbucket(ctx, verbose, commentOnly, cfg, prInfo, repoPath, repoInfo)
-	default:
-		return fmt.Errorf("unsupported platform: %s", prInfo.Platform)
-	}
+	// Environment
+	Branch base.Branch `required:"true" arg:"branch" env:"BRANCH" usage:"branch" default:"dev"`
+
+	// Phase to run (framework requires explicit phase)
+	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | in_progress | ai_review" default:"in_progress"`
+
+	// Task file for local development
+	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
+
+	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
+	// cmd/run-task uses NoopAuthSetup — the developer's existing gh auth login handles git credentials.
+	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
+
+	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
+	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
 }
 
-// runGitHub handles the GitHub PR review workflow.
-func runGitHub(
-	ctx context.Context,
-	verbose bool,
-	commentOnly bool,
-	cfg *config.Config,
-	prInfo *prurl.PRInfo,
-	repoPath string,
-	repoInfo *config.RepoInfo,
-) error {
-	// Resolve token and create client
-	resolvedToken := cfg.ResolvedGitHubToken()
-	logTokenStatus(
-		verbose,
-		"github token",
-		cfg.GitHub.Token,
-		resolvedToken,
-		config.DefaultGitHubToken,
-	)
-	ghClient := github.NewGHClient(resolvedToken)
-
-	// Get PR branch names
-	logAlways("fetching PR #%d metadata...", prInfo.Number)
-	branches, err := ghClient.GetPRBranches(ctx, prInfo.Owner, prInfo.Repo, prInfo.Number)
-	if err != nil {
-		return errors.Wrap(ctx, err, "get PR branches failed")
-	}
-	logVerbose(verbose, "source branch: %s, target branch: %s", branches.Source, branches.Target)
-
-	// Create clone and run review
-	clonePath, cleanup, err := createCloneAndFetch(
-		ctx,
-		verbose,
-		repoPath,
-		branches.Source,
-		prInfo.Number,
-	)
+func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
 		return err
 	}
-	defer cleanup()
-
-	// Create reviewer
-	reviewer := review.NewDockerReviewer(cfg.ResolvedContainerImage())
-
-	// Run review
-	reviewCommand := buildReviewCommand(repoInfo.ReviewCommand, branches.Target)
-	reviewText, result, err := runReview(
-		ctx,
-		reviewer,
-		clonePath,
-		reviewCommand,
-		cfg.ResolvedModel(),
-		prInfo,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Submit review or post comment
-	return submitGitHubReview(
-		ctx,
-		commentOnly,
-		cfg.AutoApprove,
-		result,
-		ghClient,
-		prInfo,
-		reviewText,
-	)
-}
-
-// runBitbucket handles the Bitbucket Server PR review workflow.
-func runBitbucket(
-	ctx context.Context,
-	verbose bool,
-	commentOnly bool,
-	cfg *config.Config,
-	prInfo *prurl.PRInfo,
-	repoPath string,
-	repoInfo *config.RepoInfo,
-) error {
-	// Resolve token and create client
-	resolvedToken := cfg.ResolvedBitbucketToken()
-	logTokenStatus(
-		verbose,
-		"bitbucket token",
-		cfg.Bitbucket.Token,
-		resolvedToken,
-		config.DefaultBitbucketToken,
-	)
-	if resolvedToken == "" {
-		return fmt.Errorf("BITBUCKET_TOKEN not set")
-	}
-	bbClient := bitbucket.NewClient(resolvedToken)
-
-	// Get PR branch names
-	logAlways("fetching PR #%d metadata...", prInfo.Number)
-	branches, err := bbClient.GetPRBranches(
-		ctx,
-		prInfo.Host,
-		prInfo.Project,
-		prInfo.Repo,
-		prInfo.Number,
-	)
-	if err != nil {
-		return errors.Wrap(ctx, err, "get PR branches failed")
-	}
-	logVerbose(verbose, "source branch: %s, target branch: %s", branches.Source, branches.Target)
-
-	// Create clone and run review
-	clonePath, cleanup, err := createCloneAndFetch(
-		ctx,
-		verbose,
-		repoPath,
-		branches.Source,
-		prInfo.Number,
-	)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
-	// Create reviewer
-	reviewer := review.NewDockerReviewer(cfg.ResolvedContainerImage())
-
-	// Run review
-	reviewCommand := buildReviewCommand(repoInfo.ReviewCommand, branches.Target)
-	reviewText, result, err := runReview(
-		ctx,
-		reviewer,
-		clonePath,
-		reviewCommand,
-		cfg.ResolvedModel(),
-		prInfo,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Post comment and submit verdict
-	return submitBitbucketReview(
-		ctx,
-		commentOnly,
-		cfg.AutoApprove,
-		result,
-		bbClient,
-		prInfo,
-		reviewText,
-		cfg.Bitbucket.Username,
-	)
-}
-
-// createCloneAndFetch creates a local clone and fetches latest changes.
-// Returns clone path and cleanup function.
-func createCloneAndFetch(
-	ctx context.Context,
-	verbose bool,
-	repoPath, branch string,
-	prNumber int,
-) (string, func(), error) {
-	worktreeManager := git.NewWorktreeManager()
-
-	// Fetch latest changes
-	logAlways("fetching latest changes...")
-	if err := worktreeManager.Fetch(ctx, repoPath); err != nil {
-		return "", nil, errors.Wrap(ctx, err, "fetch failed")
-	}
-
-	// Create clone
-	logAlways("creating clone for branch %s...", branch)
-	clonePath, err := worktreeManager.CreateClone(ctx, repoPath, branch, prNumber)
-	if err != nil {
-		return "", nil, errors.Wrap(ctx, err, "create clone failed")
-	}
-	logVerbose(verbose, "created clone: %s", clonePath)
-
-	cleanup := func() {
-		cleanupCtx := context.Background()
-		if cleanupErr := worktreeManager.RemoveClone(
-			cleanupCtx,
-			clonePath,
-		); cleanupErr != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"warning: cleanup failed: %v\n",
-				cleanupErr,
-			)
-		}
-	}
-
-	return clonePath, cleanup, nil
-}
-
-// runReview executes the Claude review and returns the review text and verdict.
-func runReview(
-	ctx context.Context,
-	reviewer review.Reviewer,
-	worktreePath, reviewCommand, model string,
-	prInfo *prurl.PRInfo,
-) (string, verdict.Result, error) {
-	// Run review
-	logAlways(
-		"reviewing PR #%d (%s/%s) (this may take a few minutes)...",
-		prInfo.Number,
-		prInfo.Owner,
-		prInfo.Repo,
-	)
-	reviewText, err := reviewer.Review(ctx, worktreePath, reviewCommand, model)
-	if err != nil {
-		return "", verdict.Result{}, errors.Wrap(ctx, err, "review failed")
-	}
-
-	// Always print review to stdout
-	fmt.Println(reviewText)
-
-	// Parse verdict
-	result := verdict.Parse(reviewText)
-	logAlways("verdict: %s (%s)", result.Verdict, result.Reason)
-
-	// Strip JSON verdict block before posting to PR
-	cleanedText := verdict.StripJSONVerdict(reviewText)
-
-	return cleanedText, result, nil
-}
-
-// submitGitHubReview submits the review to GitHub using the appropriate method.
-func submitGitHubReview(
-	ctx context.Context,
-	commentOnly bool,
-	autoApprove bool,
-	result verdict.Result,
-	ghClient github.Client,
-	prInfo *prurl.PRInfo,
-	reviewText string,
-) error {
-	// --comment-only flag overrides verdict
-	if commentOnly {
-		return postGitHubComment(ctx, ghClient, prInfo, reviewText)
-	}
-
-	// Handle approve verdict based on autoApprove setting
-	if result.Verdict == verdict.VerdictApprove {
-		return handleGitHubApprove(
-			ctx,
-			autoApprove,
-			result,
-			ghClient,
-			prInfo,
-			reviewText,
+	// Warn on malformed entries; allow-all and wildcard semantics handled by IsAllowed at match time.
+	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
+		glog.Warningf(
+			"REPO_ALLOWLIST contains malformed entries (will be ignored at match time): %v",
+			validationErr,
 		)
 	}
+	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 
-	// Submit structured review for request-changes
-	if result.Verdict == verdict.VerdictRequestChanges {
-		return submitGitHubStructuredReview(
-			ctx,
-			result,
-			ghClient,
-			prInfo,
-			reviewText,
-		)
+	taskContent, err := os.ReadFile(
+		a.TaskFilePath,
+	) // #nosec G304 -- filePath from trusted CLI input
+	if err != nil {
+		return errors.Wrapf(ctx, err, "read task file: %s", a.TaskFilePath)
 	}
 
-	// Fallback to plain comment for VerdictComment
-	return postGitHubComment(ctx, ghClient, prInfo, reviewText)
+	reposPath, workPath, err := a.resolveCachePaths(ctx)
+	if err != nil {
+		return err
+	}
+
+	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
+
+	authSetup := githubauth.NewNoopAuthSetup()
+	result, err := factory.RunAgent(ctx, factory.RunConfig{
+		ClaudeConfigDir: a.ClaudeConfigDir,
+		AgentDir:        a.AgentDir,
+		Model:           a.Model,
+		GHToken:         a.GHToken,
+		ReposPath:       reposPath,
+		WorkPath:        workPath,
+		ReviewMode:      a.ReviewMode,
+		RepoAllowlist:   repoAllowlist,
+		AuthSetup:       authSetup,
+		Phase:           a.Phase,
+		TaskContent:     string(taskContent),
+		Deliverer:       deliverer,
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "agent run failed")
+	}
+	return agentlib.PrintResult(result)
 }
 
-// postGitHubComment posts a plain comment to a GitHub PR.
-func postGitHubComment(
-	ctx context.Context,
-	ghClient github.Client,
-	prInfo *prurl.PRInfo,
-	reviewText string,
-) error {
-	logAlways("posting comment...")
-	if err := ghClient.PostComment(
-		ctx,
-		prInfo.Owner,
-		prInfo.Repo,
-		prInfo.Number,
-		reviewText,
-	); err != nil {
-		return errors.Wrap(ctx, err, "post comment failed")
+// resolveCachePaths fills in defaults for ReposPath/WorkPath when unset
+// (~/.cache/maintainer/pr-reviewer/{repos,work}). The pod entry point requires
+// explicit /repos and /work mounts, but local CLI usage benefits from a default.
+func (a *application) resolveCachePaths(ctx context.Context) (string, string, error) {
+	reposPath := a.ReposPath
+	workPath := a.WorkPath
+	if reposPath != "" && workPath != "" {
+		return reposPath, workPath, nil
 	}
-	logAlways("done")
-	return nil
-}
-
-// handleGitHubApprove handles the approve verdict based on autoApprove setting.
-func handleGitHubApprove(
-	ctx context.Context,
-	autoApprove bool,
-	result verdict.Result,
-	ghClient github.Client,
-	prInfo *prurl.PRInfo,
-	reviewText string,
-) error {
-	if !autoApprove {
-		logAlways("skipping auto-approve (disabled in config)")
-		return postGitHubComment(ctx, ghClient, prInfo, reviewText)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", errors.Wrap(ctx, err, "resolve user home dir")
 	}
-	return submitGitHubStructuredReview(ctx, result, ghClient, prInfo, reviewText)
-}
-
-// submitGitHubStructuredReview submits a structured review (approve/request-changes).
-func submitGitHubStructuredReview(
-	ctx context.Context,
-	result verdict.Result,
-	ghClient github.Client,
-	prInfo *prurl.PRInfo,
-	reviewText string,
-) error {
-	logAlways("submitting review: %s...", result.Verdict)
-	if err := ghClient.SubmitReview(
-		ctx,
-		prInfo.Owner,
-		prInfo.Repo,
-		prInfo.Number,
-		reviewText,
-		result.Verdict,
-	); err != nil {
-		return errors.Wrap(ctx, err, "submit review failed")
+	if reposPath == "" {
+		reposPath = filepath.Join(home, ".cache", "maintainer", "pr-reviewer", "repos")
 	}
-	logAlways("done")
-	return nil
-}
-
-// submitBitbucketReview submits the review to Bitbucket with comment and verdict.
-func submitBitbucketReview(
-	ctx context.Context,
-	commentOnly bool,
-	autoApprove bool,
-	result verdict.Result,
-	bbClient bitbucket.Client,
-	prInfo *prurl.PRInfo,
-	reviewText string,
-	username string,
-) error {
-	// Always post comment first
-	logAlways("posting comment...")
-	if err := bbClient.PostComment(
-		ctx,
-		prInfo.Host,
-		prInfo.Project,
-		prInfo.Repo,
-		prInfo.Number,
-		reviewText,
-	); err != nil {
-		return errors.Wrap(ctx, err, "post comment failed")
+	if workPath == "" {
+		workPath = filepath.Join(home, ".cache", "maintainer", "pr-reviewer", "work")
 	}
-
-	// --comment-only flag skips verdict submission
-	if commentOnly {
-		logAlways("done")
-		return nil
-	}
-
-	// Submit verdict for approve/request-changes
-	if result.Verdict == verdict.VerdictApprove {
-		if !autoApprove {
-			logAlways("skipping auto-approve (disabled in config)")
-			logAlways("done")
-			return nil
-		}
-		logAlways("approving PR...")
-		if err := bbClient.Approve(
-			ctx,
-			prInfo.Host,
-			prInfo.Project,
-			prInfo.Repo,
-			prInfo.Number,
-		); err != nil {
-			return errors.Wrap(ctx, err, "approve failed")
-		}
-		logAlways("done")
-		return nil
-	}
-
-	if result.Verdict == verdict.VerdictRequestChanges {
-		if username == "" {
-			logAlways("skipping needs-work verdict (bitbucket.username not configured)")
-			logAlways("done")
-			return nil
-		}
-		logAlways("marking PR as needs-work...")
-		if err := bbClient.NeedsWork(
-			ctx,
-			prInfo.Host,
-			prInfo.Project,
-			prInfo.Repo,
-			prInfo.Number,
-			username,
-		); err != nil {
-			return errors.Wrap(ctx, err, "needs-work failed")
-		}
-		logAlways("done")
-		return nil
-	}
-
-	// VerdictComment - no verdict action needed
-	logAlways("done")
-	return nil
-}
-
-// buildReviewCommand constructs the review command with the target branch.
-// If reviewCommand is set (custom override), use it as-is.
-// Otherwise, construct "/pr-review <targetBranch>".
-func buildReviewCommand(reviewCommand, targetBranch string) string {
-	if reviewCommand != "" {
-		return reviewCommand
-	}
-	return fmt.Sprintf("/pr-review %s", targetBranch)
-}
-
-// logTokenStatus logs the token source and whether it resolved to a value.
-func logTokenStatus(verbose bool, label, configToken, resolvedToken, defaultToken string) {
-	source := configToken
-	if source == "" {
-		source = defaultToken
-	}
-	if resolvedToken == "" {
-		logVerbose(verbose, "%s: %s (not set, using default auth)", label, source)
-	} else {
-		logVerbose(verbose, "%s: %s (set, %d chars)", label, source, len(resolvedToken))
-	}
-}
-
-// logAlways logs a message to stderr in both normal and verbose mode.
-func logAlways(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-// logVerbose logs a message to stderr only in verbose mode.
-func logVerbose(verbose bool, format string, args ...interface{}) {
-	if verbose {
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
-	}
+	return reposPath, workPath, nil
 }

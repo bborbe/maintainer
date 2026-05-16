@@ -13,7 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/verdict"
+	"github.com/bborbe/errors"
+
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 // PRBranches holds the source and target branch names of a pull request.
@@ -33,7 +35,7 @@ type Client interface {
 		owner, repo string,
 		number int,
 		body string,
-		verdict verdict.Verdict,
+		verdict prpkg.Verdict,
 	) error
 }
 
@@ -74,12 +76,17 @@ func (c *ghClient) GetPRBranches(
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return PRBranches{}, fmt.Errorf("gh pr view failed: %s", strings.TrimSpace(stderr.String()))
+		return PRBranches{}, errors.Wrapf(
+			ctx,
+			err,
+			"gh pr view failed: %s",
+			strings.TrimSpace(stderr.String()),
+		)
 	}
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	if len(lines) < 2 || lines[0] == "" || lines[1] == "" {
-		return PRBranches{}, fmt.Errorf("gh pr view returned incomplete branch info")
+		return PRBranches{}, errors.Errorf(ctx, "gh pr view returned incomplete branch info")
 	}
 
 	return PRBranches{
@@ -114,7 +121,12 @@ func (c *ghClient) PostComment(
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gh pr comment failed: %s", strings.TrimSpace(stderr.String()))
+		return errors.Wrapf(
+			ctx,
+			err,
+			"gh pr comment failed: %s",
+			strings.TrimSpace(stderr.String()),
+		)
 	}
 
 	return nil
@@ -126,12 +138,15 @@ func (c *ghClient) SubmitReview(
 	owner, repo string,
 	number int,
 	body string,
-	v verdict.Verdict,
+	v prpkg.Verdict,
 ) error {
-	// Only approve and request-changes are supported
-	// For comment verdict, caller should use PostComment instead
-	if v != verdict.VerdictApprove && v != verdict.VerdictRequestChanges {
-		return fmt.Errorf("unsupported verdict for SubmitReview: %s (use PostComment instead)", v)
+	// Defensive: rejects out-of-enum verdict values (the binary set is approve/request-changes)
+	if v != prpkg.VerdictApprove && v != prpkg.VerdictRequestChanges {
+		return errors.Errorf(
+			ctx,
+			"unsupported verdict for SubmitReview: %s",
+			v,
+		)
 	}
 
 	repoArg := fmt.Sprintf("%s/%s", owner, repo)
@@ -139,7 +154,7 @@ func (c *ghClient) SubmitReview(
 
 	args := []string{"pr", "review", numberArg, "--repo", repoArg}
 
-	if v == verdict.VerdictApprove {
+	if v == prpkg.VerdictApprove {
 		args = append(args, "--approve")
 	} else {
 		args = append(args, "--request-changes")
@@ -159,7 +174,7 @@ func (c *ghClient) SubmitReview(
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("gh pr review failed: %s", strings.TrimSpace(stderr.String()))
+		return errors.Wrapf(ctx, err, "gh pr review failed: %s", strings.TrimSpace(stderr.String()))
 	}
 
 	return nil

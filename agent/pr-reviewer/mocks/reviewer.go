@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/review"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 type Reviewer struct {
@@ -118,4 +118,4 @@ func (fake *Reviewer) recordInvocation(key string, args []interface{}) {
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
-var _ review.Reviewer = new(Reviewer)
+var _ pkg.Reviewer = new(Reviewer)

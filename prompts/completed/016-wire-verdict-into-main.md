@@ -43,7 +43,7 @@ Precondition: Client has PostComment(ctx, owner, repo, number, body) for fallbac
 </requirements>
 
 <constraints>
-- Import verdict package: `github.com/bborbe/code-reviewer/pkg/verdict`
+- Import verdict package: `github.com/bborbe/maintainer/pkg/verdict`
 - --comment-only takes precedence over any verdict
 - Do NOT change pkg/ packages — only main.go changes
 - Use Ginkgo v2 + Gomega for any new tests

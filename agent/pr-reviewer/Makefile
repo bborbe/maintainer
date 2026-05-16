@@ -1,96 +1,36 @@
-BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD | tr '/' '-')
-HOSTNAME ?= $(shell hostname -s)
-ROOTDIR ?= $(shell git rev-parse --show-toplevel)
-TEAMVAULT ?= ~/.teamvault.json
-VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
-LDFLAGS := -X github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/version.Version=$(VERSION)
+include ../../Makefile.variables
+include ../../Makefile.precommit
+include ../../Makefile.docker
+include ../../Makefile.env
+include ../../common.env
 
-.PHONY: default
-default: precommit
+SERVICE = maintainer-agent-pr-reviewer
 
-.PHONY: precommit
-precommit: ensure format generate test check addlicense
-	@echo "ready to commit"
+TOKEN ?= $(shell teamvault-password --teamvault-config ~/.teamvault.json --teamvault-key=$(AGENT_PR_REVIEWER_GH_TOKEN_KEY))
 
-.PHONY: ensure
-ensure:
-	go mod tidy -e
-	go mod verify
-	rm -rf vendor
-
-.PHONY: format
-format:
-	find . -type f -name 'go.mod' -not -path './vendor/*' -exec go run -mod=mod github.com/shoenig/go-modtool -w fmt "{}" \;
-	find . -type f -name '*.go' -not -path './vendor/*' -exec gofmt -w "{}" +
-	go run -mod=mod github.com/incu6us/goimports-reviser/v3 -project-name github.com/bborbe/code-reviewer/agent/pr-reviewer -format -excludes vendor ./...
-	find . -type d -name vendor -prune -o -type f -name '*.go' -print0 | xargs -0 -n 10 go run -mod=mod github.com/segmentio/golines --max-len=100 -w
-
-.PHONY: generate
-generate:
-	rm -rf mocks avro
-	mkdir -p mocks
-	echo "package mocks" > mocks/mocks.go
-	go generate -mod=mod ./...
-
-.PHONY: test
-test:
-	go test -mod=mod -p=$${GO_TEST_PARALLEL:-1} -cover -race $(shell go list -mod=mod ./... | grep -v /vendor/)
-
-.PHONY: check
-check: lint vet errcheck vulncheck osv-scanner gosec trivy
-
-.PHONY: lint
-lint:
-	go run -mod=mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint run --allow-parallel-runners --config ../../.golangci.yml ./...
-
-.PHONY: vet
-vet:
-	go vet -mod=mod $(shell go list -mod=mod ./... | grep -v /vendor/)
-
-.PHONY: errcheck
-errcheck:
-	go run -mod=mod github.com/kisielk/errcheck -ignore '(Close|Write|Fprint)' $(shell go list -mod=mod ./... | grep -v /vendor/)
-
-.PHONY: vulncheck
-vulncheck:
-	@go run -mod=mod golang.org/x/vuln/cmd/govulncheck -format json $(shell go list -mod=mod ./... | grep -v /vendor/) 2>&1 | \
-		jq -e 'select(.finding != null and .finding.osv != "GO-2026-4923" and .finding.osv != "GO-2026-4514" and .finding.osv != "GO-2022-0470" and .finding.osv != "GO-2026-4772" and .finding.osv != "GO-2026-4771")' > /dev/null 2>&1 && \
-		{ echo "Unexpected vulnerabilities found"; go run -mod=mod golang.org/x/vuln/cmd/govulncheck $(shell go list -mod=mod ./... | grep -v /vendor/); exit 1; } || \
-		echo "No unignored vulnerabilities found"
-
-.PHONY: osv-scanner
-osv-scanner:
-	@if [ -f ../../.osv-scanner.toml ]; then \
-		echo "Using ../../.osv-scanner.toml"; \
-		go run -mod=mod github.com/google/osv-scanner/v2/cmd/osv-scanner --config ../../.osv-scanner.toml --recursive .; \
+# verify-gh-token: fetch GH_TOKEN from teamvault (using the key configured
+# in dev.env / prod.env) and probe GitHub's rate_limit API. PAT = 5000/hr,
+# anonymous (revoked / scope-stripped) = 60/hr. Catches broken tokens before
+# they cause silent agent failures in dev/prod.
+.PHONY: verify-gh-token
+verify-gh-token:
+	@echo "teamvault-key: $(AGENT_PR_REVIEWER_GH_TOKEN_KEY)"
+	@echo "token-prefix:  $(shell echo $(TOKEN) | head -c 12)..."
+	@user=$$(curl -sH "Authorization: token $(TOKEN)" https://api.github.com/user | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('login','<none>'))"); \
+	rl_json=$$(curl -sH "Authorization: token $(TOKEN)" https://api.github.com/rate_limit); \
+	limit=$$(echo "$$rl_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['resources']['core']['limit'])"); \
+	echo "user:          $$user"; \
+	echo "rate-limit:    $$limit/hr"; \
+	echo "usage (used/limit, reset in):"; \
+	echo "$$rl_json" | python3 -c "import json,sys,time; \
+r=json.load(sys.stdin)['resources']; \
+keys=['core','search','graphql','code_search']; \
+now=int(time.time()); \
+[print(f\"  {k:<12} {r[k]['limit']-r[k]['remaining']:>5}/{r[k]['limit']:<5}  reset in {max(0,r[k]['reset']-now)//60:>2}m{max(0,r[k]['reset']-now)%60:02d}s\") for k in keys if k in r]"; \
+	if [ "$$limit" = "5000" ]; then \
+		echo "PASS: token authenticates as PAT"; \
+	elif [ "$$limit" = "60" ]; then \
+		echo "FAIL: token degrades to anonymous (60/hr) — revoked or scope-stripped"; exit 1; \
 	else \
-		echo "No config found, running default scan"; \
-		go run -mod=mod github.com/google/osv-scanner/v2/cmd/osv-scanner --recursive .; \
+		echo "FAIL: unexpected rate-limit $$limit"; exit 1; \
 	fi
-
-.PHONY: gosec
-gosec:
-	go run -mod=mod github.com/securego/gosec/v2/cmd/gosec -exclude=G104 ./...
-
-.PHONY: trivy
-trivy:
-	trivy fs \
-	--db-repository ghcr.io/aquasecurity/trivy-db \
-	--scanners vuln,secret \
-	--ignorefile ../../.trivyignore \
-	--quiet \
-	--no-progress \
-	--disable-telemetry \
-	--exit-code 1 .
-
-.PHONY: addlicense
-addlicense:
-	go run -mod=mod github.com/google/addlicense -c "Benjamin Borbe" -y $$(date +'%Y') -l bsd $$(find . -name "*.go" -not -path './vendor/*')
-
-.PHONY: install
-install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/run-task
-
-.PHONY: run
-run:
-	go run -ldflags "$(LDFLAGS)" ./cmd/run-task $(ARGS)

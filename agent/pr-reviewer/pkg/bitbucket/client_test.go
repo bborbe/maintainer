@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/bitbucket"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/bitbucket"
 )
 
 var _ = Describe("Client", func() {
@@ -454,6 +454,26 @@ var _ = Describe("Client", func() {
 				).To(ContainSubstring("projects/PROJ/repos/repo/pull-requests/123"))
 				Expect(err.Error()).NotTo(ContainSubstring(token))
 			})
+		})
+	})
+
+	Context("buildURL via production host", func() {
+		It("upgrades plain http:// to https:// for non-loopback hosts", func() {
+			client := bitbucket.NewClient(token)
+			// Exercise buildURL indirectly: a cancelled context prevents the actual
+			// HTTP call, but the error must reference the https:// URL.
+			cancelCtx, cancel := context.WithCancel(ctx)
+			cancel()
+			_, err := client.GetPRBranches(
+				cancelCtx,
+				"http://bitbucket.example.com",
+				"PROJ",
+				"repo",
+				1,
+			)
+			Expect(err).NotTo(BeNil())
+			// The actual HTTP request URL must be https (upgraded from http).
+			Expect(err.Error()).To(ContainSubstring("https://bitbucket.example.com"))
 		})
 	})
 

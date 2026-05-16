@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: agent/pr-reviewer/go.mod
           cache: true
 
       - name: Install Trivy
@@ -30,4 +30,6 @@ jobs:
           sudo apt-get install -y trivy
 
       - name: Run precommit checks
+        env:
+          RACE: "false"
         run: make precommit

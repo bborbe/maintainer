@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/git"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 )
 
 type WorktreeManager struct {

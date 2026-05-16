@@ -12,6 +12,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/bborbe/errors"
 )
 
 // PRBranches holds the source and target branch names of a pull request.
@@ -35,7 +38,7 @@ type Client interface {
 func NewClient(token string) Client {
 	return &httpClient{
 		token:      token,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -78,36 +81,36 @@ func (c *httpClient) GetPRBranches(
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return PRBranches{}, fmt.Errorf("failed to create request: %w", err)
+		return PRBranches{}, errors.Wrapf(ctx, err, "failed to create request")
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return PRBranches{}, fmt.Errorf("request failed for %s: %w", host, err)
+		return PRBranches{}, errors.Wrapf(ctx, err, "request failed for %s", host)
 	}
 	defer resp.Body.Close()
 
-	if err := checkResponseStatus(resp, host, project, repo, number); err != nil {
-		return PRBranches{}, err
+	if err := checkResponseStatus(ctx, resp, host, project, repo, number); err != nil {
+		return PRBranches{}, errors.Wrap(ctx, err, "check response status")
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return PRBranches{}, fmt.Errorf("failed to read response body: %w", err)
+		return PRBranches{}, errors.Wrapf(ctx, err, "failed to read response body")
 	}
 
 	var prResp prResponse
 	if err := json.Unmarshal(body, &prResp); err != nil {
-		return PRBranches{}, fmt.Errorf("failed to parse response: %w", err)
+		return PRBranches{}, errors.Wrapf(ctx, err, "failed to parse response")
 	}
 
 	if prResp.FromRef.DisplayID == "" {
-		return PRBranches{}, fmt.Errorf("PR response missing source branch")
+		return PRBranches{}, errors.Errorf(ctx, "PR response missing source branch")
 	}
 	if prResp.ToRef.DisplayID == "" {
-		return PRBranches{}, fmt.Errorf("PR response missing target branch")
+		return PRBranches{}, errors.Errorf(ctx, "PR response missing target branch")
 	}
 
 	return PRBranches{
@@ -132,12 +135,12 @@ func (c *httpClient) PostComment(
 	commentReq := commentRequest{Text: body}
 	jsonData, err := json.Marshal(commentReq)
 	if err != nil {
-		return fmt.Errorf("failed to marshal comment: %w", err)
+		return errors.Wrapf(ctx, err, "failed to marshal comment")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return errors.Wrapf(ctx, err, "failed to create request")
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
@@ -145,12 +148,12 @@ func (c *httpClient) PostComment(
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed for %s: %w", host, err)
+		return errors.Wrapf(ctx, err, "request failed for %s", host)
 	}
 	defer resp.Body.Close()
 
-	if err := checkResponseStatus(resp, host, project, repo, number); err != nil {
-		return err
+	if err := checkResponseStatus(ctx, resp, host, project, repo, number); err != nil {
+		return errors.Wrap(ctx, err, "check response status")
 	}
 
 	return nil
@@ -170,19 +173,19 @@ func (c *httpClient) Approve(
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return errors.Wrapf(ctx, err, "failed to create request")
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed for %s: %w", host, err)
+		return errors.Wrapf(ctx, err, "request failed for %s", host)
 	}
 	defer resp.Body.Close()
 
-	if err := checkApproveResponseStatus(resp, host, project, repo, number); err != nil {
-		return err
+	if err := checkApproveResponseStatus(ctx, resp, host, project, repo, number); err != nil {
+		return errors.Wrap(ctx, err, "check response status")
 	}
 
 	return nil
@@ -211,12 +214,12 @@ func (c *httpClient) NeedsWork(
 
 	jsonData, err := json.Marshal(participantReq)
 	if err != nil {
-		return fmt.Errorf("failed to marshal participant request: %w", err)
+		return errors.Wrapf(ctx, err, "failed to marshal participant request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return errors.Wrapf(ctx, err, "failed to create request")
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
@@ -224,60 +227,78 @@ func (c *httpClient) NeedsWork(
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed for %s: %w", host, err)
+		return errors.Wrapf(ctx, err, "request failed for %s", host)
 	}
 	defer resp.Body.Close()
 
-	if err := checkResponseStatus(resp, host, project, repo, number); err != nil {
-		return err
+	if err := checkResponseStatus(ctx, resp, host, project, repo, number); err != nil {
+		return errors.Wrap(ctx, err, "check response status")
 	}
 
 	return nil
 }
 
 // buildURL constructs the full URL with scheme detection.
-// If host contains a scheme (http:// or https://), use it as-is.
-// Otherwise, default to https:// for production Bitbucket Server instances.
+// Only loopback addresses are allowed to use http://; all other hosts are upgraded to https://.
 func (c *httpClient) buildURL(host, path string) string {
-	if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
+	if strings.HasPrefix(host, "https://") {
 		return host + path
+	}
+	if strings.HasPrefix(host, "http://") {
+		// Allow http only for loopback (test servers); upgrade everything else.
+		u := strings.TrimPrefix(host, "http://")
+		if strings.HasPrefix(u, "127.0.0.1") || strings.HasPrefix(u, "localhost") ||
+			strings.HasPrefix(u, "[::1]") {
+			return host + path
+		}
+		return "https://" + u + path
 	}
 	return "https://" + host + path
 }
 
 // checkResponseStatus validates HTTP response status and returns appropriate errors.
 // Token is intentionally excluded from error messages for security.
-func checkResponseStatus(resp *http.Response, host, project, repo string, number int) error {
+func checkResponseStatus(
+	ctx context.Context,
+	resp *http.Response,
+	host, project, repo string,
+	number int,
+) error {
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated:
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed for %s", host)
+		return errors.Errorf(ctx, "authentication failed for %s", host)
 	case http.StatusForbidden:
-		return fmt.Errorf("insufficient permissions for %s", host)
+		return errors.Errorf(ctx, "insufficient permissions for %s", host)
 	case http.StatusNotFound:
-		return fmt.Errorf("PR not found: %s/projects/%s/repos/%s/pull-requests/%d",
+		return errors.Errorf(ctx, "PR not found: %s/projects/%s/repos/%s/pull-requests/%d",
 			host, project, repo, number)
 	default:
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, host)
+		return errors.Errorf(ctx, "unexpected status %d from %s", resp.StatusCode, host)
 	}
 }
 
 // checkApproveResponseStatus validates HTTP response status for approve requests.
 // Treats 409 Conflict (already approved) as success.
 // Token is intentionally excluded from error messages for security.
-func checkApproveResponseStatus(resp *http.Response, host, project, repo string, number int) error {
+func checkApproveResponseStatus(
+	ctx context.Context,
+	resp *http.Response,
+	host, project, repo string,
+	number int,
+) error {
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusConflict:
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed for %s", host)
+		return errors.Errorf(ctx, "authentication failed for %s", host)
 	case http.StatusForbidden:
-		return fmt.Errorf("insufficient permissions for %s", host)
+		return errors.Errorf(ctx, "insufficient permissions for %s", host)
 	case http.StatusNotFound:
-		return fmt.Errorf("PR not found: %s/projects/%s/repos/%s/pull-requests/%d",
+		return errors.Errorf(ctx, "PR not found: %s/projects/%s/repos/%s/pull-requests/%d",
 			host, project, repo, number)
 	default:
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, host)
+		return errors.Errorf(ctx, "unexpected status %d from %s", resp.StatusCode, host)
 	}
 }

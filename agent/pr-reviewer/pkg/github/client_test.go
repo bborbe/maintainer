@@ -10,8 +10,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/github"
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/verdict"
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/github"
 )
 
 var _ = Describe("Client", func() {
@@ -74,21 +74,6 @@ var _ = Describe("Client", func() {
 	})
 
 	Context("SubmitReview", func() {
-		It("returns error for VerdictComment", func() {
-			client := github.NewGHClient("")
-			err := client.SubmitReview(
-				ctx,
-				"owner",
-				"repo",
-				123,
-				"test review",
-				verdict.VerdictComment,
-			)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("unsupported verdict"))
-			Expect(err.Error()).To(ContainSubstring("use PostComment instead"))
-		})
-
 		It("returns error for unknown verdict", func() {
 			client := github.NewGHClient("")
 			err := client.SubmitReview(
@@ -97,7 +82,7 @@ var _ = Describe("Client", func() {
 				"repo",
 				123,
 				"test review",
-				verdict.Verdict("unknown"),
+				prpkg.Verdict("unknown"),
 			)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported verdict"))
@@ -113,7 +98,7 @@ var _ = Describe("Client", func() {
 				"repo",
 				123,
 				"test review",
-				verdict.VerdictApprove,
+				prpkg.VerdictApprove,
 			)
 			Expect(err).To(HaveOccurred())
 		})

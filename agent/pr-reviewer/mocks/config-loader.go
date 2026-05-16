@@ -5,28 +5,28 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/config"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 type ConfigLoader struct {
-	LoadStub        func(context.Context) (*config.Config, error)
+	LoadStub        func(context.Context) (*pkg.Config, error)
 	loadMutex       sync.RWMutex
 	loadArgsForCall []struct {
 		arg1 context.Context
 	}
 	loadReturns struct {
-		result1 *config.Config
+		result1 *pkg.Config
 		result2 error
 	}
 	loadReturnsOnCall map[int]struct {
-		result1 *config.Config
+		result1 *pkg.Config
 		result2 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *ConfigLoader) Load(arg1 context.Context) (*config.Config, error) {
+func (fake *ConfigLoader) Load(arg1 context.Context) (*pkg.Config, error) {
 	fake.loadMutex.Lock()
 	ret, specificReturn := fake.loadReturnsOnCall[len(fake.loadArgsForCall)]
 	fake.loadArgsForCall = append(fake.loadArgsForCall, struct {
@@ -51,7 +51,7 @@ func (fake *ConfigLoader) LoadCallCount() int {
 	return len(fake.loadArgsForCall)
 }
 
-func (fake *ConfigLoader) LoadCalls(stub func(context.Context) (*config.Config, error)) {
+func (fake *ConfigLoader) LoadCalls(stub func(context.Context) (*pkg.Config, error)) {
 	fake.loadMutex.Lock()
 	defer fake.loadMutex.Unlock()
 	fake.LoadStub = stub
@@ -64,28 +64,28 @@ func (fake *ConfigLoader) LoadArgsForCall(i int) context.Context {
 	return argsForCall.arg1
 }
 
-func (fake *ConfigLoader) LoadReturns(result1 *config.Config, result2 error) {
+func (fake *ConfigLoader) LoadReturns(result1 *pkg.Config, result2 error) {
 	fake.loadMutex.Lock()
 	defer fake.loadMutex.Unlock()
 	fake.LoadStub = nil
 	fake.loadReturns = struct {
-		result1 *config.Config
+		result1 *pkg.Config
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *ConfigLoader) LoadReturnsOnCall(i int, result1 *config.Config, result2 error) {
+func (fake *ConfigLoader) LoadReturnsOnCall(i int, result1 *pkg.Config, result2 error) {
 	fake.loadMutex.Lock()
 	defer fake.loadMutex.Unlock()
 	fake.LoadStub = nil
 	if fake.loadReturnsOnCall == nil {
 		fake.loadReturnsOnCall = make(map[int]struct {
-			result1 *config.Config
+			result1 *pkg.Config
 			result2 error
 		})
 	}
 	fake.loadReturnsOnCall[i] = struct {
-		result1 *config.Config
+		result1 *pkg.Config
 		result2 error
 	}{result1, result2}
 }
@@ -112,4 +112,4 @@ func (fake *ConfigLoader) recordInvocation(key string, args []interface{}) {
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
-var _ config.Loader = new(ConfigLoader)
+var _ pkg.Loader = new(ConfigLoader)

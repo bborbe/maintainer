@@ -1,0 +1,44 @@
+# Agent pushes per-agent Prometheus metrics (agent_job_run_total{status}, agent_job_last_run_timestamp_seconds{status}, agent_job_duration_seconds) to PushGateway at Job end.
+# Envs (defaulted in main.go struct tags, no manifest change needed for cluster deploy):
+#   PUSHGATEWAY_URL  default "http://pushgateway:9090" — cluster-internal address resolves automatically.
+#   TASK_TYPE        default "unknown" — executor-side population is a follow-up; metrics carry task_type="unknown" until then.
+apiVersion: agent.benjamin-borbe.de/v1
+kind: Config
+metadata:
+  name: maintainer-agent-pr-reviewer
+  namespace: '{{ "NAMESPACE" | env }}'
+spec:
+  assignee: pr-reviewer-agent
+  taskTypes:
+    - pr-review
+    - healthcheck
+  priorityClassName: maintainer-agent-pr-reviewer
+  image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
+  heartbeat: 5m
+  secretName: maintainer-agent-pr-reviewer
+  volumeClaim: agent-pr-reviewer
+  volumeMountPath: /home/claude/.claude
+  env:
+    # Tell Claude Code where the config + plugins live (matches volumeMountPath).
+    # Without this, the agent runs without /coding plugin loaded → /coding:pr-review
+    # slash command not registered → execution phase falls back to inline prompt.
+    CLAUDE_CONFIG_DIR: /home/claude/.claude
+    # Defense-in-depth allowlist mirroring watcher's REPO_ALLOWLIST. Agent refuses
+    # to clone tasks whose host/owner/repo is not on the list. Empty = allow-all.
+    REPO_ALLOWLIST: '{{ "REPO_ALLOWLIST" | env }}'
+  trigger:
+    statuses:
+      - in_progress
+    phases:
+      - planning
+      - in_progress
+      - ai_review
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+      ephemeral-storage: 5Gi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+      ephemeral-storage: 5Gi

@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/code-reviewer/agent/pr-reviewer/pkg/bitbucket"
+	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/bitbucket"
 )
 
 type BitbucketClient struct {

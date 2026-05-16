@@ -44,7 +44,7 @@ Precondition: pkg/verdict defines VerdictApprove and VerdictRequestChanges const
 
 <constraints>
 - Follow existing ghClient patterns exactly (GH_TOKEN, nosec comment, stderr buffer)
-- Import verdict package: `github.com/bborbe/code-reviewer/pkg/verdict`
+- Import verdict package: `github.com/bborbe/maintainer/pkg/verdict`
 - Use Ginkgo v2 + Gomega for tests
 - Run `go generate ./...` after interface change
 </constraints>
