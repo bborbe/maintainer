@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-16T10:32:03Z"
 generating: "2026-05-16T10:32:04Z"
 prompted: "2026-05-16T10:39:02Z"
 verifying: "2026-05-16T12:03:36Z"
+completed: "2026-05-18T14:00:42Z"
 branch: dark-factory/bug-pr-reviewer-dismisses-current-head-review
 ---
 
@@ -198,3 +199,20 @@ kubectlquant -n dev logs <pod-name> | grep -E 'PUT .*dismissals'
 ## Do-Nothing Option
 
 Not viable. Every multi-pod-per-SHA scenario (operator-triggered retry, controller-triggered re-spawn, network-flake-triggered replay) silently wipes the just-posted review. The triggering incident already produced a PR on `bborbe/maintainer` with zero reviews despite a successful agent run. Until fixed, the reviewer pipeline cannot be trusted to leave durable evidence on a PR, which defeats specs 025 and 027. The configured workaround would be to disable re-spawns entirely, which negates Bug 3's recovery path and other legitimate retry scenarios.
+
+## Verification Result
+
+**Verified:** 2026-05-18T13:59:49Z (HEAD bbc6821)
+**Binary:** installed `dark-factory` (spec target is maintainer/agent/pr-reviewer v0.25.3)
+**Scenario:** Rung-1 grep/test ACs verified on tree at bbc6821; revert-test confirmed table fails Row A/B/C/D with `==`; Rung-2 live evidence from prod multi-trigger cycle on PR #2 at 2026-05-16T22:07Z (post v0.25.3 release).
+**Evidence:**
+- `grep -rnE 'r\.CommitID\s*(==|!=)\s*headSHA' agent/pr-reviewer/pkg/githubposter/` → `poster.go:199` uses `!=` (filter); `poster.go:360` + `verifier.go:40` use `==` (verifier, intentional per Constraints).
+- Invariant comment present at `poster.go:191-198` with "current head SHA", "NEVER dismissed", references `docs/pr-post-back.md §Dismissal Contract` and spec 031.
+- `DescribeTable "listBotReviews SHA filter — dismissal eligibility"` at `poster_test.go:441` with 6 Entries (Row A line 497, B 505, C 512, D 520, E 528, F 535).
+- Revert-test (`!=` → `==`): `go test ./pkg/githubposter/...` exits non-zero; failures include Row A, Row B, Row C, Row D (also pre-existing dismissal tests).
+- `cd agent/pr-reviewer && make precommit` → exit 0.
+- `agent/pr-reviewer/docs/pr-post-back.md:95` `## Dismissal Contract` subsection; prose contains "current head" + "superseded".
+- `grep 'commit_id\|CommitID' agent/pr-reviewer/pkg/githubposter/*_test.go` → only the `reviewJSON` helper (line 45) and the POST-body verifier (line 436); no test asserts dismissal of a current-head review.
+- v0.25.3 released 2026-05-16T14:03Z; `maintainer-dev` and `maintainer-prod` both at HEAD past v0.25.3 (bf18f55).
+- Live replay (Rung-2): vault task `~/Documents/Obsidian/OpenClaw/tasks/PR Review github - bborbe-maintainer - 2 - f972fdd6 - test-delete-this-pr-never.md` shows trigger_count=3 on same head SHA `f972fdd6`, job_started_at 2026-05-16T22:07:14Z, review_id 4304429904 POSTed and persisted across reruns (per parent task `[[Fix Pr-Reviewer Verdict-Posting Bug Chain]]` DOD: "Review persisted in UI (Bug 2 fix proven — not dismissed). Single execution pod ...").
+**Verdict:** PASS
