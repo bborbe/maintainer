@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-16T10:20:22Z"
 generating: "2026-05-16T10:20:23Z"
 prompted: "2026-05-16T10:29:46Z"
 verifying: "2026-05-16T11:33:31Z"
+completed: "2026-05-18T12:01:44Z"
 branch: dark-factory/bug-pr-reviewer-verdict-parser-silently-inverts-request-changes
 ---
 
