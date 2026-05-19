@@ -1,6 +1,11 @@
 ---
-status: draft
-summary: Add WATCHER_GITHUB_PR_TASK_SUFFIX env var to watcher/github-pr so dev and prod watchers writing to the same OpenClaw vault produce distinct PR task filenames (prod empty → no change; dev = "dev" → " - dev" appended after slug). Eliminates YAML merge conflicts in dashboard.
+status: committing
+summary: Added WATCHER_GITHUB_PR_TASK_SUFFIX config through application struct, factory.CreateWatcher, pkg.NewWatcher, and computePRTitle so dev/prod watchers write distinct task filenames into the same vault, preventing YAML merge-conflict markers.
+container: maintainer-exec-122-add-pr-task-suffix-env-var
+dark-factory-version: v0.162.0
+created: "2026-05-19T16:29:20Z"
+queued: "2026-05-19T16:29:20Z"
+started: "2026-05-19T16:29:26Z"
 ---
 
 <summary>

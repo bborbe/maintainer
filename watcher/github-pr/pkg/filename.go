@@ -21,14 +21,19 @@ const DefaultMaxSlugLen = 80
 
 // Format (with slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]} - {slug}"
 // Format (empty slug): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]}"
+// Format (with suffix): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]} - {slug} - {suffix}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
 // maxSlug caps the slug segment alone; maxTitle is a safety cap on the full title.
 // Both are passed by the caller (read from env at startup) — see watcher/github-pr/main.go.
+// taskSuffix, when non-empty, is appended as " - <suffix>" after the slug (before maxTitle cap).
+// When truncation is needed and a suffix is present, the slug shrinks to preserve the suffix —
+// losing the suffix would defeat its purpose as a per-stage disambiguator.
 func computePRTitle(
 	provider, owner, repo string,
 	number int,
 	sha, title string,
 	maxSlug, maxTitle int,
+	taskSuffix string,
 ) string {
 	shortSHA := sha
 	if len(shortSHA) > 8 {
@@ -42,15 +47,26 @@ func computePRTitle(
 	} else {
 		t = base + " - " + slug
 	}
-	if len(t) > maxTitle {
-		glog.Warningf(
-			"PR title exceeds max length: len=%d max=%d — truncating",
-			len(t),
-			maxTitle,
-		)
-		t = t[:maxTitle]
+	var suffixPart string
+	if taskSuffix != "" {
+		suffixPart = " - " + taskSuffix
 	}
-	return t
+	if len(t)+len(suffixPart) > maxTitle {
+		glog.Warningf(
+			"PR title exceeds max length: len=%d max=%d suffix=%q — truncating slug to preserve suffix",
+			len(t)+len(suffixPart),
+			maxTitle,
+			taskSuffix,
+		)
+		budget := maxTitle - len(suffixPart)
+		if budget < 0 {
+			budget = 0
+		}
+		if len(t) > budget {
+			t = t[:budget]
+		}
+	}
+	return t + suffixPart
 }
 
 // slugifyTitle converts a PR title to a filesystem-safe, human-readable slug.

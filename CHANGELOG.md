@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.4
+
+- feat(watcher/github-pr): add `WATCHER_GITHUB_PR_TASK_SUFFIX` env var; non-empty value is appended as ` - <suffix>` to PR task filenames so dev and prod watchers writing into the same vault produce distinct filenames (dev=`dev` → ` - dev`; prod empty → unchanged). Fixes YAML merge-conflict markers in OpenClaw task files when two watchers poll overlapping repos.
+
 ## v0.25.3
 
 - fix(agent/pr-reviewer): invert SHA filter in `listBotReviews` from `==` to `!=`; dismissal now removes only prior-commit reviews and never the current-head review; add Dismissal Contract invariant comment and doc section (spec 031)
