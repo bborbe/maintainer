@@ -58,6 +58,7 @@ func CreateWatcher(
 	trustedAuthors []string,
 	maxSlugLen int,
 	maxTitleLen int,
+	taskSuffix string,
 ) (pkg.Watcher, func(), error) {
 	branch := base.Branch(stage)
 	createSender, cleanup, err := CreateKafkaSender(ctx, brokers, branch)
@@ -79,6 +80,7 @@ func CreateWatcher(
 		trustDecision,
 		maxSlugLen,
 		maxTitleLen,
+		taskSuffix,
 	)
 	return w, cleanup, nil
 }

@@ -105,19 +105,20 @@ type application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"            usage:"HTTP listen address (healthz/readiness/metrics)"                                               default:":9090"`
-	GHToken          string           `required:"true"  arg:"gh-token"          env:"GH_TOKEN"          usage:"GitHub token (read scope sufficient)"                                                                                                  display:"length"`
-	KafkaBrokers     libkafka.Brokers `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma-separated Kafka broker list"`
-	Stage            string           `required:"true"  arg:"stage"             env:"STAGE"             usage:"Deployment stage (dev|prod)"`
-	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"     usage:"Poll interval (Go duration)"                                                                   default:"5m"`
-	RepoScope        string           `required:"false" arg:"repo-scope"        env:"REPO_SCOPE"        usage:"GitHub user/org scope"                                                                         default:"bborbe"`
-	BotAllowlist     string           `required:"false" arg:"bot-allowlist"     env:"BOT_ALLOWLIST"     usage:"Comma-separated bot author allowlist"                                                          default:"dependabot[bot],renovate[bot]"`
-	TrustedAuthors   string           `required:"false" arg:"trusted-authors"   env:"TRUSTED_AUTHORS"   usage:"Comma-separated trusted GitHub author logins (required; empty list refuses startup)"`
-	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"        usage:"Skip PRs older than this (Go duration; empty disables)"                                        default:"2160h"`
-	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION" usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)"     default:"720h"`
-	RepoAllowlist    string           `required:"false" arg:"repo-allowlist"    env:"REPO_ALLOWLIST"    usage:"Comma-separated host-qualified repo allowlist (host/owner/repo format); empty means allow-all"`
-	MaxSlugLen       int              `required:"false" arg:"max-slug-len"      env:"MAX_SLUG_LEN"      usage:"Max length of slugified PR-title segment in vault filenames"                                   default:"80"`
-	MaxTitleLen      int              `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN"     usage:"Max length of vault task filename (whole title; safety cap)"                                   default:"200"`
+	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"                        usage:"HTTP listen address (healthz/readiness/metrics)"                                                                                                                                                           default:":9090"`
+	GHToken          string           `required:"true"  arg:"gh-token"          env:"GH_TOKEN"                      usage:"GitHub token (read scope sufficient)"                                                                                                                                                                                                              display:"length"`
+	KafkaBrokers     libkafka.Brokers `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"                 usage:"Comma-separated Kafka broker list"`
+	Stage            string           `required:"true"  arg:"stage"             env:"STAGE"                         usage:"Deployment stage (dev|prod)"`
+	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"                 usage:"Poll interval (Go duration)"                                                                                                                                                                               default:"5m"`
+	RepoScope        string           `required:"false" arg:"repo-scope"        env:"REPO_SCOPE"                    usage:"GitHub user/org scope"                                                                                                                                                                                     default:"bborbe"`
+	BotAllowlist     string           `required:"false" arg:"bot-allowlist"     env:"BOT_ALLOWLIST"                 usage:"Comma-separated bot author allowlist"                                                                                                                                                                      default:"dependabot[bot],renovate[bot]"`
+	TrustedAuthors   string           `required:"false" arg:"trusted-authors"   env:"TRUSTED_AUTHORS"               usage:"Comma-separated trusted GitHub author logins (required; empty list refuses startup)"`
+	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"                    usage:"Skip PRs older than this (Go duration; empty disables)"                                                                                                                                                    default:"2160h"`
+	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION"             usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)"                                                                                                                 default:"720h"`
+	RepoAllowlist    string           `required:"false" arg:"repo-allowlist"    env:"REPO_ALLOWLIST"                usage:"Comma-separated host-qualified repo allowlist (host/owner/repo format); empty means allow-all"`
+	MaxSlugLen       int              `required:"false" arg:"max-slug-len"      env:"MAX_SLUG_LEN"                  usage:"Max length of slugified PR-title segment in vault filenames"                                                                                                                                               default:"80"`
+	MaxTitleLen      int              `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN"                 usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                               default:"200"`
+	TaskSuffix       string           `required:"false" arg:"task-suffix"       env:"WATCHER_GITHUB_PR_TASK_SUFFIX" usage:"Optional suffix appended to PR task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
 }
 
 func (a *application) validateConfig(ctx context.Context) error {
@@ -196,6 +197,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		trustedAuthors,
 		a.MaxSlugLen,
 		a.MaxTitleLen,
+		a.TaskSuffix,
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")

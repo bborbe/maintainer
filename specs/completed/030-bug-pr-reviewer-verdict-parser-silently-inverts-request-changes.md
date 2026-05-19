@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-16T10:20:22Z"
 generating: "2026-05-16T10:20:23Z"
 prompted: "2026-05-16T10:29:46Z"
 verifying: "2026-05-16T11:33:31Z"
+completed: "2026-05-18T12:01:44Z"
 branch: dark-factory/bug-pr-reviewer-verdict-parser-silently-inverts-request-changes
 ---
 
@@ -145,3 +146,20 @@ Expected: at least one review by `pr-review-of-ben` with `state: "CHANGES_REQUES
 ## Do-Nothing Option
 
 Not viable. The current code silently posts APPROVE reviews when the agent says request_changes. Every reviewer run is exposed to this inversion. The triggering incident already caused one wrong-direction review on a real PR; until fixed, the reviewer pipeline cannot be trusted to enforce changes-requested verdicts, which defeats the purpose of specs 025 and 027. The configured workaround (`autoApprove: false`) would require human review of every PR and negate the agent's value.
+
+## Verification Result
+
+**Verified:** 2026-05-18T09:31:57Z (HEAD bf18f55)
+**Binary:** installed `dark-factory` (not a dark-factory spec; spec target is maintainer/agent/pr-reviewer v0.25.2)
+**Scenario:** Rung-1 grep/test ACs verified on tree at bf18f55; Rung-2 live replay evidence from prod task execution at 2026-05-16T20:24:22Z (post v0.25.2 release at 2026-05-16T11:33Z).
+**Evidence:**
+- `grep -n 'request_changes' agent/pr-reviewer/pkg/prompts/execution_output-format.md` → 0 lines; `request-changes` present at line 5.
+- `grep -nE 'mustFixPattern|shouldFixPattern|checkMustFixContent|hasExpectedReviewSections' agent/pr-reviewer/pkg/verdict.go` → 0 lines; `verdict_internal_test.go` deleted.
+- `ParseVerdict` body (verdict.go:129-164) is JSON-only + fail-closed switch; `grep -c regexp verdict.go` = 0.
+- Ginkgo DescribeTable `ParseVerdict normalisation regression (spec-030)` at verdict_test.go:742 with all 9 required rows (a-i).
+- `grep -n 'no must-fix section' agent/pr-reviewer/pkg/` → 0 lines.
+- `cd agent/pr-reviewer && make precommit` → exit 0; `go test ./pkg/` → 279 of 279 specs pass.
+- v0.25.2 tagged 2026-05-16T11:33Z; deployment worktrees `maintainer-dev` and `maintainer-prod` both at bf18f55 (past v0.25.2).
+- Live replay (Rung-2): vault task `~/Documents/Obsidian/OpenClaw/tasks/PR Review github - bborbe-maintainer - 5 - d04d349a - confirm-new-env-vars-are-documented-in-help.md` shows trigger_count=4, stage=prod, phase=done, final job_run=2026-05-16T20:24:22Z (9h post-release); body contains canonical `"verdict": "request-changes"` JSON block; diagnostics: `review_id: 4304188732 outcome: success`.
+- Note: GitHub `/repos/bborbe/maintainer/pulls/5/reviews` now returns `[]` because PR #5 was merged 2026-05-16T10:26:22Z and reviews have since been dismissed (separately tracked in spec 031); the vault task body is the persistent post-fix execution record.
+**Verdict:** PASS
