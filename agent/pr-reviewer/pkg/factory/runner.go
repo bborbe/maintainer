@@ -24,14 +24,19 @@ type RunConfig struct {
 	AgentDir        claudelib.AgentDir
 	Model           claudelib.ClaudeModel
 	GHToken         string
-	ReposPath       string
-	WorkPath        string
-	ReviewMode      string
-	RepoAllowlist   []string                // host-qualified repos the agent may clone
-	AuthSetup       githubauth.Configurator // pod: real gh-auth-setup; local-CLI: noop
-	Phase           domain.TaskPhase
-	TaskContent     string
-	Deliverer       agentlib.ResultDeliverer
+	// Anthropic-compatible alt-provider routing (e.g. MiniMax). When BaseURL +
+	// AuthToken are non-empty they are injected into the claude subprocess env;
+	// Model is mirrored into ANTHROPIC_MODEL there for parity with the --model flag.
+	AnthropicBaseURL   string
+	AnthropicAuthToken string
+	ReposPath          string
+	WorkPath           string
+	ReviewMode         string
+	RepoAllowlist      []string                // host-qualified repos the agent may clone
+	AuthSetup          githubauth.Configurator // pod: real gh-auth-setup; local-CLI: noop
+	Phase              domain.TaskPhase
+	TaskContent        string
+	Deliverer          agentlib.ResultDeliverer
 	// Agent overrides the agent used for execution. If nil, CreateAgent is called.
 	// Set by main.go after dispatching via CreateAgentProvider. cmd/run-task leaves
 	// this nil so CreateAgent is used for backward compatibility.
@@ -70,6 +75,15 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	env := map[string]string{}
 	if cfg.GHToken != "" {
 		env["GH_TOKEN"] = cfg.GHToken
+	}
+	if cfg.AnthropicBaseURL != "" {
+		env["ANTHROPIC_BASE_URL"] = cfg.AnthropicBaseURL
+	}
+	if cfg.AnthropicAuthToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = cfg.AnthropicAuthToken
+	}
+	if cfg.Model != "" {
+		env["ANTHROPIC_MODEL"] = cfg.Model.String()
 	}
 
 	agent := cfg.Agent
