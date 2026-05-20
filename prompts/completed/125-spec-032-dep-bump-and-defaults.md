@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [032-rename-task-status-phase-taxonomy]
 summary: Bumped vault-cli to v0.64.3 in all three modules and flipped BuildTaskStatus default from 'todo' to 'next' and Phase default from 'in_progress' to 'execution' across four main.go entry points; all make precommit runs exit 0.
 container: maintainer-exec-125-spec-032-dep-bump-and-defaults
@@ -7,9 +7,8 @@ dark-factory-version: v0.162.0
 created: "2026-05-20T16:50:00Z"
 queued: "2026-05-20T17:19:58Z"
 started: "2026-05-20T17:47:59Z"
-completed: "2026-05-20T17:26:42Z"
+completed: "2026-05-20T17:53:37Z"
 branch: dark-factory/rename-task-status-phase-taxonomy
-lastFailReason: 'validate completion report: completion report status: failed'
 ---
 
 <summary>
