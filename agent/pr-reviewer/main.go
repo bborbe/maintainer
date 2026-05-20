@@ -52,9 +52,6 @@ type application struct {
 	// Agent directory (contains .claude/ with CLAUDE.md and commands)
 	AgentDir claudelib.AgentDir `required:"false" arg:"agent-dir" env:"AGENT_DIR" usage:"Agent directory with .claude/ config" default:"agent"`
 
-	// Model selection
-	Model claudelib.ClaudeModel `required:"false" arg:"model" env:"MODEL" usage:"Claude model to use (sonnet, opus)" default:"sonnet"`
-
 	// Workdir paths for bare-clone cache and per-task worktrees
 	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache"   default:"/repos"`
 	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees" default:"/work"`
@@ -69,7 +66,7 @@ type application struct {
 	Branch base.Branch `required:"true" arg:"branch" env:"BRANCH" usage:"branch"`
 
 	// Phase to run (framework requires explicit phase)
-	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | in_progress | ai_review" default:"in_progress"`
+	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | execution | ai_review" default:"execution"`
 
 	// Kafka delivery (optional — only active when TASK_ID is set)
 	KafkaBrokers libkafka.Brokers        `required:"false" arg:"kafka-brokers" env:"KAFKA_BROKERS" usage:"Comma separated list of Kafka brokers"`
@@ -78,6 +75,14 @@ type application struct {
 	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
 	// Also used by the real GitHubAuthSetup to configure git credential helper at pod startup.
 	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth and git credential helper at pod startup" display:"length"`
+
+	// Anthropic-compatible provider routing. Setting AnthropicBaseURL + AnthropicAuthToken
+	// routes the claude CLI to an alt-provider (e.g. MiniMax via https://api.minimax.io/anthropic).
+	// AnthropicModel drives both the `--model` CLI flag and the ANTHROPIC_MODEL env var seen by
+	// the claude subprocess.
+	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
+	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL"                                  display:"length"`
+	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name; also exposed to the claude subprocess as ANTHROPIC_MODEL"                  default:"sonnet"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
@@ -136,19 +141,21 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
-		ClaudeConfigDir: a.ClaudeConfigDir,
-		AgentDir:        a.AgentDir,
-		Model:           a.Model,
-		GHToken:         a.GHToken,
-		ReposPath:       a.ReposPath,
-		WorkPath:        a.WorkPath,
-		ReviewMode:      a.ReviewMode,
-		RepoAllowlist:   repoAllowlist,
-		AuthSetup:       authSetup,
-		Phase:           a.Phase,
-		TaskContent:     a.TaskContent,
-		Deliverer:       deliverer,
-		Agent:           agent,
+		ClaudeConfigDir:    a.ClaudeConfigDir,
+		AgentDir:           a.AgentDir,
+		Model:              a.AnthropicModel,
+		GHToken:            a.GHToken,
+		AnthropicBaseURL:   a.AnthropicBaseURL,
+		AnthropicAuthToken: a.AnthropicAuthToken,
+		ReposPath:          a.ReposPath,
+		WorkPath:           a.WorkPath,
+		ReviewMode:         a.ReviewMode,
+		RepoAllowlist:      repoAllowlist,
+		AuthSetup:          authSetup,
+		Phase:              a.Phase,
+		TaskContent:        a.TaskContent,
+		Deliverer:          deliverer,
+		Agent:              agent,
 	})
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
@@ -169,6 +176,15 @@ func (a *application) dispatchAgent(
 	if a.GHToken != "" {
 		env["GH_TOKEN"] = a.GHToken
 	}
+	if a.AnthropicBaseURL != "" {
+		env["ANTHROPIC_BASE_URL"] = a.AnthropicBaseURL
+	}
+	if a.AnthropicAuthToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = a.AnthropicAuthToken
+	}
+	if a.AnthropicModel != "" {
+		env["ANTHROPIC_MODEL"] = a.AnthropicModel.String()
+	}
 	repoManager := git.NewRepoManager(git.WorkdirConfig{
 		ReposPath: a.ReposPath,
 		WorkPath:  a.WorkPath,
@@ -176,7 +192,7 @@ func (a *application) dispatchAgent(
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,
-		a.Model,
+		a.AnthropicModel,
 		a.GHToken,
 		env,
 		repoManager,

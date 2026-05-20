@@ -44,9 +44,6 @@ type application struct {
 	// Agent directory (contains .claude/ with CLAUDE.md and commands)
 	AgentDir claudelib.AgentDir `required:"false" arg:"agent-dir" env:"AGENT_DIR" usage:"Agent directory with .claude/ config" default:"agent"`
 
-	// Model selection
-	Model claudelib.ClaudeModel `required:"false" arg:"model" env:"MODEL" usage:"Claude model to use (sonnet, opus)" default:"sonnet"`
-
 	// Workdir paths for bare-clone cache and per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/*)
 	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache (default: ~/.cache/maintainer/pr-reviewer/repos)"`
 	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees (default: ~/.cache/maintainer/pr-reviewer/work)"`
@@ -58,7 +55,7 @@ type application struct {
 	Branch base.Branch `required:"true" arg:"branch" env:"BRANCH" usage:"branch" default:"dev"`
 
 	// Phase to run (framework requires explicit phase)
-	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | in_progress | ai_review" default:"in_progress"`
+	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | execution | ai_review" default:"execution"`
 
 	// Task file for local development
 	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
@@ -69,6 +66,14 @@ type application struct {
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
+
+	// Anthropic-compatible provider routing. Setting AnthropicBaseURL + AnthropicAuthToken
+	// routes the claude CLI to an alt-provider (e.g. MiniMax via https://api.minimax.io/anthropic).
+	// AnthropicModel drives both the `--model` CLI flag and the ANTHROPIC_MODEL env var seen by
+	// the claude subprocess.
+	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
+	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL"                                  display:"length"`
+	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name; also exposed to the claude subprocess as ANTHROPIC_MODEL"                  default:"sonnet"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -101,18 +106,20 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	authSetup := githubauth.NewNoopAuthSetup()
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
-		ClaudeConfigDir: a.ClaudeConfigDir,
-		AgentDir:        a.AgentDir,
-		Model:           a.Model,
-		GHToken:         a.GHToken,
-		ReposPath:       reposPath,
-		WorkPath:        workPath,
-		ReviewMode:      a.ReviewMode,
-		RepoAllowlist:   repoAllowlist,
-		AuthSetup:       authSetup,
-		Phase:           a.Phase,
-		TaskContent:     string(taskContent),
-		Deliverer:       deliverer,
+		ClaudeConfigDir:    a.ClaudeConfigDir,
+		AgentDir:           a.AgentDir,
+		Model:              a.AnthropicModel,
+		GHToken:            a.GHToken,
+		AnthropicBaseURL:   a.AnthropicBaseURL,
+		AnthropicAuthToken: a.AnthropicAuthToken,
+		ReposPath:          reposPath,
+		WorkPath:           workPath,
+		ReviewMode:         a.ReviewMode,
+		RepoAllowlist:      repoAllowlist,
+		AuthSetup:          authSetup,
+		Phase:              a.Phase,
+		TaskContent:        string(taskContent),
+		Deliverer:          deliverer,
 	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "agent run failed")

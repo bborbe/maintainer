@@ -38,7 +38,7 @@ require (
 	github.com/bborbe/parse v1.10.12 // indirect
 	github.com/bborbe/strimzi v1.8.3 // indirect
 	github.com/bborbe/validation v1.4.13 // indirect
-	github.com/bborbe/vault-cli v0.64.0 // indirect
+	github.com/bborbe/vault-cli v0.64.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

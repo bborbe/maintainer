@@ -26,6 +26,12 @@ spec:
     # Defense-in-depth allowlist mirroring watcher's REPO_ALLOWLIST. Agent refuses
     # to clone tasks whose host/owner/repo is not on the list. Empty = allow-all.
     REPO_ALLOWLIST: '{{ "REPO_ALLOWLIST" | env }}'
+    # Anthropic-compatible alt-provider routing (MiniMax). The Go binary reads
+    # ANTHROPIC_MODEL into the AnthropicModel field and forwards it to the claude
+    # subprocess as both the --model flag and the ANTHROPIC_MODEL env var.
+    # ANTHROPIC_AUTH_TOKEN is sourced from the agent secret (teamvault MOPmQL).
+    ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+    ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
   trigger:
     statuses:
       - in_progress
