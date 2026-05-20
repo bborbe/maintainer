@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.7
+
+- test(agent/pr-reviewer): add `NormalizeTaskStatus("todo")` → `TaskStatusNext` and `NormalizeTaskPhase("in_progress")` → `TaskPhaseExecution` alias round-trip tests to document and guard vault-cli's legacy alias contract (spec 032)
+
 ## v0.25.6
 
 - feat(watcher/github-build,agent/pr-reviewer): bump vault-cli to v0.64.3; flip `BuildTaskStatus` default from `"todo"` to `"next"` and agent `Phase` default from `"in_progress"` to `"execution"` so newly published tasks carry the vault-cli canonical taxonomy

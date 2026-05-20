@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [032-rename-task-status-phase-taxonomy]
+summary: 'Created agent/pr-reviewer/domain_normalize_test.go with two Ginkgo It blocks exercising NormalizeTaskStatus("todo")→TaskStatusNext and NormalizeTaskPhase("in_progress")→TaskPhaseExecution alias round-trips; added CHANGELOG entry under ## Unreleased.'
+container: maintainer-exec-126-spec-032-normalize-alias-tests
+dark-factory-version: v0.162.0
 created: "2026-05-20T16:50:00Z"
 queued: "2026-05-20T17:20:01Z"
+started: "2026-05-20T17:53:39Z"
 branch: dark-factory/rename-task-status-phase-taxonomy
 ---
 
