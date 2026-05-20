@@ -1,8 +1,10 @@
 ---
-status: prompted
+status: completed
 approved: "2026-05-20T16:37:06Z"
 generating: "2026-05-20T16:40:38Z"
 prompted: "2026-05-20T16:51:56Z"
+verifying: "2026-05-20T17:56:21Z"
+completed: "2026-05-20T18:13:34Z"
 branch: dark-factory/rename-task-status-phase-taxonomy
 ---
 
@@ -95,3 +97,17 @@ go run ./ --help 2>&1 | grep 'build-task-status'
 go run ./ --help 2>&1 | grep -A1 'Agent phase'
 # Expected: "planning | execution | ai_review" in usage
 ```
+
+## Verification Result
+
+**Verified:** 2026-05-20T18:13:10Z (HEAD 25c0a37)
+**Binary:** installed `dark-factory` (maintainer is not the dark-factory repo)
+**Scenario:** No scenario file; ACs are grep/build-time evidence captured against worktree at HEAD 25c0a37.
+**Evidence:**
+- All 3 modules pin `github.com/bborbe/vault-cli v0.64.3`; `go doc TaskStatusNext` + `TaskPhaseExecution` both succeed
+- `watcher/github-build/main.go:57` carries `default:"next"`; 0 hits for `default:"todo"`
+- `agent/pr-reviewer/main.go:69` and `agent/pr-reviewer/cmd/run-task/main.go:58` carry `default:"execution"` and usage `planning | execution | ai_review`; 0 hits for `in_progress` defaults or legacy usage strings
+- `grep -rn 'default:"todo"\|default:"in_progress"' watcher/ agent/` returns 0 lines
+- `make precommit` exits 0 in `lib`, `watcher/github-build`, `watcher/github-pr`, `agent/pr-reviewer`
+- `agent/pr-reviewer/domain_normalize_test.go:16-18,24-26` asserts both alias roundtrips against `TaskStatusNext` / `TaskPhaseExecution`
+**Verdict:** PASS
