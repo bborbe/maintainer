@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.8
+
+- feat(lib): add `lib/githubapp` shared package — `NewClient` + `MintIAT` for GitHub App installation access token minting via `ghinstallation/v2`; consumed by spec 033 pr-reviewer auth migration
+
 ## v0.25.7
 
 - test(agent/pr-reviewer): add `NormalizeTaskStatus("todo")` → `TaskStatusNext` and `NormalizeTaskPhase("in_progress")` → `TaskPhaseExecution` alias round-trip tests to document and guard vault-cli's legacy alias contract (spec 032)
