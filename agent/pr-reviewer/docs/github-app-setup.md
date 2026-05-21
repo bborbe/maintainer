@@ -8,6 +8,10 @@ The agent previously authenticated as user `pr-review-of-ben` with a Personal Ac
 
 ## App Identity
 
+Two Apps are used — one per cluster. Dev and prod must have separate identities so dev test verdicts cannot be mistaken for prod verdicts by auto-merge gates, and so a dev compromise cannot reach prod.
+
+### Prod App
+
 | Field | Value |
 |-------|-------|
 | App name | `Ben's Pull Request Reviewer` |
@@ -17,9 +21,24 @@ The agent previously authenticated as user `pr-review-of-ben` with a Personal Ac
 | Client ID | `Iv23liSDydoekRW3gOIk` |
 | Installation ID (`bborbe`) | `134414316` |
 | Bot login in API responses | `ben-s-pull-request-reviewer[bot]` |
+| Repository scope | All repositories (194 repos) |
 | Private key (PEM) | Teamvault [`kLoejw`](https://teamvault.benjamin-borbe.de/secrets/kLoejw/) |
 
-App ID and Installation ID are public values and safe to commit. The PEM is secret — store only in Teamvault and Kubernetes Secrets.
+### Dev App
+
+| Field | Value |
+|-------|-------|
+| App name | `Ben's Pull Request Reviewer Dev` |
+| App slug | `ben-s-pull-request-reviewer-dev` |
+| App settings | <https://github.com/settings/apps/ben-s-pull-request-reviewer-dev> |
+| App ID | `3800041` |
+| Client ID | `Iv23liriUXoU0pa4J4fC` |
+| Installation ID (`bborbe`) | `134435225` |
+| Bot login in API responses | `ben-s-pull-request-reviewer-dev[bot]` |
+| Repository scope | `bborbe/go-skeleton` only (matches `dev.env` filter) |
+| Private key (PEM) | Teamvault [`eqKj8L`](https://teamvault.benjamin-borbe.de/secrets/eqKj8L/) |
+
+App IDs and Installation IDs are public values and safe to commit. PEMs are secret — store only in Teamvault and Kubernetes Secrets.
 
 ## Permissions
 
@@ -75,6 +94,8 @@ Exactly one of `PEM_KEY` / `PEM_KEY_FILE` must be set.
 
 ### Run from Teamvault (PEM never touches disk)
 
+Prod App:
+
 ```bash
 TEAMVAULT_URL=https://teamvault.benjamin-borbe.de \
 TEAMVAULT_USER=bborbe \
@@ -84,6 +105,20 @@ TEAMVAULT_KEY=kLoejw \
   go run ./cmd/mint-iat \
     -app-id=3798945 \
     -installation-id=134414316 \
+    -pem-key-file=/dev/stdin
+```
+
+Dev App:
+
+```bash
+TEAMVAULT_URL=https://teamvault.benjamin-borbe.de \
+TEAMVAULT_USER=bborbe \
+TEAMVAULT_PASSWORD='...' \
+TEAMVAULT_KEY=eqKj8L \
+  teamvault-file | base64 -d | \
+  go run ./cmd/mint-iat \
+    -app-id=3800041 \
+    -installation-id=134435225 \
     -pem-key-file=/dev/stdin
 ```
 
@@ -139,7 +174,7 @@ App ID and Installation ID remain unchanged across rotations.
 
 ## Migration Status
 
-- 2026-05-21: App registered. PEM stored in Teamvault. App installed on `@bborbe`. Permissions set (Contents: Read, Pull requests: Write, Metadata: Read). `cmd/mint-iat` smoke test passing end-to-end.
-- Pending: production code refactor (`pkg/githubposter`, `pkg/steps_gh_token.go`, `pkg/githubauth`), k8s manifest updates, deploy + verification, PAT user retirement.
+- 2026-05-21: Both Apps (prod + dev) registered, installed on `@bborbe`, permissions set, PEMs stored in Teamvault. `cmd/mint-iat` smoke test passing end-to-end against both Apps (Phase A). Phase B verified the prod App posts reviews visible via the REST `/reviews` endpoint.
+- Pending: production code refactor (`pkg/githubposter`, `pkg/steps_gh_token.go`, `pkg/githubauth`, new `lib/githubapp`), k8s manifest updates for dev + prod clusters, deploy + verification on dev first, PAT user retirement after prod cutover.
 
 Tracked in vault task `Migrate PR Reviewer from User PAT to GitHub App` under goal `GitHub Code Reviewer Agent - Base` (F1).
