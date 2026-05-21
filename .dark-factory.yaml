@@ -9,6 +9,7 @@ env:
   GOPATH: /home/node/go
   GOCACHE: /home/node/.cache/go-build
   GOLANGCI_LINT_CACHE: /home/node/.cache/golangci-lint
+  GOFLAGS: "-buildvcs=false"
 extraMounts:
   - src: ${GOPATH}/pkg
     dst: /home/node/go/pkg
