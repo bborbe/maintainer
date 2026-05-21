@@ -32,6 +32,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	githubapp "github.com/bborbe/maintainer/lib/githubapp"
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
@@ -76,6 +77,15 @@ type application struct {
 	// Also used by the real GitHubAuthSetup to configure git credential helper at pod startup.
 	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth and git credential helper at pod startup" display:"length"`
 
+	// GitHub App authentication. When AppID + InstallationID + PEMKeyFile are
+	// set, the pod mints an installation access token at startup and uses it
+	// in place of GHToken; the legacy GHToken env stays accepted as a fallback
+	// (see Run() for the resolution order).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])" default:"ben-s-pull-request-reviewer[bot]"`
+
 	// Anthropic-compatible provider routing. Setting AnthropicBaseURL + AnthropicAuthToken
 	// routes the claude CLI to an alt-provider (e.g. MiniMax via https://api.minimax.io/anthropic).
 	// AnthropicModel drives both the `--model` CLI flag and the ANTHROPIC_MODEL env var seen by
@@ -108,6 +118,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	start := libtime.NewCurrentDateTime().Now().Time()
 
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
+
+	if err := a.resolveAuth(ctx); err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
+		return err
+	}
 
 	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
@@ -153,6 +169,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		RepoAllowlist:      repoAllowlist,
 		AuthSetup:          authSetup,
 		Phase:              a.Phase,
+		BotLogin:           a.BotLogin,
 		TaskContent:        a.TaskContent,
 		Deliverer:          deliverer,
 		Agent:              agent,
@@ -185,6 +202,9 @@ func (a *application) dispatchAgent(
 	if a.AnthropicModel != "" {
 		env["ANTHROPIC_MODEL"] = a.AnthropicModel.String()
 	}
+	if a.BotLogin != "" {
+		env["BOT_GITHUB_LOGIN"] = a.BotLogin
+	}
 	repoManager := git.NewRepoManager(git.WorkdirConfig{
 		ReposPath: a.ReposPath,
 		WorkPath:  a.WorkPath,
@@ -204,6 +224,43 @@ func (a *application) dispatchAgent(
 		return nil, errors.Wrap(ctx, err, "select agent for task_type")
 	}
 	return agent, nil
+}
+
+// resolveAuth determines the auth mode and, for GitHub App mode, mints an IAT
+// into a.GHToken. The legacy GH_TOKEN env is accepted as a fallback.
+func (a *application) resolveAuth(ctx context.Context) error {
+	mode := prpkg.ResolveAuthMode(a.AppID, a.InstallationID, a.PEMKeyFile, a.GHToken)
+	switch mode {
+	case prpkg.AuthModeGitHubApp:
+		if a.GHToken != "" {
+			glog.Warningf(
+				"pr-reviewer auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
+			)
+		}
+		iat, err := githubapp.MintIAT(ctx, githubapp.Config{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEMPath:        a.PEMKeyFile,
+		})
+		if err != nil {
+			return errors.Wrap(ctx, err, "mint github app iat")
+		}
+		a.GHToken = iat
+		glog.V(2).Infof(
+			"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
+			a.AppID, a.InstallationID,
+		)
+	case prpkg.AuthModePATFallback:
+		glog.Warningf(
+			"pr-reviewer auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)",
+		)
+	case prpkg.AuthModeNone:
+		return errors.Errorf(
+			ctx,
+			"pr-reviewer auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE, or set GH_TOKEN",
+		)
+	}
+	return nil
 }
 
 // createDeliverer builds the Kafka result deliverer when TASK_ID is set,

@@ -26,6 +26,7 @@ import (
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	githubapp "github.com/bborbe/maintainer/lib/githubapp"
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
@@ -63,6 +64,15 @@ type application struct {
 	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
 	// cmd/run-task uses NoopAuthSetup — the developer's existing gh auth login handles git credentials.
 	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
+
+	// GitHub App authentication. When AppID + InstallationID + PEMKeyFile are
+	// set, the pod mints an installation access token at startup and uses it
+	// in place of GHToken; the legacy GHToken env stays accepted as a fallback
+	// (see Run() for the resolution order).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])" default:"ben-s-pull-request-reviewer[bot]"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
@@ -104,6 +114,39 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
+	// Resolve auth mode and mint IAT before factory.RunAgent reads GHToken.
+	mode := prpkg.ResolveAuthMode(a.AppID, a.InstallationID, a.PEMKeyFile, a.GHToken)
+	switch mode {
+	case prpkg.AuthModeGitHubApp:
+		if a.GHToken != "" {
+			glog.Warningf(
+				"pr-reviewer auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
+			)
+		}
+		iat, err := githubapp.MintIAT(ctx, githubapp.Config{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEMPath:        a.PEMKeyFile,
+		})
+		if err != nil {
+			return errors.Wrap(ctx, err, "mint github app iat")
+		}
+		a.GHToken = iat
+		glog.V(2).Infof(
+			"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
+			a.AppID, a.InstallationID,
+		)
+	case prpkg.AuthModePATFallback:
+		glog.Warningf(
+			"pr-reviewer auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)",
+		)
+	case prpkg.AuthModeNone:
+		return errors.Errorf(
+			ctx,
+			"pr-reviewer auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE, or set GH_TOKEN",
+		)
+	}
+
 	authSetup := githubauth.NewNoopAuthSetup()
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir:    a.ClaudeConfigDir,
@@ -120,6 +163,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		Phase:              a.Phase,
 		TaskContent:        string(taskContent),
 		Deliverer:          deliverer,
+		BotLogin:           a.BotLogin,
 	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "agent run failed")

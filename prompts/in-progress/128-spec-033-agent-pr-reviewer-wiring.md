@@ -1,8 +1,12 @@
 ---
-status: approved
+status: committing
 spec: [033-migrate-pr-reviewer-to-github-app]
+summary: Wired lib/githubapp into agent/pr-reviewer for GitHub App auth; added APP_ID/INSTALLATION_ID/PEM_KEY_FILE/BOT_GITHUB_LOGIN env vars; retained GH_TOKEN as fallback; eradicated pr-review-of-ben literal; switched checkBotIdentity from GET /user to GET /app
+container: maintainer-pr-reviewer-app-exec-128-spec-033-agent-pr-reviewer-wiring
+dark-factory-version: v0.164.0
 created: "2026-05-21T20:30:30Z"
 queued: "2026-05-21T20:58:04Z"
+started: "2026-05-21T21:11:05Z"
 ---
 
 <summary>

@@ -175,6 +175,7 @@ App ID and Installation ID remain unchanged across rotations.
 ## Migration Status
 
 - 2026-05-21: Both Apps (prod + dev) registered, installed on `@bborbe`, permissions set, PEMs stored in Teamvault. `cmd/mint-iat` smoke test passing end-to-end against both Apps (Phase A). Phase B verified the prod App posts reviews visible via the REST `/reviews` endpoint.
-- Pending: production code refactor (`pkg/githubposter`, `pkg/steps_gh_token.go`, `pkg/githubauth`, new `lib/githubapp`), k8s manifest updates for dev + prod clusters, deploy + verification on dev first, PAT user retirement after prod cutover.
+- In progress: production code refactor — `lib/githubapp` wired into `agent/pr-reviewer`; new env vars `APP_ID`, `INSTALLATION_ID`, `PEM_KEY_FILE`, `BOT_GITHUB_LOGIN` accepted alongside legacy `GH_TOKEN` fallback; `pr-review-of-ben` literal eradicated from code; `checkBotIdentity` switched from `GET /user` to `GET /app`.
+- Pending: k8s manifest updates for dev + prod clusters, deploy + verification on dev first, PAT user retirement after prod cutover.
 
 Tracked in vault task `Migrate PR Reviewer from User PAT to GitHub App` under goal `GitHub Code Reviewer Agent - Base` (F1).

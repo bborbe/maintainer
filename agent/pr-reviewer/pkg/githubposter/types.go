@@ -20,7 +20,7 @@ type AutoApproveConfig struct {
 
 const (
 	// DefaultBotLogin is the GitHub login the agent posts as by default.
-	DefaultBotLogin = "pr-review-of-ben"
+	DefaultBotLogin = "ben-s-pull-request-reviewer[bot]"
 
 	// BotLoginEnv is the env var that overrides DefaultBotLogin (read by the factory).
 	BotLoginEnv = "BOT_GITHUB_LOGIN"
