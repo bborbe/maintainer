@@ -84,7 +84,8 @@ type application struct {
 	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
 	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
 	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
-	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])" default:"ben-s-pull-request-reviewer[bot]"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"          usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE"`
+	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])"             default:"ben-s-pull-request-reviewer[bot]"`
 
 	// Anthropic-compatible provider routing. Setting AnthropicBaseURL + AnthropicAuthToken
 	// routes the claude CLI to an alt-provider (e.g. MiniMax via https://api.minimax.io/anthropic).
@@ -229,19 +230,35 @@ func (a *application) dispatchAgent(
 // resolveAuth determines the auth mode and, for GitHub App mode, mints an IAT
 // into a.GHToken. The legacy GH_TOKEN env is accepted as a fallback.
 func (a *application) resolveAuth(ctx context.Context) error {
-	mode := prpkg.ResolveAuthMode(a.AppID, a.InstallationID, a.PEMKeyFile, a.GHToken)
-	switch mode {
-	case prpkg.AuthModeGitHubApp:
-		if a.GHToken != "" {
-			glog.Warningf(
-				"pr-reviewer auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
+	// Determine the effective auth mode: prefer PEMKeyFile (file mount), fall back
+	// to PEMKey (env var content) if PEMKeyFile is not set.
+	hasPEMFile := a.PEMKeyFile != ""
+	hasPEMContent := a.PEMKey != ""
+	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && (hasPEMFile || hasPEMContent)
+
+	if a.GHToken != "" && useGitHubApp {
+		glog.Warningf(
+			"pr-reviewer auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
+		)
+	}
+
+	switch {
+	case useGitHubApp:
+		var iat string
+		var err error
+		if hasPEMFile {
+			iat, err = githubapp.MintIAT(ctx, githubapp.Config{
+				AppID:          a.AppID,
+				InstallationID: a.InstallationID,
+				PEMPath:        a.PEMKeyFile,
+			})
+		} else {
+			iat, err = githubapp.MintIAT(ctx, githubapp.Config{
+				AppID:          a.AppID,
+				InstallationID: a.InstallationID,
+				PEM:            []byte(a.PEMKey),
+			})
 		}
-		iat, err := githubapp.MintIAT(ctx, githubapp.Config{
-			AppID:          a.AppID,
-			InstallationID: a.InstallationID,
-			PEMPath:        a.PEMKeyFile,
-		})
 		if err != nil {
 			return errors.Wrap(ctx, err, "mint github app iat")
 		}
@@ -250,14 +267,14 @@ func (a *application) resolveAuth(ctx context.Context) error {
 			"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
 			a.AppID, a.InstallationID,
 		)
-	case prpkg.AuthModePATFallback:
+	case a.GHToken != "":
 		glog.Warningf(
 			"pr-reviewer auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)",
 		)
-	case prpkg.AuthModeNone:
+	default:
 		return errors.Errorf(
 			ctx,
-			"pr-reviewer auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE, or set GH_TOKEN",
+			"pr-reviewer auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE (or PEM_KEY), or set GH_TOKEN",
 		)
 	}
 	return nil

@@ -32,6 +32,13 @@ spec:
     # ANTHROPIC_AUTH_TOKEN is sourced from the agent secret (teamvault MOPmQL).
     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
     ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+    # GitHub App auth — when set, the pod mints an installation access token at
+    # startup and uses it instead of GH_TOKEN. The PEM is mounted from the Secret
+    # at /etc/github-app/pem (see secretFileMounts below).
+    APP_ID: '{{ "AGENT_PR_REVIEWER_APP_ID" | env }}'
+    INSTALLATION_ID: '{{ "AGENT_PR_REVIEWER_INSTALLATION_ID" | env }}'
+    BOT_GITHUB_LOGIN: '{{ "AGENT_PR_REVIEWER_BOT_LOGIN" | env }}'
+    PEM_KEY_FILE: /etc/github-app/pem
   trigger:
     statuses:
       - in_progress

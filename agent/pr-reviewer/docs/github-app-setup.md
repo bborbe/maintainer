@@ -172,6 +172,19 @@ App ID and Installation ID remain unchanged across rotations.
 - **Required-approvals gates and App `APPROVE`** — GitHub does not explicitly document whether App reviews count toward numeric required-approvals rules. Test after migration; document findings here.
 - **PEM never in git** — only Teamvault and Kubernetes Secrets.
 
+## Deploy-time environment variables
+
+The following env vars are set in the operator's deploy shell (`~/.zshrc` or per-cluster `.envrc`) before running `BRANCH=dev make buca` or `BRANCH=prod make buca`. They are committed as Teamvault entry keys and public App IDs, not secret values.
+
+| Env var | Prod value | Dev value |
+|---------|------------|-----------|
+| `AGENT_PR_REVIEWER_APP_ID` | `3798945` | `3800041` |
+| `AGENT_PR_REVIEWER_INSTALLATION_ID` | `134414316` | `134435225` |
+| `AGENT_PR_REVIEWER_BOT_LOGIN` | `ben-s-pull-request-reviewer[bot]` | `ben-s-pull-request-reviewer-dev[bot]` |
+| `AGENT_PR_REVIEWER_PEM_KEY` | `kLoejw` (Teamvault entry key) | `eqKj8L` (Teamvault entry key) |
+
+The `AGENT_PR_REVIEWER_PEM_KEY` is the Teamvault entry key for the PEM file, not the PEM content itself. At deploy time, `teamvault-config-parser` resolves `{{ "AGENT_PR_REVIEWER_PEM_KEY" | env | teamvaultPassword | base64 }}` in the Secret manifest to produce the base64-encoded PEM.
+
 ## Migration Status
 
 - 2026-05-21: Both Apps (prod + dev) registered, installed on `@bborbe`, permissions set, PEMs stored in Teamvault. `cmd/mint-iat` smoke test passing end-to-end against both Apps (Phase A). Phase B verified the prod App posts reviews visible via the REST `/reviews` endpoint.
