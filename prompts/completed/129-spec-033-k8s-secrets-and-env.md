@@ -1,8 +1,12 @@
 ---
-status: approved
+status: completed
 spec: [033-migrate-pr-reviewer-to-github-app]
+container: maintainer-pr-reviewer-app-exec-129-spec-033-k8s-secrets-and-env
+dark-factory-version: v0.164.0
 created: "2026-05-21T20:30:30Z"
 queued: "2026-05-21T20:58:04Z"
+started: "2026-05-21T21:25:40Z"
+completed: "2026-05-21T21:38:08Z"
 ---
 
 <summary>
