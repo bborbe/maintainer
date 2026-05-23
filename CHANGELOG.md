@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.3
+
+- feat(watcher/github-pr): migrate from PAT to GitHub App authentication with auto-refreshing IAT transport; supports APP_ID + INSTALLATION_ID + PEM_KEY env vars; static-PAT fallback via GH_TOKEN still works; partial App config produces a named error at startup naming the missing fields
+
 ## v0.26.2
 
 - chore(watcher/github-build): wire GitHub App credentials (APP_ID, INSTALLATION_ID, PEM_KEY) into watcher container via Kubernetes Secret and StatefulSet env vars (spec 038)

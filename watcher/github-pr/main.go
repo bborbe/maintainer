@@ -109,7 +109,10 @@ type application struct {
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
 	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"                        usage:"HTTP listen address (healthz/readiness/metrics)"                                                                                                                                                           default:":9090"`
-	GHToken          string           `required:"true"  arg:"gh-token"          env:"GH_TOKEN"                      usage:"GitHub token (read scope sufficient)"                                                                                                                                                                                                              display:"length"`
+	GHToken          string           `required:"false" arg:"gh-token"          env:"GH_TOKEN"                      usage:"GitHub PAT (legacy fallback when App credentials are not set)"                                                                                                                                                                                     display:"length"`
+	AppID            int64            `required:"false" arg:"app-id"            env:"APP_ID"                        usage:"GitHub App ID (numeric); when set with InstallationID + PEMKey, App auth is used instead of GH_TOKEN"`
+	InstallationID   int64            `required:"false" arg:"installation-id"   env:"INSTALLATION_ID"               usage:"GitHub App Installation ID (numeric)"`
+	PEMKey           string           `required:"false" arg:"pem-key"           env:"PEM_KEY"                       usage:"GitHub App private key (PEM content from k8s Secret envFrom)"                                                                                                                                                                                      display:"length"`
 	KafkaBrokers     libkafka.Brokers `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"                 usage:"Comma-separated Kafka broker list"`
 	Stage            string           `required:"true"  arg:"stage"             env:"STAGE"                         usage:"Deployment stage (dev|prod)"`
 	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"                 usage:"Poll interval (Go duration)"                                                                                                                                                                               default:"5m"`
@@ -191,8 +194,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	glog.V(2).Infof("trusted-authors count=%d", len(trustedAuthors))
 
-	ghClient := pkg.NewGitHubClient(a.GHToken)
-
 	branch := base.Branch(a.Stage)
 	createSender, cleanup, err := factory.CreateKafkaSender(ctx, a.KafkaBrokers, branch)
 	if err != nil {
@@ -204,7 +205,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	w, err := factory.CreateWatcher(
 		ctx,
-		ghClient,
+		factory.AuthConfig{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEMKey:         a.PEMKey,
+			GHToken:        a.GHToken,
+		},
 		createSender,
 		a.Stage,
 		a.RepoScope,
@@ -221,7 +227,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	triggerHandler, err := factory.CreateSinglePRHandler(
 		ctx,
-		ghClient,
+		factory.AuthConfig{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEMKey:         a.PEMKey,
+			GHToken:        a.GHToken,
+		},
 		createSender,
 		taskCreationFilter,
 		trustDecision,

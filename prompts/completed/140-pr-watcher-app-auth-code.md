@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [037-migrate-pr-watcher-to-github-app]
+summary: Migrated watcher/github-pr from static PAT to GitHub App authentication with auto-refreshing IATs, plus PAT fallback; all 6 auth-mode branches covered by tests
+container: maintainer-exec-140-pr-watcher-app-auth-code
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:38:55Z"
 queued: "2026-05-23T21:41:43Z"
+started: "2026-05-23T22:19:18Z"
+completed: "2026-05-23T22:25:34Z"
 branch: fix/pr-watcher-github-app-auth-code
 ---
 
