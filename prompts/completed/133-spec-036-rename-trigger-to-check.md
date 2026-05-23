@@ -1,14 +1,14 @@
 ---
-status: failed
+status: completed
 spec: [036-watcher-pr-rename-trigger-add-single-pr-trigger]
+summary: Renamed /trigger HTTP route to /check in watcher/github-pr/main.go
 container: maintainer-exec-133-spec-036-rename-trigger-to-check
 dark-factory-version: v0.169.0
 created: "2026-05-23T21:01:00Z"
 queued: "2026-05-23T21:13:13Z"
-started: "2026-05-23T21:13:15Z"
-completed: "2026-05-23T21:14:47Z"
+started: "2026-05-23T21:37:46Z"
+completed: "2026-05-23T21:38:54Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
-lastFailReason: 'validate completion report: completion report status: failed'
 ---
 
 ## Summary

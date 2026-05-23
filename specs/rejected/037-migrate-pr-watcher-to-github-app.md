@@ -1,11 +1,13 @@
 ---
-status: prompted
+status: rejected
 tags:
     - dark-factory
     - spec
 approved: "2026-05-23T21:06:45Z"
 generating: "2026-05-23T21:06:46Z"
 prompted: "2026-05-23T21:11:21Z"
+rejected: "2026-05-23T21:36:01Z"
+rejected_reason: Daemon-generated prompts had systemic issues (compile-blocking fabricated APIs, cross-prompt signature overlap, silent test-skip risk). Replacing with hand-written standalone prompts per CLAUDE.md rule that spec-linked prompts must be daemon-generated. Spec content preserved here for reference; new prompts will reference this rejection.
 branch: dark-factory/migrate-pr-watcher-to-github-app
 ---
 

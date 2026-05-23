@@ -1,8 +1,10 @@
 ---
-status: draft
+status: rejected
 spec: [037-migrate-pr-watcher-to-github-app]
 created: "2026-05-23T21:30:00Z"
 branch: dark-factory/migrate-pr-watcher-to-github-app
+rejected: "2026-05-23T21:35:35Z"
+rejected_reason: Generator produced compile-breakers + cross-prompt overlap. Hand-writing leaner replacements.
 ---
 
 ## Summary
