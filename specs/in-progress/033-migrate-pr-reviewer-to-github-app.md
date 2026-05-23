@@ -7,7 +7,6 @@ approved: "2026-05-21T20:16:14Z"
 generating: "2026-05-21T20:30:30Z"
 prompted: "2026-05-21T20:49:03Z"
 verifying: "2026-05-21T21:38:29Z"
-branch: dark-factory/spec-033
 ---
 
 ## Summary
