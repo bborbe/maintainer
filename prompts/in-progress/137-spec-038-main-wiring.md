@@ -255,21 +255,113 @@ Cross-prompt boundary: **tests for `resolveAuth` and `tokenTransport` live in si
 
    f. Do NOT remove the `github.com/bborbe/run` import — it remains in use via `run.CancelOnFirstFinish` and `run.Func` (lines 110, 116, 123, 141).
 
-4. **Update all call sites of `factory.CreateWatcher`**:
+4. **Extract `resolveAuth` + `tokenTransport` to a shared package — TWO entry points consume `factory.CreateWatcher`**:
 
-   Search for all callers:
-   ```bash
-   grep -rn "factory.CreateWatcher\|CreateWatcher" watcher/github-build/
+   `watcher/github-build/` builds TWO binaries: the long-lived StatefulSet at `main.go` AND the local smoke-test CLI at `cmd/run-once/main.go`. Both call `factory.CreateWatcher` (verified: `grep -rn "factory.CreateWatcher" watcher/github-build/` returns matches in `main.go:88` and `cmd/run-once/main.go:60`). After step 2 changes the factory signature, BOTH binaries must produce an `*http.Client` from their `application` struct — duplicating the resolver in two places is a maintenance liability.
+
+   Create `watcher/github-build/pkg/auth/auth.go`:
+   ```go
+   // Package auth resolves the GitHub auth mode (App vs PAT) for the watcher binaries.
+   package auth
+
+   import (
+       "context"
+       "net/http"
+       "os"
+
+       "github.com/bborbe/errors"
+       "github.com/golang/glog"
+
+       githubapp "github.com/bborbe/maintainer/lib/githubapp"
+   )
+
+   // Config is the resolver input.
+   type Config struct {
+       AppID          int64
+       InstallationID int64
+       PEMKeyFile     string
+       PEMKey         string
+       GHToken        string
+       LogPrefix      string // e.g. "watcher/github-build" or "watcher/github-build-run-once"
+   }
+
+   // Resolve picks the active auth mode (App-when-configured, PAT-when-not,
+   // error-when-neither) and returns an *http.Client suitable for go-github.
+   // The App-mode client has an auto-refreshing transport (lib/githubapp.NewClient).
+   // The PAT-mode client has a static-Bearer transport (tokenTransport below).
+   func Resolve(ctx context.Context, cfg Config) (*http.Client, error) {
+       hasPEMFile := cfg.PEMKeyFile != ""
+       hasPEMContent := cfg.PEMKey != ""
+       useGitHubApp := cfg.AppID != 0 && cfg.InstallationID != 0 && (hasPEMFile || hasPEMContent)
+
+       if cfg.GHToken != "" && useGitHubApp {
+           glog.Warningf("%s auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored", cfg.LogPrefix)
+       }
+
+       switch {
+       case useGitHubApp:
+           appCfg := githubapp.Config{AppID: cfg.AppID, InstallationID: cfg.InstallationID}
+           if hasPEMFile {
+               pemBytes, err := os.ReadFile(cfg.PEMKeyFile)
+               if err != nil {
+                   return nil, errors.Wrapf(ctx, err, "read PEM file %s", cfg.PEMKeyFile)
+               }
+               appCfg.PEM = pemBytes
+           } else {
+               appCfg.PEM = []byte(cfg.PEMKey)
+           }
+           httpClient, err := githubapp.NewClient(ctx, appCfg)
+           if err != nil {
+               return nil, errors.Wrap(ctx, err, "create githubapp client")
+           }
+           glog.V(2).Infof("%s auth mode=github-app app_id=%d installation_id=%d",
+               cfg.LogPrefix, cfg.AppID, cfg.InstallationID)
+           return httpClient, nil
+
+       case cfg.GHToken != "":
+           glog.Warningf("%s auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)", cfg.LogPrefix)
+           return &http.Client{Transport: &tokenTransport{token: cfg.GHToken}}, nil
+
+       default:
+           return nil, errors.Errorf(ctx,
+               "%s auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE (or PEM_KEY), or set GH_TOKEN",
+               cfg.LogPrefix)
+       }
+   }
+
+   // tokenTransport injects a static Bearer token. Unexported — only Resolve
+   // constructs it.
+   type tokenTransport struct{ token string }
+
+   func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+       req = req.Clone(req.Context())
+       req.Header.Set("Authorization", "Bearer "+t.token)
+       return http.DefaultTransport.RoundTrip(req)
+   }
    ```
-   If there are callers outside the main package that pass a token, update them to use `factory.CreateWatcher` with an `httpClient` — but since this is a private factory inside the same binary, the only call site is in `main.go` which is already updated in step 3.
 
-5. **Verify the test helper `NewForTest`**:
-
-   Check `watcher/github-build/pkg/githubclient_export_test.go` or wherever `NewForTest` is defined:
-   ```bash
-   grep -rn "NewForTest" watcher/github-build/pkg/
+   Then **inline `resolveAuth` / `tokenTransport` from step 3 disappear**. Replace the call site in `main.go` (step 3e) with:
+   ```go
+   httpClient, err := auth.Resolve(ctx, auth.Config{
+       AppID: a.AppID, InstallationID: a.InstallationID,
+       PEMKeyFile: a.PEMKeyFile, PEMKey: a.PEMKey,
+       GHToken: a.GHToken,
+       LogPrefix: "watcher/github-build",
+   })
+   if err != nil {
+       return errors.Wrap(ctx, err, "resolve auth")
+   }
+   defer httpClient.CloseIdleConnections()
    ```
-   If it takes a token, update it to take `*http.Client` and pass it to `gogithub.NewClient(httpClient)`. Update all callers.
+
+   **Then update `watcher/github-build/cmd/run-once/main.go` to mirror**:
+   a. Downgrade its `GHToken` field to `required:"false"`.
+   b. Add the same four App env fields (`AppID`, `InstallationID`, `PEMKeyFile`, `PEMKey`) to its `application` struct (same shape as step 1).
+   c. Before calling `factory.CreateWatcher` at line 60, call `auth.Resolve(ctx, auth.Config{..., LogPrefix: "watcher/github-build-run-once"})` and pass the returned `httpClient` to `factory.CreateWatcher` instead of `a.GHToken`.
+
+   Note: with this refactor, the `resolveAuth` METHOD on `application` (step 3c) and the inlined `tokenTransport` type (step 3d) are NO LONGER needed in `main.go` — they live in `pkg/auth/` instead. Strike steps 3c and 3d; both binaries' `Run` methods just call `auth.Resolve(ctx, auth.Config{...})`.
+
+5. **Verify the test helper `NewForTest` in `watcher/github-build/pkg/githubclient_export_test.go`** — verified pre-existing signature: `NewForTest(c *gogithub.Client) *gitHubClient`. Takes a `*gogithub.Client`, not a token. No change needed.
 
 6. **Run `cd watcher/github-build && make test`** — must pass. If tests fail due to constructor signature changes, fix the tests by passing a real `*http.Client` (for integration-style tests using httptest) or a nil/default client.
 

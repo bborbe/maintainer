@@ -10,7 +10,7 @@ branch: fix/pr-watcher-github-app-auth-k8s-docs
 - `watcher/github-pr/k8s/maintainer-watcher-github-pr-secret.yaml`: add `PEM_KEY` Secret entry sourced via `teamvaultFileBase64` (NOT `teamvaultPassword` — that returns 0 bytes for file-type Teamvault entries, the bug that bit spec 033 mid-rollout). `GH_TOKEN` stays for now as a rollout fallback.
 - `watcher/github-pr/k8s/maintainer-watcher-github-pr-sts.yaml`: add `APP_ID` and `INSTALLATION_ID` env vars (plain integer values, not secrets) sourced from the operator's deploy shell. `PEM_KEY` flows in from the Secret via the existing pattern.
 - `dev.env` and `prod.env`: add 3 new exports per stage pointing at the existing pr-reviewer App identities + Teamvault PEM keys.
-- `CHANGELOG.md`: create a new `## Unreleased` heading directly above the most recent `## v0.25.X` heading and add the bullet under it. (No `## Unreleased` heading currently exists — `v0.25.13` was the last release.) Bullet records the `NewClient`-not-`MintIAT` rationale (long-lived StatefulSet) so future readers see why this differs from spec 033's `MintIAT` pattern.
+- `CHANGELOG.md`: create a new `## Unreleased` heading directly above the topmost `## vX.Y.Z` version heading and add the bullet under it. (No `## Unreleased` heading currently exists — the previous one was just consumed by a recent release; the exact version doesn't matter, just position relative to the topmost version.) Bullet records the `NewClient`-not-`MintIAT` rationale (long-lived StatefulSet) so future readers see why this differs from spec 033's `MintIAT` pattern.
 </summary>
 
 <objective>
@@ -31,7 +31,7 @@ The PR watcher pod, once deployed, can pick up the GitHub App credentials from i
 
 **Reference env pattern:** `prod.env` already contains `export AGENT_PR_REVIEWER_PEM_KEY=kLoejw` (Teamvault key for the agent). The watcher gets its own env-var name pointing at the same Teamvault entry.
 
-**CHANGELOG state:** `CHANGELOG.md:11` currently reads `## v0.25.13` — there is NO `## Unreleased` heading right now. The project convention is to maintain a transient `## Unreleased` staging section between commits and releases (dark-factory's auto-release flips it to `## vX.Y.Z` at tag time). Since the previous Unreleased section was just released as v0.25.13, this prompt must CREATE a fresh `## Unreleased` heading at the top of the per-version list (directly above `## v0.25.13`).
+**CHANGELOG state:** there is NO `## Unreleased` heading right now — the previous one was just consumed by a recent release. The project convention is to maintain a transient `## Unreleased` staging section between commits and releases (dark-factory's auto-release flips it to `## vX.Y.Z` at tag time). This prompt must CREATE a fresh `## Unreleased` heading at the top of the per-version list, directly above the topmost `## vX.Y.Z` heading currently in the file. Find the topmost `## vX.Y.Z` heading by reading the file rather than hard-coding a version — releases ship continuously and the anchor will be stale by the time the agent runs.
 </context>
 
 <requirements>
@@ -73,17 +73,17 @@ The PR watcher pod, once deployed, can pick up the GitHub App credentials from i
    export WATCHER_GITHUB_PR_PEM_KEY=kLoejw
    ```
 
-5. **Edit `CHANGELOG.md`** — `## Unreleased` does NOT currently exist (the last release `v0.25.13` consumed it). Create a fresh `## Unreleased` heading directly above the `## v0.25.13` heading at line 11, with the new bullet. Result should look like:
+5. **Edit `CHANGELOG.md`** — `## Unreleased` does NOT currently exist (consumed by a recent release). First, READ the file to find the topmost `## vX.Y.Z` heading (do NOT hard-code the version — releases ship continuously). Insert a fresh `## Unreleased` heading + blank line + the bullet directly above that topmost version heading. Shape:
 
    ```markdown
    ## Unreleased
 
    - feat(watcher/github-pr): add GitHub App auth via `APP_ID` + `INSTALLATION_ID` + `PEM_KEY` env vars (reuses existing pr-reviewer Apps `3798945` / `3800041`); uses `lib/githubapp.NewClient` (auto-refreshing IAT via `ghinstallation/v2`) because the watcher is a long-lived StatefulSet — a single `MintIAT` call would expire after 1 hour. Partial App env returns an error naming the missing field; legacy `GH_TOKEN` retained as fallback for rollout safety.
 
-   ## v0.25.13
+   ## v<topmost-existing-version>
    ```
 
-   Do NOT touch the existing `## v0.25.13` bullet or any prior version sections.
+   Do NOT touch any existing `## vX.Y.Z` bullet or prior version sections.
 
 </requirements>
 

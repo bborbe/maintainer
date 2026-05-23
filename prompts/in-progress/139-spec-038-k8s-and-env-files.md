@@ -169,11 +169,11 @@ grep -E 'WATCHER_GITHUB_BUILD_(APP_ID|INSTALLATION_ID|PEM_KEY)' dev.env
 grep -E 'WATCHER_GITHUB_BUILD_(APP_ID|INSTALLATION_ID|PEM_KEY)' prod.env
 # Expected: 3 lines, values 3798945 / 134414316 / kLoejw
 
-# StatefulSet wires all three from Secret
+# StatefulSet wires all three env vars
 grep -n 'APP_ID\|INSTALLATION_ID\|PEM_KEY' watcher/github-build/k8s/maintainer-watcher-github-build-sts.yaml
-# Expected: 3 secretKeyRef entries (APP_ID, INSTALLATION_ID, PEM_KEY)
+# Expected: 3 env entries — APP_ID + INSTALLATION_ID via `value: '{{ "..." | env }}'` (direct env), PEM_KEY via `secretKeyRef` (only secret)
 
-# Build passes
-cd watcher/github-build && go build ./...
+# Precommit passes
+cd watcher/github-build && make precommit
 ```
 </verification>
