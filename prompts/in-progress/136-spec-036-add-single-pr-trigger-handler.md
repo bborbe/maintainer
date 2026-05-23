@@ -1,13 +1,14 @@
 ---
-status: draft
+status: approved
 spec: [036-watcher-pr-rename-trigger-add-single-pr-trigger]
 created: "2026-05-23T21:02:00Z"
+queued: "2026-05-23T21:23:08Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
 ---
 
 ## Summary
 
-- `PRDetails` struct in `watcher/github-pr/pkg/githubclient.go` extended to include `AuthorLogin`, `Title`, `IsDraft`
+- `PRDetails` struct in `watcher/github-pr/pkg/githubclient.go` extended to include `AuthorLogin`, `Title`, `IsDraft`, `UpdatedAt`
 - `GetPRDetails` implementation updated to populate the new fields
 - `BuildCreateCommand` exported function added to `watcher/github-pr/pkg/watcher.go`
 - New handler `trigger_handler.go` created in `watcher/github-pr/pkg/handler/`
@@ -83,9 +84,10 @@ type PRDetails struct {
     HeadSHA     string
     CloneURL    string
     BaseRef     string
-    AuthorLogin string // GitHub author login; empty for deleted accounts
-    Title       string // PR title
-    IsDraft     bool   // draft state
+    AuthorLogin string           // GitHub author login; empty for deleted accounts
+    Title       string           // PR title
+    IsDraft     bool             // draft state
+    UpdatedAt   libtime.DateTime // PR last-updated timestamp; required for AgeFilter
 }
 ```
 
@@ -98,12 +100,13 @@ func (c *githubClient) GetPRDetails(ctx context.Context, owner, repo string, num
         return PRDetails{}, errors.Wrapf(ctx, err, "get pull request %s/%s#%d", owner, repo, number)
     }
     return PRDetails{
-        HeadSHA:  pr.GetHead().GetSHA(),
-        CloneURL: pr.GetHead().GetRepo().GetCloneURL(),
-        BaseRef:  pr.GetBase().GetRef(),
+        HeadSHA:     pr.GetHead().GetSHA(),
+        CloneURL:    pr.GetHead().GetRepo().GetCloneURL(),
+        BaseRef:     pr.GetBase().GetRef(),
         AuthorLogin: pr.GetUser().GetLogin(),
         Title:       pr.GetTitle(),
         IsDraft:     pr.GetDraft(),
+        UpdatedAt:   libtime.DateTime(pr.GetUpdatedAt().Time),
     }, nil
 }
 ```
@@ -268,7 +271,7 @@ func (h *singlePRTriggerHandler) ServeHTTP(resp http.ResponseWriter, req *http.R
         AuthorLogin: details.AuthorLogin,
         IsDraft:     details.IsDraft,
         Title:       details.Title,
-        UpdatedAt:   libtime.DateTime{}, // zero time passes age filter (no cursor dependency)
+        UpdatedAt:   details.UpdatedAt, // real PR UpdatedAt from GitHub; required for AgeFilter
         RepoKey:     repoKey,
     }
 
@@ -530,32 +533,37 @@ import (
     "encoding/json"
     "net/http"
     "net/http/httptest"
+    "time"
 
     . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
 
     "github.com/bborbe/agent/lib/command/task"
-    "github.com/bborbe/agent/lib/command/task/mocks"
+    taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
     "github.com/bborbe/errors"
+    libtime "github.com/bborbe/time"
 
     "github.com/bborbe/maintainer/watcher/github-pr/pkg"
     "github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
     "github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
+    "github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
     "github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 var _ = Describe("TriggerHandler", func() {
     var (
+        ctx                context.Context
         ghClient           *mocks.GitHubClient
-        createSender       *mocks.TaskCreateCommandSender
+        createSender       *taskmocks.TaskCreateCommandSender
         taskCreationFilter *mocks.TaskCreationFilter
         trustDecision      *mocks.Trust
         h                  http.Handler
     )
 
     BeforeEach(func() {
+        ctx = context.Background()
         ghClient = new(mocks.GitHubClient)
-        createSender = new(mocks.TaskCreateCommandSender)
+        createSender = new(taskmocks.TaskCreateCommandSender)
         taskCreationFilter = new(mocks.TaskCreationFilter)
         trustDecision = new(mocks.Trust)
 
@@ -572,7 +580,7 @@ var _ = Describe("TriggerHandler", func() {
         )
     })
 
-    describeTable("error cases", func(rawURL string, expectedStatus int) {
+    DescribeTable("error cases", func(rawURL string, expectedStatus int) {
         req := httptest.NewRequest("POST", "/trigger?"+rawURL, nil)
         resp := httptest.NewRecorder()
         h.ServeHTTP(resp, req)
@@ -583,15 +591,15 @@ var _ = Describe("TriggerHandler", func() {
             Expect(body["pr_url"]).ToNot(BeEmpty())
         }
     },
-        entry("missing url returns 400", "foo=bar", http.StatusBadRequest),
-        entry("empty url returns 400", "url=", http.StatusBadRequest),
-        entry("invalid url returns 400", "url=not-a-url", http.StatusBadRequest),
-        entry("non-github platform returns 400", "url=https://bitbucket.org/owner/repo/pull-requests/1", http.StatusBadRequest),
+        Entry("missing url returns 400", "foo=bar", http.StatusBadRequest),
+        Entry("empty url returns 400", "url=", http.StatusBadRequest),
+        Entry("invalid url returns 400", "url=not-a-url", http.StatusBadRequest),
+        Entry("non-github platform returns 400", "url=https://bitbucket.org/owner/repo/pull-requests/1", http.StatusBadRequest),
     )
 
     Context("GitHub fetch failure", func() {
         BeforeEach(func() {
-            ghClient.GetPRDetailsReturns(pkg.PRDetails{}, errors.New("network error"))
+            ghClient.GetPRDetailsReturns(pkg.PRDetails{}, errors.Errorf(ctx, "network error"))
         })
 
         It("returns 502", func() {
@@ -643,7 +651,7 @@ var _ = Describe("TriggerHandler", func() {
                 CloneURL: "https://github.com/bborbe/repo.git",
                 BaseRef:  "main",
             }, nil)
-            createSender.SendCommandReturns(errors.New("kafka error"))
+            createSender.SendCommandReturns(errors.Errorf(ctx, "kafka error"))
         })
 
         It("returns 502", func() {
@@ -742,6 +750,38 @@ var _ = Describe("TriggerHandler", func() {
             Expect(resp.Code).To(Equal(http.StatusOK))
             Expect(sentCmd.Frontmatter["phase"]).To(Equal("planning"))
             Expect(sentCmd.Frontmatter["status"]).To(Equal("in_progress"))
+        })
+    })
+
+    Context("CreateCommand.Validate boundary (AC spec line 107)", func() {
+        // task.CreateCommand.Validate rejects titles containing /, :, ?, etc.
+        // computePRTitle slugifies — this test guards against a slugifier regression
+        // silently breaking every triggered review on real-world PR titles.
+        It("constructed CreateCommand passes Validate for adversarial PR titles with /:?", func() {
+            ghClient.GetPRDetailsReturns(pkg.PRDetails{
+                HeadSHA:     "abc123",
+                CloneURL:    "https://github.com/bborbe/repo.git",
+                BaseRef:     "main",
+                AuthorLogin: "bborbe",
+                Title:       "feat: handle /api?id=1 in :backend",
+                IsDraft:     false,
+                UpdatedAt:   libtime.DateTime(time.Date(2026, 5, 23, 0, 0, 0, 0, time.UTC)),
+            }, nil)
+
+            var sentCmd task.CreateCommand
+            createSender.SendCommandStub = func(_ context.Context, cmd task.CreateCommand) error {
+                sentCmd = cmd
+                return nil
+            }
+
+            req := httptest.NewRequest("POST", "/trigger?url=https://github.com/bborbe/repo/pull/77", nil)
+            resp := httptest.NewRecorder()
+            h.ServeHTTP(resp, req)
+
+            Expect(resp.Code).To(Equal(http.StatusOK))
+            Expect(createSender.SendCommandCallCount()).To(Equal(1))
+            Expect(sentCmd.Validate(ctx)).To(Succeed(),
+                "Validate must succeed; if it fails, computePRTitle slugifier regressed or PRDetails fields leaked unsanitized into the command title/frontmatter")
         })
     })
 })

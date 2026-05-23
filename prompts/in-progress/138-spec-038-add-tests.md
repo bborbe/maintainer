@@ -1,7 +1,9 @@
 ---
-spec: [038]
-status: draft
+status: approved
+spec: [038-migrate-watcher-github-build-to-github-app]
 created: "2026-05-23T21:30:00Z"
+queued: "2026-05-23T21:24:11Z"
+branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 
 <summary>
@@ -26,54 +28,51 @@ Read before writing tests:
 
 The existing test pattern uses `httptest.NewServer` for GitHub API mocking. Follow the same pattern for auth resolver tests.
 
-Read coding docs:
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-testing-guide.md`
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-patterns.md` (counterfeiter annotations)
+Existing test files to model:
+- `watcher/github-build/main_allowlist_test.go` (`package main`, internal — direct access to `application` struct; this is the pattern to follow for `resolveAuth` tests)
+- `watcher/github-build/validate_test.go` (`package main`, internal)
+- `watcher/github-build/pkg/githubclient_test.go` (httptest mock pattern)
 </context>
 
 <requirements>
-1. **Add auth resolver tests to `watcher/github-build/main_test.go`**:
-
-   Add a new `Describe("resolveAuth", ...)` block in the existing `Describe("Main", ...)` in `main_test.go`.
-
-   Create a test helper struct for the test cases:
-   ```go
-   func buildApp() *application {
-       return &application{
-           AppID:          123456,
-           InstallationID: 789012,
-           PEMKeyFile:     "", // will be set per-test
-           PEMKey:         "", // will be set per-test
-           GHToken:        "",
-       }
-   }
-   ```
+1. **Create `watcher/github-build/main_resolveauth_test.go`** — internal-package test (`package main`, NOT `main_test`) so `application` and `resolveAuth` are directly accessible. Follow the same pattern as `main_allowlist_test.go` (which is also `package main`).
 
    Test cases for `resolveAuth`:
 
-   a. **App mode with PEM content** — set `PEMKey` with valid-looking PEM bytes (any bytes, since the lib parses and mints; in test, use a mock or httptest server to avoid real GitHub calls):
-      - For unit tests, set `PEMKey` to a valid PEM header string so `githubapp.NewClient` succeeds up to the IAT mint step.
-      - Use an `httptest.Server` as a mock GitHub API that returns 200 on app token exchange.
-      - Assert: returned `*http.Client` is non-nil.
-      - Assert: the auth mode log line `auth mode=github-app app_id=123456 installation_id=789012` appears (check via `glog` output capture or just check client is non-nil).
+   a. **PAT fallback mode — captured Authorization header (spec AC line 102)** — `AppID=0`, `InstallationID=0`, `GHToken="my-token"`:
+      ```go
+      app := &application{GHToken: "my-token"}
+      httpClient, err := app.resolveAuth(ctx)
+      Expect(err).NotTo(HaveOccurred())
+      Expect(httpClient).NotTo(BeNil())
 
-   b. **PAT fallback mode** — `AppID=0`, `InstallationID=0`, `GHToken="my-token"`:
-      - Assert: returned `*http.Client` is non-nil.
-      - Assert: log line `auth mode=pat-fallback` appears.
+      // Drive an outbound request through the returned client to capture the Bearer header.
+      var captured string
+      server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+          captured = r.Header.Get("Authorization")
+          w.WriteHeader(200)
+      }))
+      defer server.Close()
 
-   c. **Conflict mode (both set)** — `AppID=123456`, `InstallationID=789012`, `PEMKey=validPEM`, `GHToken="some-token"`:
-      - Assert: returned `*http.Client` is non-nil (App wins).
-      - Assert: warning log line contains `both App credentials and GH_TOKEN are set — App wins`.
+      _, err = httpClient.Get(server.URL)
+      Expect(err).NotTo(HaveOccurred())
+      Expect(captured).To(Equal("Bearer my-token"))
+      ```
+      This satisfies spec AC line 102 — the captured header equals `Bearer <GH_TOKEN>`.
 
-   d. **Refusal mode (neither set)** — `AppID=0`, `GHToken=""`:
+   b. **Conflict mode (both set) — full warning literal** — `AppID=123456`, `InstallationID=789012`, `PEMKey=<dummy>`, `GHToken="some-token"`:
+      - Note: the App branch will fail at PEM parse (no real RSA key), so this test exercises the conflict-detection path before the mint. Test approach: assert that when both are set, the code path that logs the conflict warning is taken (verify via the order of operations or by inspecting a captured glog output). If `glog` output is hard to capture in-process, accept this case as covered by Rung 3 e2e and skip the unit test; document the skip.
+      - At minimum: assert that with both set AND an invalid PEM, the error returned mentions App-side failure (not "neither configured") — proves the conflict branch was taken.
+
+   c. **Refusal mode (neither set)** — `AppID=0`, `GHToken=""`:
+      - Assert: returned `httpClient` is nil.
       - Assert: returned error is non-nil.
-      - Assert: error message contains `APP_ID` (or `neither App nor PAT`).
+      - Assert: error message contains both literals `APP_ID` AND `GH_TOKEN` (spec AC).
 
-   e. **Missing PEM (App set but no PEMKey/PEMKeyFile)** — `AppID=123456`, `InstallationID=789012`, `PEMKey=""`, `PEMKeyFile=""`:
-      - Assert: returned error is non-nil.
+   d. **Missing PEMKeyFile file** — `AppID=123456`, `InstallationID=789012`, `PEMKeyFile="/nonexistent/path"`, `PEMKey=""`:
+      - Assert: returned error is non-nil and contains the path or "no such file".
 
-   f. **Missing PEMKeyFile file** — `AppID=123456`, `InstallationID=789012`, `PEMKeyFile="/nonexistent/path"`, `PEMKey=""`:
-      - Assert: returned error is non-nil and contains the path.
+   **Out of scope for unit tests**: the App-mode happy-path (`NewClient` + successful IAT mint) requires either a real RSA key + httptest.Server with `BaseURL` redirection on `lib/githubapp.Config`, OR a mock — both higher-friction than the value they provide. Spec line 131 explicitly defers this to Rung 3 cluster verification ("Live cluster verification is the right granularity"). Do NOT add a happy-path App-mode unit test in this prompt.
 
 2. **Add `NewGitHubClient` constructor tests to `watcher/github-build/pkg/githubclient_test.go`**:
 
@@ -124,12 +123,10 @@ Read coding docs:
 
 <constraints>
 - Tests must use Ginkgo v2 / Gomega (same framework as existing tests)
-- Counterfeiter-generated mocks only — never hand-write mocks
-- External test packages (`_test` suffix) — same as existing tests
-- `context.Background()` forbidden in test setup that calls production code paths
-- `go generate` must be run after any counterfeiter annotation changes
+- New `resolveAuth` tests live in `watcher/github-build/main_resolveauth_test.go` with `package main` (NOT `main_test`) — `application` and `resolveAuth` are unexported, so internal-package access is required. Model: `main_allowlist_test.go`.
+- `context.Background()` is acceptable in unit tests for ctx parameter values; only forbidden in production code paths.
 - Do NOT commit — dark-factory handles git
-- Coverage must be ≥80% for new code paths
+- No counterfeiter mocks are introduced by this prompt; the existing `pkg.Watcher` interface is unchanged.
 </constraints>
 
 <verification>

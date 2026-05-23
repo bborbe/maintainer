@@ -1,7 +1,9 @@
 ---
-spec: [038]
-status: draft
+status: approved
+spec: [038-migrate-watcher-github-build-to-github-app]
 created: "2026-05-23T21:30:00Z"
+queued: "2026-05-23T21:24:11Z"
+branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 
 <summary>
@@ -117,10 +119,7 @@ type Config struct {
 
 Note: The watcher is a long-lived StatefulSet (hours/days runtime) — MUST use `NewClient` (auto-refreshing transport), NOT `MintIAT` (static 1-hour token). This is different from pr-reviewer which is a one-shot job.
 
-Read also:
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-patterns.md`
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-factory-pattern.md`
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-error-wrapping-guide.md`
+Cross-prompt boundary: **tests for `resolveAuth` and `tokenTransport` live in sibling prompt `2-spec-038-add-tests.md`**. Do NOT add test files in this prompt.
 </context>
 
 <requirements>
@@ -210,7 +209,7 @@ Read also:
            return httpClient, nil
 
        case a.GHToken != "":
-           glog.V(2).Infof("watcher/github-build auth mode=pat-fallback")
+           glog.Warningf("watcher/github-build auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
            return &http.Client{
                Transport: &tokenTransport{token: a.GHToken},
            }, nil
@@ -218,7 +217,7 @@ Read also:
        default:
            return nil, errors.Errorf(
                ctx,
-               "watcher/github-build auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY (or PEM_KEY_FILE), or set GH_TOKEN",
+               "watcher/github-build auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE (or PEM_KEY), or set GH_TOKEN",
            )
        }
    }
@@ -254,7 +253,7 @@ Read also:
    )
    ```
 
-   f. Remove the unused import `github.com/bborbe/run` if it is no longer referenced after this change (check with `grep -n "run\." watcher/github-build/main.go`).
+   f. Do NOT remove the `github.com/bborbe/run` import — it remains in use via `run.CancelOnFirstFinish` and `run.Func` (lines 110, 116, 123, 141).
 
 4. **Update all call sites of `factory.CreateWatcher`**:
 
