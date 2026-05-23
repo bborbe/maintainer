@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [034-pr-reviewer-always-post-review]
 summary: Updated pr-post-back.md with Always-Post Review Invariant section, planning-phase LGTM posting note, and LGTM failure routing table rows
 container: maintainer-exec-131-pr-reviewer-always-post-review-docs
@@ -7,8 +7,7 @@ dark-factory-version: v0.164.0
 created: "2026-05-23T00:00:00Z"
 queued: "2026-05-23T11:30:19Z"
 started: "2026-05-23T12:35:30Z"
-completed: "2026-05-23T11:43:07Z"
-lastFailReason: 'validate completion report: completion report status: failed'
+completed: "2026-05-23T12:38:40Z"
 ---
 
 <summary>
