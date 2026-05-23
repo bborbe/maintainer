@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [038-migrate-watcher-github-build-to-github-app]
+summary: Added Ginkgo v2 unit tests for auth.Resolve in watcher/github-build/pkg/auth/auth_test.go covering PAT fallback, conflict warning, refusal, and missing PEMKeyFile cases
+container: maintainer-exec-138-spec-038-add-tests
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:30:00Z"
 queued: "2026-05-23T21:24:11Z"
+started: "2026-05-23T22:12:45Z"
+completed: "2026-05-23T22:17:36Z"
 branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 
