@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- fix(agent/pr-reviewer): drop `checkBotIdentity` pre-flight call to `GET /app`; GitHub's `/app` endpoint requires the App-level JWT but the agent only holds the Installation Access Token, so every call returned 401 `"A JSON web token could not be decoded"` and blocked every review POST; bot identity is now trusted from the `BotLogin` env var (operator-configured), removing the broken self-check entirely
+
 ## v0.25.11
 
 - fix(agent/pr-reviewer): planner now advances non-empty-concerns tasks with `NextPhase: "execution"` (via `domain.TaskPhaseExecution`) instead of the stale `"in_progress"` literal that spec 032 renamed; factory + k8s Config CR `trigger.phases` + planner unit test all moved to the canonical value; restores the spec 034 F2 invariant for the non-empty-concerns branch (spec 035)

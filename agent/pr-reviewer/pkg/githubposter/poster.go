@@ -75,10 +75,6 @@ func (p *prPoster) PostLGTM(
 
 func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
 	start := time.Now()
-	if result, ok := p.checkBotIdentity(ctx); !ok {
-		result.ElapsedMs = time.Since(start).Milliseconds()
-		return result
-	}
 	config, err := ReadAutoApproveConfig(ctx, req.WorkDir)
 	if err != nil {
 		return prpkg.PostResult{
@@ -99,69 +95,6 @@ func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostRe
 	result := p.postAndVerify(ctx, req.PR, req.HeadSHA, event, body, warnings)
 	result.ElapsedMs = time.Since(start).Milliseconds()
 	return result
-}
-
-func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool) {
-	// Option A: replace GET /user (which doesn't work for Apps) with GET /app.
-	// The response slug-derived login is <slug>[bot], which we compare against p.botLogin.
-	type appResp struct {
-		Slug string `json:"slug"`
-	}
-	step := "GET /app"
-	cr := retryCall(ctx, step, func(ctx context.Context) (appResp, int, string, error) {
-		status, body, err := doRequest(
-			ctx,
-			p.httpClient,
-			p.ghToken,
-			"GET",
-			"https://api.github.com/app",
-			nil,
-		)
-		if err != nil {
-			return appResp{}, status, truncateBody(body), err
-		}
-		if status != 200 {
-			return appResp{}, status, truncateBody(
-					body,
-				), errors.Errorf(
-					ctx,
-					"unexpected status %d",
-					status,
-				)
-		}
-		var u appResp
-		if err := json.Unmarshal(body, &u); err != nil {
-			return appResp{}, status, truncateBody(
-					body,
-				), errors.Wrapf(
-					ctx,
-					err,
-					"parse /app response",
-				)
-		}
-		return u, status, truncateBody(body), nil
-	})
-	if cr.Err != nil {
-		return buildFailedResult(step, cr), false
-	}
-	expectedLogin := p.botLogin
-	actualLogin := cr.Value.Slug + "[bot]"
-	if actualLogin != expectedLogin {
-		return prpkg.PostResult{
-			Outcome:      "failed",
-			FailureStep:  step,
-			Class:        prpkg.ErrorClassPermanent,
-			EscalateHint: true,
-			Attempt:      cr.Attempts,
-			HTTPStatus:   cr.HTTPStatus,
-			ErrorMessage: fmt.Sprintf(
-				"bot identity mismatch: expected %s got %s",
-				expectedLogin,
-				actualLogin,
-			),
-		}, false
-	}
-	return prpkg.PostResult{}, true
 }
 
 func (p *prPoster) dismissPriorReviews(

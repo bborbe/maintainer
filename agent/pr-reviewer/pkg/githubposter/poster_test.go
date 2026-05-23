@@ -39,11 +39,6 @@ func makeHTTPResp(status int, body string) *http.Response {
 	}
 }
 
-// botAppJSON returns a GET /app response for the prod App slug.
-func botAppJSON() string {
-	return `{"slug":"ben-s-pull-request-reviewer"}`
-}
-
 func reviewJSON(id int64, login, commitID, state string) string {
 	return fmt.Sprintf(
 		`{"id":%d,"user":{"login":%q},"commit_id":%q,"state":%q}`,
@@ -135,7 +130,6 @@ var _ = Describe("PrPoster", func() {
 
 	happySpecs := func(state string) []callSpec {
 		return []callSpec{
-			{200, botAppJSON(), nil},
 			{200, reviewListJSON(), nil},
 			{201, postRespJSON(42), nil},
 			{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, state)), nil},
@@ -177,26 +171,11 @@ var _ = Describe("PrPoster", func() {
 		Entry("soft-warning", prpkg.ErrorClassSoftWarning, "soft-warning"),
 	)
 
-	Context("bot identity mismatch", func() {
-		It("returns permanent failure without posting", func() {
-			fakeClient.DoReturns(makeHTTPResp(200, `{"login":"someone-else"}`), nil)
-			req := prpkg.PostRequest{PR: pr, HeadSHA: testHeadSHA, WorkDir: tmpDir}
-			result := poster.Post(ctx, req)
-			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
-			Expect(result.EscalateHint).To(BeTrue())
-			Expect(result.FailureStep).To(Equal("GET /app"))
-			Expect(result.ErrorMessage).To(ContainSubstring("bot identity mismatch"))
-			Expect(fakeClient.DoCallCount()).To(Equal(1))
-		})
-	})
-
 	Context("dismissal before POST", func() {
 		It("dismisses prior bot review then POSTs in that order", func() {
 			writeYAML(true)
 			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
 				{200, `{}`, nil}, // PUT dismissal
 				{201, postRespJSON(42), nil},
@@ -208,12 +187,12 @@ var _ = Describe("PrPoster", func() {
 			})
 			Expect(result.Outcome).To(Equal("success"))
 			invs := fakeClient.Invocations()["Do"]
-			Expect(len(invs)).To(Equal(5))
-			putReq, ok := invs[2][0].(*http.Request)
+			Expect(len(invs)).To(Equal(4))
+			putReq, ok := invs[1][0].(*http.Request)
 			Expect(ok).To(BeTrue())
 			Expect(putReq.Method).To(Equal("PUT"))
 			Expect(putReq.URL.Path).To(ContainSubstring("dismissals"))
-			postReq, ok := invs[3][0].(*http.Request)
+			postReq, ok := invs[2][0].(*http.Request)
 			Expect(ok).To(BeTrue())
 			Expect(postReq.Method).To(Equal("POST"))
 		})
@@ -223,7 +202,6 @@ var _ = Describe("PrPoster", func() {
 		It("retries verify-GET and succeeds on second attempt", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(), nil}, // first verify: phantom (empty list)
@@ -234,7 +212,7 @@ var _ = Describe("PrPoster", func() {
 				Summary: "ok", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
-			Expect(fakeClient.DoCallCount()).To(Equal(5))
+			Expect(fakeClient.DoCallCount()).To(Equal(4))
 		})
 	})
 
@@ -242,7 +220,6 @@ var _ = Describe("PrPoster", func() {
 		It("returns transient failure after both verify attempts find no review", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(), nil}, // verify attempt 1: empty
@@ -262,7 +239,6 @@ var _ = Describe("PrPoster", func() {
 	Context("POST 422 (PR closed)", func() {
 		It("returns success with not-a-failure class and no verify-GET", func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{422, `{"message":"Unprocessable Entity"}`, nil},
 			})
@@ -272,14 +248,13 @@ var _ = Describe("PrPoster", func() {
 			Expect(result.Outcome).To(Equal("success"))
 			Expect(result.Class).To(Equal(prpkg.ErrorClassNotAFailure))
 			Expect(result.HTTPStatus).To(Equal(422))
-			Expect(fakeClient.DoCallCount()).To(Equal(3))
+			Expect(fakeClient.DoCallCount()).To(Equal(2))
 		})
 	})
 
 	Context("POST 403 permanent failure", func() {
 		It("returns permanent failure without retry", func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{403, `{"message":"Forbidden"}`, nil},
 			})
@@ -290,26 +265,7 @@ var _ = Describe("PrPoster", func() {
 			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.Attempt).To(Equal(1))
-			Expect(fakeClient.DoCallCount()).To(Equal(3))
-		})
-	})
-
-	Context("transient 5xx retry succeeds", func() {
-		It("retries GET /app on 503 and continues to success", func() {
-			writeYAML(true)
-			fakeClient.DoStub = seqStub([]callSpec{
-				{503, `service unavailable`, nil}, // GET /app attempt 1
-				{200, botAppJSON(), nil},          // GET /app attempt 2
-				{200, reviewListJSON(), nil},
-				{201, postRespJSON(42), nil},
-				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
-			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
-				Summary: "ok", WorkDir: tmpDir,
-			})
-			Expect(result.Outcome).To(Equal("success"))
-			Expect(fakeClient.DoCallCount()).To(Equal(5))
+			Expect(fakeClient.DoCallCount()).To(Equal(2))
 		})
 	})
 
@@ -330,7 +286,6 @@ var _ = Describe("PrPoster", func() {
 		It("stops after PUT dismissal fails and does not POST", func() {
 			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
 				{403, `{"message":"Forbidden"}`, nil}, // PUT dismissal fails
 			})
@@ -340,21 +295,7 @@ var _ = Describe("PrPoster", func() {
 			Expect(result.Outcome).To(Equal("failed"))
 			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.FailureStep).To(Equal("PUT .../dismissals"))
-			Expect(fakeClient.DoCallCount()).To(Equal(3))
-		})
-	})
-
-	Context("unknown class from non-JSON /user response", func() {
-		It("returns unknown class and no retry", func() {
-			fakeClient.DoReturns(makeHTTPResp(200, "not-json-at-all"), nil)
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, WorkDir: tmpDir,
-			})
-			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassUnknown))
-			Expect(result.EscalateHint).To(BeTrue())
-			Expect(result.Attempt).To(Equal(1))
-			Expect(fakeClient.DoCallCount()).To(Equal(1))
+			Expect(fakeClient.DoCallCount()).To(Equal(2))
 		})
 	})
 
@@ -368,7 +309,6 @@ var _ = Describe("PrPoster", func() {
 
 		BeforeEach(func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botAppJSON(), nil},
 				// Three prior reviews by the bot on this SHA: COMMENTED, APPROVED, CHANGES_REQUESTED
 				{200, reviewListJSON(
 					reviewJSON(commentedID, testBotLogin, "sha-prior", "COMMENTED"),
@@ -396,8 +336,8 @@ var _ = Describe("PrPoster", func() {
 					Summary: "issues found", WorkDir: tmpDir,
 				})
 				Expect(result.Outcome).To(Equal("success"))
-				// 6 calls: GET /app + GET /reviews (list) + 2x PUT dismissal + POST + GET /reviews (verify)
-				Expect(fakeClient.DoCallCount()).To(Equal(6))
+				// 5 calls: GET /reviews (list) + 2x PUT dismissal + POST + GET /reviews (verify)
+				Expect(fakeClient.DoCallCount()).To(Equal(5))
 
 				invs := fakeClient.Invocations()["Do"]
 				var dismissedPaths []string
@@ -433,13 +373,13 @@ var _ = Describe("PrPoster", func() {
 			fakeClient.DoStub = func(req *http.Request) (*http.Response, error) {
 				idx := callIdx
 				callIdx++
-				if idx == 2 && req.Body != nil {
+				if idx == 1 && req.Body != nil {
 					b, _ := io.ReadAll(req.Body)
 					capturedBody = b
 					return makeHTTPResp(201, postRespJSON(42)), nil
 				}
 				bodies := []string{
-					botAppJSON(), reviewListJSON(),
+					reviewListJSON(),
 					"", // POST body captured above
 					reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")),
 				}
@@ -465,10 +405,9 @@ var _ = Describe("PrPoster", func() {
 	DescribeTable("listBotReviews SHA filter — dismissal eligibility",
 		func(inputReviews []string, expectedDismissedIDs []int64) {
 			// Build the full HTTP call sequence:
-			//   GET /app + GET dismiss-list + N×PUT dismissal + POST + GET verify
-			specs := make([]callSpec, 0, 2+len(expectedDismissedIDs)+2)
+			//   GET dismiss-list + N×PUT dismissal + POST + GET verify
+			specs := make([]callSpec, 0, 1+len(expectedDismissedIDs)+2)
 			specs = append(specs,
-				callSpec{200, botAppJSON(), nil},
 				callSpec{200, reviewListJSON(inputReviews...), nil},
 			)
 			for range expectedDismissedIDs {
