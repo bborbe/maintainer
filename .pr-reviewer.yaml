@@ -1,4 +1,4 @@
-# pr-reviewer config — controls how the bot (pr-review-of-ben) posts reviews on this repo's PRs.
+# pr-reviewer config — controls how the bot (ben-s-pull-request-reviewer[bot]) posts reviews on this repo's PRs.
 #
 # Schema:
 #   autoApprove: bool (default false when this file is absent or the field is unset)
