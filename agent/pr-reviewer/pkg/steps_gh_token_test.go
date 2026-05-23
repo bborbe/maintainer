@@ -63,7 +63,7 @@ var _ = Describe("GHTokenCheckStep", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(got.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 		Expect(got.Message).To(ContainSubstring("anonymous"))
-		Expect(got.Message).To(ContainSubstring("rotate teamvault"))
+		Expect(got.Message).To(ContainSubstring("rotate the PAT or the App PEM"))
 	})
 
 	It("returns needs_input on 401 unauthorized", func() {

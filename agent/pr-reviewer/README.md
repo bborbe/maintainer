@@ -40,8 +40,14 @@ Environment variables:
 
 | Var | Purpose |
 |---|---|
-| `PR_REVIEWER_GITHUB_TOKEN` | GitHub token (defaults via `${PR_REVIEWER_GITHUB_TOKEN}` in config) |
+| `GH_TOKEN` | GitHub token (PAT — **legacy**, being migrated to GitHub App, see [GitHub App Setup](#github-app-setup)) |
 | `BITBUCKET_TOKEN` | Bitbucket Server bearer token |
+
+## GitHub App Setup
+
+The agent is being migrated from a Personal Access Token (user `pr-review-of-ben`, flagged "Spammy") to a GitHub App identity (`Ben's Pull Request Reviewer`). Apps are not subject to user-level spam classification, so their reviews remain visible via the REST `/reviews` API for auto-merge gates.
+
+See [`docs/github-app-setup.md`](docs/github-app-setup.md) for App ID, Installation ID, PEM location, auth flow, and the `cmd/mint-iat` smoke-test workflow.
 
 ## How It Works
 

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	testBotLogin = "pr-review-of-ben"
+	testBotLogin = "ben-s-pull-request-reviewer[bot]"
 	testHeadSHA  = "sha123abc"
 	testPriorSHA = "sha-prior"
 )
@@ -36,8 +36,9 @@ func makeHTTPResp(status int, body string) *http.Response {
 	}
 }
 
-func botUserJSON() string {
-	return fmt.Sprintf(`{"login":%q}`, testBotLogin)
+// botAppJSON returns a GET /app response for the prod App slug.
+func botAppJSON() string {
+	return `{"slug":"ben-s-pull-request-reviewer"}`
 }
 
 func reviewJSON(id int64, login, commitID, state string) string {
@@ -111,7 +112,7 @@ var _ = Describe("PrPoster", func() {
 
 	happySpecs := func(state string) []callSpec {
 		return []callSpec{
-			{200, botUserJSON(), nil},
+			{200, botAppJSON(), nil},
 			{200, reviewListJSON(), nil},
 			{201, postRespJSON(42), nil},
 			{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, state)), nil},
@@ -161,7 +162,7 @@ var _ = Describe("PrPoster", func() {
 			Expect(result.Outcome).To(Equal("failed"))
 			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
-			Expect(result.FailureStep).To(Equal("GET /user"))
+			Expect(result.FailureStep).To(Equal("GET /app"))
 			Expect(result.ErrorMessage).To(ContainSubstring("bot identity mismatch"))
 			Expect(fakeClient.DoCallCount()).To(Equal(1))
 		})
@@ -172,7 +173,7 @@ var _ = Describe("PrPoster", func() {
 			writeYAML(true)
 			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
 				{200, `{}`, nil}, // PUT dismissal
 				{201, postRespJSON(42), nil},
@@ -199,7 +200,7 @@ var _ = Describe("PrPoster", func() {
 		It("retries verify-GET and succeeds on second attempt", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(), nil}, // first verify: phantom (empty list)
@@ -218,7 +219,7 @@ var _ = Describe("PrPoster", func() {
 		It("returns transient failure after both verify attempts find no review", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(), nil}, // verify attempt 1: empty
@@ -238,7 +239,7 @@ var _ = Describe("PrPoster", func() {
 	Context("POST 422 (PR closed)", func() {
 		It("returns success with not-a-failure class and no verify-GET", func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{422, `{"message":"Unprocessable Entity"}`, nil},
 			})
@@ -255,7 +256,7 @@ var _ = Describe("PrPoster", func() {
 	Context("POST 403 permanent failure", func() {
 		It("returns permanent failure without retry", func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(), nil},
 				{403, `{"message":"Forbidden"}`, nil},
 			})
@@ -271,11 +272,11 @@ var _ = Describe("PrPoster", func() {
 	})
 
 	Context("transient 5xx retry succeeds", func() {
-		It("retries GET /user on 503 and continues to success", func() {
+		It("retries GET /app on 503 and continues to success", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub([]callSpec{
-				{503, `service unavailable`, nil}, // GET /user attempt 1
-				{200, botUserJSON(), nil},         // GET /user attempt 2
+				{503, `service unavailable`, nil}, // GET /app attempt 1
+				{200, botAppJSON(), nil},          // GET /app attempt 2
 				{200, reviewListJSON(), nil},
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
@@ -306,7 +307,7 @@ var _ = Describe("PrPoster", func() {
 		It("stops after PUT dismissal fails and does not POST", func() {
 			priorReview := reviewJSON(99, testBotLogin, "sha-prior", "APPROVED")
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				{200, reviewListJSON(priorReview), nil},
 				{403, `{"message":"Forbidden"}`, nil}, // PUT dismissal fails
 			})
@@ -344,7 +345,7 @@ var _ = Describe("PrPoster", func() {
 
 		BeforeEach(func() {
 			fakeClient.DoStub = seqStub([]callSpec{
-				{200, botUserJSON(), nil},
+				{200, botAppJSON(), nil},
 				// Three prior reviews by the bot on this SHA: COMMENTED, APPROVED, CHANGES_REQUESTED
 				{200, reviewListJSON(
 					reviewJSON(commentedID, testBotLogin, "sha-prior", "COMMENTED"),
@@ -372,7 +373,7 @@ var _ = Describe("PrPoster", func() {
 					Summary: "issues found", WorkDir: tmpDir,
 				})
 				Expect(result.Outcome).To(Equal("success"))
-				// 6 calls: GET /user + GET /reviews (list) + 2x PUT dismissal + POST + GET /reviews (verify)
+				// 6 calls: GET /app + GET /reviews (list) + 2x PUT dismissal + POST + GET /reviews (verify)
 				Expect(fakeClient.DoCallCount()).To(Equal(6))
 
 				invs := fakeClient.Invocations()["Do"]
@@ -415,7 +416,7 @@ var _ = Describe("PrPoster", func() {
 					return makeHTTPResp(201, postRespJSON(42)), nil
 				}
 				bodies := []string{
-					botUserJSON(), reviewListJSON(),
+					botAppJSON(), reviewListJSON(),
 					"", // POST body captured above
 					reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")),
 				}
@@ -441,10 +442,10 @@ var _ = Describe("PrPoster", func() {
 	DescribeTable("listBotReviews SHA filter — dismissal eligibility",
 		func(inputReviews []string, expectedDismissedIDs []int64) {
 			// Build the full HTTP call sequence:
-			//   GET /user + GET dismiss-list + N×PUT dismissal + POST + GET verify
+			//   GET /app + GET dismiss-list + N×PUT dismissal + POST + GET verify
 			specs := make([]callSpec, 0, 2+len(expectedDismissedIDs)+2)
 			specs = append(specs,
-				callSpec{200, botUserJSON(), nil},
+				callSpec{200, botAppJSON(), nil},
 				callSpec{200, reviewListJSON(inputReviews...), nil},
 			)
 			for range expectedDismissedIDs {
