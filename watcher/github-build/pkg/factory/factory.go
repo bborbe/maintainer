@@ -7,6 +7,7 @@ package factory
 
 import (
 	"context"
+	"net/http"
 
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
@@ -48,7 +49,7 @@ func CreateKafkaCreateSender(
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 func CreateWatcher(
 	ctx context.Context,
-	ghToken string,
+	httpClient *http.Client,
 	brokers libkafka.Brokers,
 	stage string,
 	allowlist []string,
@@ -63,7 +64,7 @@ func CreateWatcher(
 	if err != nil {
 		return nil, nil, errors.Wrap(ctx, err, "create kafka create sender")
 	}
-	ghClient := pkg.NewGitHubClient(ghToken)
+	ghClient := pkg.NewGitHubClient(httpClient)
 	maintenanceLoader := maintenance.NewLoader(ghClient)
 	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(allowlist)}
 	w := pkg.NewWatcher(

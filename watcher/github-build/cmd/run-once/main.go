@@ -17,6 +17,7 @@ import (
 	"github.com/bborbe/service"
 
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
@@ -30,10 +31,14 @@ type application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	GHToken       string           `required:"true" arg:"gh-token"       env:"GH_TOKEN"       usage:"GitHub token (read scope sufficient)"                                               display:"length"`
-	KafkaBrokers  libkafka.Brokers `required:"true" arg:"kafka-brokers"  env:"KAFKA_BROKERS"  usage:"Comma-separated Kafka broker list"`
-	Stage         string           `required:"true" arg:"stage"          env:"STAGE"          usage:"Deployment stage (dev|prod)"`
-	RepoAllowlist string           `required:"true" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
+	GHToken        string           `required:"false" arg:"gh-token"        env:"GH_TOKEN"        usage:"GitHub token (read scope sufficient); ignored when App auth is configured"             display:"length"`
+	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string           `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM) mounted from k8s Secret"`
+	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
+	KafkaBrokers   libkafka.Brokers `required:"true"  arg:"kafka-brokers"   env:"KAFKA_BROKERS"   usage:"Comma-separated Kafka broker list"`
+	Stage          string           `required:"true"  arg:"stage"           env:"STAGE"           usage:"Deployment stage (dev|prod)"`
+	RepoAllowlist  string           `required:"true"  arg:"repo-allowlist"  env:"REPO_ALLOWLIST"  usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
 
 	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                    default:"build-fixer-agent"`
 	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                      default:"next"`
@@ -57,9 +62,22 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		)
 	}
 
+	httpClient, err := auth.Resolve(ctx, auth.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKeyFile:     a.PEMKeyFile,
+		PEMKey:         a.PEMKey,
+		GHToken:        a.GHToken,
+		LogPrefix:      "watcher/github-build-run-once",
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "resolve auth")
+	}
+	defer httpClient.CloseIdleConnections()
+
 	w, cleanup, err := factory.CreateWatcher(
 		ctx,
-		a.GHToken,
+		httpClient,
 		a.KafkaBrokers,
 		a.Stage,
 		repoAllowlist,

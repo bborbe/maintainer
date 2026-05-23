@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [038-migrate-watcher-github-build-to-github-app]
+summary: Migrated watcher/github-build from PAT-only to GitHub App authentication with auto-refreshing IAT transport via lib/githubapp.NewClient, with PAT fallback and shared auth resolver for both binaries
+container: maintainer-exec-137-spec-038-main-wiring
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:30:00Z"
 queued: "2026-05-23T21:24:11Z"
+started: "2026-05-23T22:09:39Z"
+completed: "2026-05-23T22:12:41Z"
 branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 
