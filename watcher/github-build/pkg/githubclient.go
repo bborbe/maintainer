@@ -74,9 +74,9 @@ type GitHubClient interface {
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
-func NewGitHubClient(token string) GitHubClient {
+func NewGitHubClient(httpClient *http.Client) GitHubClient {
 	return &githubClient{
-		client: gogithub.NewClient(nil).WithAuthToken(token),
+		client: gogithub.NewClient(httpClient),
 	}
 }
 

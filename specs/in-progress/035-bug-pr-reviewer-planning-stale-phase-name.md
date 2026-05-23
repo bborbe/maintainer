@@ -1,10 +1,11 @@
 ---
-status: approved
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-23T14:04:16Z"
 prompted: "2026-05-23T14:58:04Z"
+verifying: "2026-05-23T15:08:32Z"
 branch: dark-factory/bug-pr-reviewer-planning-stale-phase-name
 ---
 

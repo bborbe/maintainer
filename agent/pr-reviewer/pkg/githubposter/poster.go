@@ -16,6 +16,7 @@ import (
 	errors "github.com/bborbe/errors"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 type prPoster struct {
@@ -54,7 +55,7 @@ type postReviewResp struct {
 // Verdict is not applicable — always COMMENT event.
 func (p *prPoster) PostLGTM(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, workDir, botLogin string,
 ) prpkg.PostResult {
 	start := time.Now()
@@ -75,10 +76,6 @@ func (p *prPoster) PostLGTM(
 
 func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
 	start := time.Now()
-	if result, ok := p.checkBotIdentity(ctx); !ok {
-		result.ElapsedMs = time.Since(start).Milliseconds()
-		return result
-	}
 	config, err := ReadAutoApproveConfig(ctx, req.WorkDir)
 	if err != nil {
 		return prpkg.PostResult{
@@ -101,72 +98,9 @@ func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostRe
 	return result
 }
 
-func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool) {
-	// Option A: replace GET /user (which doesn't work for Apps) with GET /app.
-	// The response slug-derived login is <slug>[bot], which we compare against p.botLogin.
-	type appResp struct {
-		Slug string `json:"slug"`
-	}
-	step := "GET /app"
-	cr := retryCall(ctx, step, func(ctx context.Context) (appResp, int, string, error) {
-		status, body, err := doRequest(
-			ctx,
-			p.httpClient,
-			p.ghToken,
-			"GET",
-			"https://api.github.com/app",
-			nil,
-		)
-		if err != nil {
-			return appResp{}, status, truncateBody(body), err
-		}
-		if status != 200 {
-			return appResp{}, status, truncateBody(
-					body,
-				), errors.Errorf(
-					ctx,
-					"unexpected status %d",
-					status,
-				)
-		}
-		var u appResp
-		if err := json.Unmarshal(body, &u); err != nil {
-			return appResp{}, status, truncateBody(
-					body,
-				), errors.Wrapf(
-					ctx,
-					err,
-					"parse /app response",
-				)
-		}
-		return u, status, truncateBody(body), nil
-	})
-	if cr.Err != nil {
-		return buildFailedResult(step, cr), false
-	}
-	expectedLogin := p.botLogin
-	actualLogin := cr.Value.Slug + "[bot]"
-	if actualLogin != expectedLogin {
-		return prpkg.PostResult{
-			Outcome:      "failed",
-			FailureStep:  step,
-			Class:        prpkg.ErrorClassPermanent,
-			EscalateHint: true,
-			Attempt:      cr.Attempts,
-			HTTPStatus:   cr.HTTPStatus,
-			ErrorMessage: fmt.Sprintf(
-				"bot identity mismatch: expected %s got %s",
-				expectedLogin,
-				actualLogin,
-			),
-		}, false
-	}
-	return prpkg.PostResult{}, true
-}
-
 func (p *prPoster) dismissPriorReviews(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA string,
 ) (prpkg.PostResult, bool) {
 	step := "GET /pulls/N/reviews (dismiss-list)"
@@ -187,7 +121,7 @@ func (p *prPoster) dismissPriorReviews(
 
 func (p *prPoster) listBotReviews(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, step string,
 ) ([]reviewEntry, prpkg.PostResult, bool) {
 	url := fmt.Sprintf(
@@ -238,7 +172,7 @@ func (p *prPoster) listBotReviews(
 
 func (p *prPoster) dismissOne(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	reviewID int64,
 ) (prpkg.PostResult, bool) {
 	step := "PUT .../dismissals"
@@ -278,7 +212,7 @@ func (p *prPoster) dismissOne(
 
 func (p *prPoster) postAndVerify(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event, body string,
 	warnings []string,
 ) prpkg.PostResult {
@@ -295,7 +229,7 @@ func (p *prPoster) postAndVerify(
 
 func (p *prPoster) postReview(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event, body string,
 ) (int64, prpkg.PostResult, bool) {
 	const step = "POST /pulls/N/reviews"
@@ -354,7 +288,7 @@ func (p *prPoster) postReview(
 
 func (p *prPoster) verifyAfterPost(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event string,
 	warnings []string,
 ) prpkg.PostResult {

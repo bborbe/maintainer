@@ -16,6 +16,8 @@ import (
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
+
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 // planningOutput is the parsed shape of the ## Plan JSON block.
@@ -138,7 +140,7 @@ func (s *planningStep) postLGTMAndDone(
 		}, nil
 	}
 
-	prInfo, parseErr := ParsePRURL(ctx, prURLStr)
+	prInfo, parseErr := prurl.ParsePRURL(ctx, prURLStr)
 	if parseErr != nil {
 		return &agentlib.Result{
 			Status:    agentlib.AgentStatusDone,
@@ -147,7 +149,7 @@ func (s *planningStep) postLGTMAndDone(
 		}, nil
 	}
 
-	if prInfo.Platform != PlatformGitHub {
+	if prInfo.Platform != prurl.PlatformGitHub {
 		// Non-GitHub — skip posting, advance to done.
 		return &agentlib.Result{
 			Status:    agentlib.AgentStatusDone,

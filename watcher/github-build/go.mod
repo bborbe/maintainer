@@ -2,7 +2,9 @@ module github.com/bborbe/maintainer/watcher/github-build
 
 go 1.26.3
 
-replace github.com/bborbe/maintainer/lib => ../../lib
+replace (
+	github.com/bborbe/maintainer/lib => ../../lib
+)
 
 require (
 	github.com/bborbe/agent/lib v0.62.17
@@ -39,6 +41,7 @@ require (
 	github.com/bborbe/validation v1.4.13 // indirect
 	github.com/bborbe/vault-cli v0.64.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
@@ -52,8 +55,10 @@ require (
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect

@@ -9,10 +9,12 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"regexp"
 	"time"
 
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
@@ -29,6 +31,7 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 var repoScopePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
@@ -119,6 +122,8 @@ type application struct {
 	MaxSlugLen       int              `required:"false" arg:"max-slug-len"      env:"MAX_SLUG_LEN"                  usage:"Max length of slugified PR-title segment in vault filenames"                                                                                                                                               default:"80"`
 	MaxTitleLen      int              `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN"                 usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                               default:"200"`
 	TaskSuffix       string           `required:"false" arg:"task-suffix"       env:"WATCHER_GITHUB_PR_TASK_SUFFIX" usage:"Optional suffix appended to PR task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
+
+	TriggerHandler http.Handler
 }
 
 func (a *application) validateConfig(ctx context.Context) error {
@@ -186,10 +191,21 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	glog.V(2).Infof("trusted-authors count=%d", len(trustedAuthors))
 
-	w, cleanup, err := factory.CreateWatcher(
+	ghClient := pkg.NewGitHubClient(a.GHToken)
+
+	branch := base.Branch(a.Stage)
+	createSender, cleanup, err := factory.CreateKafkaSender(ctx, a.KafkaBrokers, branch)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create kafka sender")
+	}
+	defer cleanup()
+
+	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
+
+	w, err := factory.CreateWatcher(
 		ctx,
-		a.GHToken,
-		a.KafkaBrokers,
+		ghClient,
+		createSender,
 		a.Stage,
 		a.RepoScope,
 		taskCreationFilter,
@@ -202,7 +218,22 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
 	}
-	defer cleanup()
+
+	triggerHandler, err := factory.CreateSinglePRHandler(
+		ctx,
+		ghClient,
+		createSender,
+		taskCreationFilter,
+		trustDecision,
+		a.Stage,
+		a.MaxSlugLen,
+		a.MaxTitleLen,
+		a.TaskSuffix,
+	)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create single-PR trigger handler")
+	}
+	a.TriggerHandler = triggerHandler
 
 	glog.V(2).
 		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
@@ -248,7 +279,8 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 		router.Path("/metrics").Handler(promhttp.Handler())
 		router.Path("/setloglevel/{level}").
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
-		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/check").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/trigger").Handler(a.TriggerHandler)
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}

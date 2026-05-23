@@ -14,6 +14,8 @@ import (
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
+
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 // verdictPayload is the parsed shape of the ## Verdict JSON the ai_review
@@ -189,13 +191,13 @@ func (s *reviewStep) callVerifier(ctx context.Context, md *agentlib.Markdown) *V
 		return nil
 	}
 
-	prInfo, err := ParsePRURL(ctx, prURLStr)
+	prInfo, err := prurl.ParsePRURL(ctx, prURLStr)
 	if err != nil {
 		glog.Warningf("ai_review verify: failed to parse PR URL %q: %v — skipping", prURLStr, err)
 		return nil
 	}
 
-	if prInfo.Platform != PlatformGitHub {
+	if prInfo.Platform != prurl.PlatformGitHub {
 		glog.Warningf("ai_review verify: non-GitHub platform %q — skipping", prInfo.Platform)
 		return nil
 	}

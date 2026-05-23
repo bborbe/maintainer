@@ -49,8 +49,8 @@ func CreateKafkaSender(
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 func CreateWatcher(
 	ctx context.Context,
-	ghToken string,
-	brokers libkafka.Brokers,
+	ghClient pkg.GitHubClient,
+	createSender task.CreateCommandSender,
 	stage string,
 	repoScope string,
 	taskCreationFilter filter.TaskCreationFilter,
@@ -59,15 +59,8 @@ func CreateWatcher(
 	maxSlugLen int,
 	maxTitleLen int,
 	taskSuffix string,
-) (pkg.Watcher, func(), error) {
-	branch := base.Branch(stage)
-	createSender, cleanup, err := CreateKafkaSender(ctx, brokers, branch)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka sender")
-	}
-
+) (pkg.Watcher, error) {
 	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
-	ghClient := pkg.NewGitHubClient(ghToken)
 	w := pkg.NewWatcher(
 		ghClient,
 		createSender,
@@ -82,5 +75,5 @@ func CreateWatcher(
 		maxTitleLen,
 		taskSuffix,
 	)
-	return w, cleanup, nil
+	return w, nil
 }

@@ -8,6 +8,28 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.0
+
+- feat: migrate watcher/github-build from PAT to GitHub App authentication with auto-refreshing IAT transport
+
+## v0.25.15
+
+- refactor(lib): extract `ParsePRURL` from `agent/pr-reviewer/pkg/prurl.go` to shared `lib/prurl/prurl.go` so both `agent/pr-reviewer` and `watcher/github-pr` import the same parser (spec 036)
+- refactor(watcher/github-pr): rename admin endpoint `/trigger` (multi-repo poll) to `/check` — name now reflects behavior; hard cutover, no backwards-compat alias (spec 036)
+- feat(watcher/github-pr): add `POST /trigger?url=<pr_url>` admin endpoint to fire a single-PR review by URL; reuses the existing filter chain and trust evaluation; known limit — if a vault task already exists for the same (PR, SHA) the operator must still reset vault frontmatter or push a new commit (spec 036)
+
+## v0.25.14
+
+- refactor(agent/pr-reviewer,lib): move `prurl` package from `agent/pr-reviewer/pkg/prurl` to `lib/prurl`; update all callers to import `github.com/bborbe/maintainer/lib/prurl`
+
+## v0.25.13
+
+- refactor(watcher/github-pr): rename `/trigger` HTTP route to `/check`
+
+## v0.25.12
+
+- fix(agent/pr-reviewer): drop `checkBotIdentity` pre-flight call to `GET /app`; GitHub's `/app` endpoint requires the App-level JWT but the agent only holds the Installation Access Token, so every call returned 401 `"A JSON web token could not be decoded"` and blocked every review POST; bot identity is now trusted from the `BotLogin` env var (operator-configured), removing the broken self-check entirely
+
 ## v0.25.11
 
 - fix(agent/pr-reviewer): planner now advances non-empty-concerns tasks with `NextPhase: "execution"` (via `domain.TaskPhaseExecution`) instead of the stale `"in_progress"` literal that spec 032 renamed; factory + k8s Config CR `trigger.phases` + planner unit test all moved to the canonical value; restores the spec 034 F2 invariant for the non-empty-concerns branch (spec 035)
