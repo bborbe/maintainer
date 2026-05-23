@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-23T20:50:50Z"
 generating: "2026-05-23T20:56:01Z"
 prompted: "2026-05-23T21:05:48Z"
 verifying: "2026-05-23T22:26:29Z"
+completed: "2026-05-23T23:22:37Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
 ---
 
