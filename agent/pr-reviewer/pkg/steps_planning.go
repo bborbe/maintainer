@@ -15,6 +15,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 )
 
 // planningOutput is the parsed shape of the ## Plan JSON block.
@@ -24,7 +25,7 @@ type planningOutput struct {
 
 // planningStep runs Claude to produce the ## Plan section, then branches:
 // - concerns empty → POST LGTM via PrPoster → write ## Verdict → done
-// - concerns non-empty → advance to in_progress
+// - concerns non-empty → advance to the execution phase
 type planningStep struct {
 	runner       claudelib.ClaudeRunner
 	instructions claudelib.Instructions
@@ -96,10 +97,12 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		return s.postLGTMAndDone(ctx, md)
 	}
 
-	// Non-empty concerns — advance to in_progress.
+	// Non-empty concerns — advance to the execution phase (canonical name per
+	// spec 032; do NOT revert to "in_progress" — the agentlib frontmatter validator
+	// rejects that stale literal and the task silently short-circuits to done).
 	return &agentlib.Result{
 		Status:    agentlib.AgentStatusDone,
-		NextPhase: "in_progress",
+		NextPhase: string(domain.TaskPhaseExecution),
 	}, nil
 }
 

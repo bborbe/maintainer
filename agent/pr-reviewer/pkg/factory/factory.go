@@ -20,6 +20,7 @@ import (
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
@@ -148,7 +149,7 @@ func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
 // tool scopes and per-phase prompts:
 //
 //   - planning: read-only diff inspection → ## Plan (JSON)
-//   - in_progress: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
+//   - execution: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
 //   - ai_review: minimal read-only fresh-context verifier → ## Verdict (JSON);
 //     verdict=pass → done, otherwise → human_review; verifier confirms review
 //     persisted on GitHub (nil verifier skips verification)
@@ -192,7 +193,7 @@ func CreateAgent(
 	)
 	return agentlib.NewAgent(
 		planningPhase,
-		agentlib.NewPhase("in_progress", tokenCheck, executionStep),
+		agentlib.NewPhase(domain.TaskPhaseExecution, tokenCheck, executionStep),
 		agentlib.NewPhase("ai_review", tokenCheck, reviewStep),
 	)
 }
