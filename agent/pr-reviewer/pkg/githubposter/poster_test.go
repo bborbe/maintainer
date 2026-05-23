@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -81,6 +84,26 @@ func seqStub(specs []callSpec) func(*http.Request) (*http.Response, error) {
 		}
 		return makeHTTPResp(s.status, s.body), nil
 	}
+}
+
+// redirectingHTTPClient proxies requests to api.github.com to a test server.
+type redirectingHTTPClient struct {
+	base    *http.Transport
+	testURL *url.URL
+}
+
+func (c *redirectingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if strings.HasPrefix(req.URL.Host, "api.github.com") {
+		newReq := *req
+		newReq.URL = &url.URL{
+			Scheme: c.testURL.Scheme,
+			Host:   c.testURL.Host,
+			Path:   req.URL.Path,
+		}
+		newReq.Host = newReq.URL.Host
+		return c.base.RoundTrip(&newReq)
+	}
+	return c.base.RoundTrip(req)
 }
 
 var _ = Describe("PrPoster", func() {
@@ -538,4 +561,75 @@ var _ = Describe("PrPoster", func() {
 			[]int64{},
 		),
 	)
+
+	Describe("*prPoster.PostLGTM (integration boundary)", func() {
+		var (
+			server *httptest.Server
+		)
+
+		AfterEach(func() {
+			if server != nil {
+				server.Close()
+			}
+		})
+
+		It(
+			"posts a COMMENT review with the canonical LGTM body and reports success",
+			func(ctx context.Context) {
+				const botLogin = "ben-s-pull-request-reviewer-dev[bot]"
+				const headSHA = "abc123def456abc123def456abc123def456abc1"
+
+				var capturedBody string
+				server = httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path == "/app" {
+							_, _ = w.Write([]byte(`{"slug":"ben-s-pull-request-reviewer-dev"}`))
+							return
+						}
+						if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/reviews") {
+							body, _ := io.ReadAll(r.Body)
+							capturedBody = string(body)
+							_, _ = w.Write([]byte(`{"id":99999}`))
+							return
+						}
+						if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/reviews") {
+							_, _ = w.Write(
+								[]byte(
+									`[{"id":99999,"user":{"login":"` + botLogin + `"},"commit_id":"` + headSHA + `","state":"COMMENTED"}]`,
+								),
+							)
+							return
+						}
+						http.NotFound(w, r)
+					}),
+				)
+
+				// Use a transport that redirects api.github.com to the test server.
+				baseURL := server.URL
+				testURL, _ := url.Parse(baseURL)
+				transport := &http.Transport{}
+				redirectingClient := &redirectingHTTPClient{base: transport, testURL: testURL}
+
+				poster := githubposter.NewPrPoster(redirectingClient, "test-iat", botLogin)
+
+				result := poster.PostLGTM(
+					ctx,
+					prpkg.PRInfo{Owner: "bborbe", Repo: "go-skeleton", Number: 99},
+					headSHA,
+					"",
+					botLogin,
+				)
+
+				Expect(result.Outcome).To(Equal("success"))
+				Expect(result.PostedEvent).To(Equal("COMMENT"))
+				Expect(result.ReviewID).To(Equal(int64(99999)))
+				// The load-bearing assertion: the actual POST body matches the LGTM template, NOT a typo.
+				Expect(
+					capturedBody,
+				).To(MatchRegexp(`"body":\s*"Reviewed by ` + regexp.QuoteMeta(botLogin) + ` — no concerns flagged\."`))
+				Expect(capturedBody).To(MatchRegexp(`"event":\s*"COMMENT"`))
+				Expect(capturedBody).To(MatchRegexp(`"commit_id":\s*"` + headSHA + `"`))
+			},
+		)
+	})
 })

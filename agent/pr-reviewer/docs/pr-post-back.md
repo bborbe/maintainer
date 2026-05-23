@@ -50,6 +50,8 @@ postAndRoute
         anything else                           → advance to human_review
 ```
 
+Note: The planning phase has a separate LGTM posting path via `PrPoster.PostLGTM` for the empty-concerns route. This path bypasses the worktree checkout and posts directly from the planning phase. Failure routes to `human_review` in the same way as the execution posting path.
+
 ## Diagnostic Block Format
 
 One block is appended to `## Diagnostics` per Job run (append-only; history is preserved across re-triggers).
@@ -80,6 +82,9 @@ elapsed_ms: 342
 
 | Posting outcome | Class | Next phase |
 |---|---|---|
+| `success` on LGTM POST | any | `done` |
+| `not-a-failure` on LGTM POST | `not-a-failure` | `done` |
+| failure on LGTM POST | `transient` / `permanent` / `unknown` | `human_review` |
 | `success` | any | `ai_review` |
 | any | `not-a-failure` | `ai_review` |
 | any | `transient` / `permanent` / `unknown` | `human_review` |
@@ -87,6 +92,36 @@ elapsed_ms: 342
 The `not-a-failure` class covers expected non-error states: 422 Unprocessable Entity (PR already closed or merged), duplicate review (already reviewed at this SHA). These are not errors — the review is simply no longer relevant.
 
 `human_review` is a terminal state that routes the task to a human operator. The full diagnostic block in `## Diagnostics` gives the operator everything needed to diagnose and re-trigger if appropriate.
+
+## Always-Post Review Invariant
+
+After spec 034, every PR that reaches the planning phase produces at least one visible artifact on the GitHub PR — there is no silent-skip path.
+
+**Empty-concerns path (LGTM):** When the planning phase's `## Plan` JSON has `concerns: []` (no concerns flagged), the agent POSTs a `COMMENT` review with body `Reviewed by <BotLogin> — no concerns flagged.` via `PrPoster.PostLGTM`. The `## Verdict` section is written to the vault after the POST succeeds, naming the review id and `COMMENT` event. The task advances to `phase: done`.
+
+**Non-empty-concerns path:** When concerns are non-empty, the existing planning → execution → ai_review flow proceeds unchanged. `## Verdict` is written by the `ai_review` phase after the full review is posted.
+
+**Failure routing:** If the LGTM POST fails (network error, GitHub 5xx/4xx), the task escalates to `human_review`. The `## Diagnostics` block records the failure. This is the same failure routing as the execution-phase posting path.
+
+**BotLogin:** The LGTM body interpolates `BotLogin` (the `BOT_GITHUB_LOGIN` env value resolved by the factory) at runtime. No hardcoded bot login literals in agent code or templates.
+
+**Vault `## Verdict` section (LGTM path):**
+```
+review_id: 12345
+event: COMMENT
+```
+
+**Vault `## Verdict` section (full review path — written by ai_review):**
+```
+review_id: 67890
+event: APPROVE  # or REQUEST_CHANGES
+verdict: pass
+reason: <meta-verdict reason>
+```
+
+**Non-GitHub platforms:** If the PR URL resolves to a non-GitHub platform, the LGTM path skips posting and returns `done` immediately. No `human_review` escalation for platform mismatches.
+
+**nil poster (cmd/run-task):** When `prPoster` is nil (local CLI mode), the LGTM path skips posting and returns `done` without writing `## Verdict` or `## Diagnostics`. This preserves backward compatibility with the local test runner.
 
 ## nil Poster — Local / Backward-Compatible Mode
 
