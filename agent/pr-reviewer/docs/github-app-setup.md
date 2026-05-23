@@ -166,7 +166,7 @@ App ID and Installation ID remain unchanged across rotations.
 
 ## Gotchas
 
-- **`GET /user` does not work for Apps** — Apps have no user identity. The current `poster.go::checkBotIdentity` uses `GET /user` and must be reworked to either `GET /app` or be removed.
+- **Identity self-check removed** — `GET /user` returns 404 for Apps, and `GET /app` requires the JWT (the agent only holds the IAT, so `/app` returns 401 `"A JSON web token could not be decoded"`). The agent now trusts `BotLogin` from env; identity correctness is the operator's responsibility at deploy time. See `poster.go` history for the removed `checkBotIdentity`.
 - **Bot login has literal brackets** — `ben-s-pull-request-reviewer[bot]`. Any string-match logic referencing `pr-review-of-ben` must update.
 - **IAT TTL is 1 hour** — production code must cache + refresh, not mint per call. `ghinstallation/v2` handles this transparently.
 - **Required-approvals gates and App `APPROVE`** — GitHub does not explicitly document whether App reviews count toward numeric required-approvals rules. Test after migration; document findings here.
@@ -188,7 +188,7 @@ The `AGENT_PR_REVIEWER_PEM_KEY` is the Teamvault entry key for the PEM file, not
 ## Migration Status
 
 - 2026-05-21: Both Apps (prod + dev) registered, installed on `@bborbe`, permissions set, PEMs stored in Teamvault. `cmd/mint-iat` smoke test passing end-to-end against both Apps (Phase A). Phase B verified the prod App posts reviews visible via the REST `/reviews` endpoint.
-- In progress: production code refactor — `lib/githubapp` wired into `agent/pr-reviewer`; new env vars `APP_ID`, `INSTALLATION_ID`, `PEM_KEY_FILE`, `BOT_GITHUB_LOGIN` accepted alongside legacy `GH_TOKEN` fallback; `pr-review-of-ben` literal eradicated from code; `checkBotIdentity` switched from `GET /user` to `GET /app`.
+- In progress: production code refactor — `lib/githubapp` wired into `agent/pr-reviewer`; new env vars `APP_ID`, `INSTALLATION_ID`, `PEM_KEY_FILE`, `BOT_GITHUB_LOGIN` accepted alongside legacy `GH_TOKEN` fallback; `pr-review-of-ben` literal eradicated from code; `checkBotIdentity` removed entirely (see Gotcha above).
 - Pending: k8s manifest updates for dev + prod clusters, deploy + verification on dev first, PAT user retirement after prod cutover.
 
 Tracked in vault task `Migrate PR Reviewer from User PAT to GitHub App` under goal `GitHub Code Reviewer Agent - Base` (F1).
