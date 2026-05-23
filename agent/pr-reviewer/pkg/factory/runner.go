@@ -37,6 +37,10 @@ type RunConfig struct {
 	Phase              domain.TaskPhase
 	TaskContent        string
 	Deliverer          agentlib.ResultDeliverer
+	// BotLogin is the GitHub bot login used by githubposter. When non-empty it
+	// is injected into the env map as BOT_GITHUB_LOGIN so ResolveBotLogin
+	// picks it up instead of the DefaultBotLogin fallback.
+	BotLogin string
 	// Agent overrides the agent used for execution. If nil, CreateAgent is called.
 	// Set by main.go after dispatching via CreateAgentProvider. cmd/run-task leaves
 	// this nil so CreateAgent is used for backward compatibility.
@@ -84,6 +88,9 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	}
 	if cfg.Model != "" {
 		env["ANTHROPIC_MODEL"] = cfg.Model.String()
+	}
+	if cfg.BotLogin != "" {
+		env["BOT_GITHUB_LOGIN"] = cfg.BotLogin
 	}
 
 	agent := cfg.Agent

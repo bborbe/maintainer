@@ -34,7 +34,7 @@ const serviceName = "maintainer-agent-pr-reviewer"
 // lets it do its job. Planning + Review are read-only inspection. Execution
 // gets broader git access for cross-file reads; posting happens in-process
 // via the PrPoster (Go net/http, not gh CLI) after the LLM step completes,
-// gated by bot-identity self-check (GET /user == pr-review-of-ben) and
+// gated by bot-identity self-check (GET /app slug-derived login) and
 // per-repo .pr-reviewer.yaml (autoApprove: bool). The ai_review phase
 // independently verifies the post via GET /pulls/{n}/reviews before
 // advancing to done.
@@ -133,7 +133,7 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 
 // CreatePrPoster wires a PrPoster backed by net/http.DefaultClient.
 // token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
-// (BOT_GITHUB_LOGIN env, default "pr-review-of-ben" if empty). Pure plumbing; no logic.
+// (BOT_GITHUB_LOGIN env, default "ben-s-pull-request-reviewer[bot]" if empty). Pure plumbing; no logic.
 func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
 	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
 }

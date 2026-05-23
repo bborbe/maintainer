@@ -104,7 +104,7 @@ func (s *ghTokenCheckStep) Run(
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return needsInput(fmt.Sprintf(
-			"GH_TOKEN unauthorized (HTTP 401) — rotate teamvault entry: %s",
+			"GH credentials unauthorized (HTTP 401) — rotate the PAT or the App PEM (whichever is in use): %s",
 			truncate(string(body), 200),
 		)), nil
 	}
@@ -132,8 +132,8 @@ func (s *ghTokenCheckStep) Run(
 
 	if rl.Resources.Core.Limit < authenticatedLimitFloor {
 		return needsInput(fmt.Sprintf(
-			"GH_TOKEN authenticates as anonymous (limit=%d/hr, expected >=%d) "+
-				"— token revoked or scope-stripped, rotate teamvault entry",
+			"GH credentials authenticate as anonymous (limit=%d/hr, expected >=%d) "+
+				"— token revoked or scope-stripped, rotate the PAT or the App PEM",
 			rl.Resources.Core.Limit, authenticatedLimitFloor,
 		)), nil
 	}

@@ -78,24 +78,26 @@ func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostRe
 }
 
 func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool) {
-	type userResp struct {
-		Login string `json:"login"`
+	// Option A: replace GET /user (which doesn't work for Apps) with GET /app.
+	// The response slug-derived login is <slug>[bot], which we compare against p.botLogin.
+	type appResp struct {
+		Slug string `json:"slug"`
 	}
-	step := "GET /user"
-	cr := retryCall(ctx, step, func(ctx context.Context) (userResp, int, string, error) {
+	step := "GET /app"
+	cr := retryCall(ctx, step, func(ctx context.Context) (appResp, int, string, error) {
 		status, body, err := doRequest(
 			ctx,
 			p.httpClient,
 			p.ghToken,
 			"GET",
-			"https://api.github.com/user",
+			"https://api.github.com/app",
 			nil,
 		)
 		if err != nil {
-			return userResp{}, status, truncateBody(body), err
+			return appResp{}, status, truncateBody(body), err
 		}
 		if status != 200 {
-			return userResp{}, status, truncateBody(
+			return appResp{}, status, truncateBody(
 					body,
 				), errors.Errorf(
 					ctx,
@@ -103,14 +105,14 @@ func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool
 					status,
 				)
 		}
-		var u userResp
+		var u appResp
 		if err := json.Unmarshal(body, &u); err != nil {
-			return userResp{}, status, truncateBody(
+			return appResp{}, status, truncateBody(
 					body,
 				), errors.Wrapf(
 					ctx,
 					err,
-					"parse /user response",
+					"parse /app response",
 				)
 		}
 		return u, status, truncateBody(body), nil
@@ -118,7 +120,9 @@ func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool
 	if cr.Err != nil {
 		return buildFailedResult(step, cr), false
 	}
-	if cr.Value.Login != p.botLogin {
+	expectedLogin := p.botLogin
+	actualLogin := cr.Value.Slug + "[bot]"
+	if actualLogin != expectedLogin {
 		return prpkg.PostResult{
 			Outcome:      "failed",
 			FailureStep:  step,
@@ -128,8 +132,8 @@ func (p *prPoster) checkBotIdentity(ctx context.Context) (prpkg.PostResult, bool
 			HTTPStatus:   cr.HTTPStatus,
 			ErrorMessage: fmt.Sprintf(
 				"bot identity mismatch: expected %s got %s",
-				p.botLogin,
-				cr.Value.Login,
+				expectedLogin,
+				actualLogin,
 			),
 		}, false
 	}

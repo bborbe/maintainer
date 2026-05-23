@@ -8,6 +8,15 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.9
+
+- feat(agent/pr-reviewer): add GitHub App auth via new `APP_ID` / `INSTALLATION_ID` / `PEM_KEY_FILE` / `BOT_GITHUB_LOGIN` env vars; legacy `GH_TOKEN` retained as fallback; bot login `ben-s-pull-request-reviewer[bot]` (prod) / `ben-s-pull-request-reviewer-dev[bot]` (dev); `pr-review-of-ben` literal eradicated (spec 033)
+- feat(agent/pr-reviewer): wire k8s Secret + Config CR for GitHub App auth (PEM mount + APP_ID/INSTALLATION_ID/PEM_KEY_FILE/BOT_LOGIN env vars); dev uses `eqKj8L` + App 3800041, prod uses `kLoejw` + App 3798945; legacy `GH_TOKEN` Secret key retained as fallback (spec 033)
+
+## v0.25.8
+
+- feat(lib): add `lib/githubapp` shared package — `NewClient` + `MintIAT` for GitHub App installation access token minting via `ghinstallation/v2`; consumed by spec 033 pr-reviewer auth migration
+
 ## v0.25.7
 
 - test(agent/pr-reviewer): add `NormalizeTaskStatus("todo")` → `TaskStatusNext` and `NormalizeTaskPhase("in_progress")` → `TaskPhaseExecution` alias round-trip tests to document and guard vault-cli's legacy alias contract (spec 032)
