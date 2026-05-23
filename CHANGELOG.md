@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.5
+
+- chore(agent/pr-reviewer): add `glog.V(2)` logging to every planning-step return site so routing decisions (LGTM short-circuit, execution advance, human_review escalation, POST failures) are visible in pod logs; mirrors the existing `steps_review.go` pattern
+
 All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).

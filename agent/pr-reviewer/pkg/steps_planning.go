@@ -16,6 +16,7 @@ import (
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
+	"github.com/golang/glog"
 
 	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
@@ -68,9 +69,14 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		return nil, errors.Wrapf(ctx, err, "planning marshal task")
 	}
 
+	prURL := ExtractPRURL(md)
+	ref, _ := md.Frontmatter.String("ref")
+	glog.V(2).Infof("planning: starting pr_url=%q ref=%s", prURL, ref)
+
 	prompt := claudelib.BuildPrompt(s.instructions.String(), nil, taskContent)
 	runResult, runErr := s.runner.Run(ctx, prompt)
 	if runErr != nil {
+		glog.V(2).Infof("planning: claude failed nextPhase=human_review err=%v", runErr)
 		return &agentlib.Result{
 			Status:  agentlib.AgentStatusFailed,
 			Message: fmt.Sprintf("planning claude run failed: %v", runErr),
@@ -87,6 +93,7 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	concerns, parseErr := parsePlanningConcerns(ctx, runResult.Result)
 	if parseErr != nil {
 		// Malformed JSON in ## Plan is a planning failure — escalate.
+		glog.V(2).Infof("planning: parse failed nextPhase=human_review err=%v", parseErr)
 		return &agentlib.Result{
 			Status:    agentlib.AgentStatusDone,
 			NextPhase: "human_review",
@@ -102,6 +109,7 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	// Non-empty concerns — advance to the execution phase (canonical name per
 	// spec 032; do NOT revert to "in_progress" — the agentlib frontmatter validator
 	// rejects that stale literal and the task silently short-circuits to done).
+	glog.V(2).Infof("planning: %d concerns nextPhase=execution", len(concerns))
 	return &agentlib.Result{
 		Status:    agentlib.AgentStatusDone,
 		NextPhase: string(domain.TaskPhaseExecution),
@@ -115,82 +123,64 @@ func (s *planningStep) postLGTMAndDone(
 ) (*agentlib.Result, error) {
 	prURLStr := ExtractPRURL(md)
 	if prURLStr == "" {
-		// No GitHub PR URL found. Check if any PR URL exists at all (non-GitHub).
-		// If a non-GitHub PR URL is present, skip posting and return done.
-		// If no PR URL at all, escalate to human_review.
-		if hasAnyPRURL(md) {
-			return &agentlib.Result{
-				Status:    agentlib.AgentStatusDone,
-				NextPhase: "done",
-			}, nil
-		}
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "human_review",
-			Message:   "planning: no GitHub PR URL found — cannot post LGTM",
-		}, nil
+		return s.handleEmptyPRURL(ctx, md)
 	}
-
-	// Only GitHub PRs are supported for posting. Non-GitHub URLs (including
-	// Bitbucket Cloud and unrecognised formats) skip posting and return done.
 	if !isGitHubPRURL(prURLStr) {
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "done",
-		}, nil
+		glog.V(2).Infof("planning: non-github PR URL nextPhase=done url=%s", prURLStr)
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
 	}
-
 	prInfo, parseErr := prurl.ParsePRURL(ctx, prURLStr)
 	if parseErr != nil {
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "human_review",
-			Message:   fmt.Sprintf("planning: failed to parse PR URL %q: %v", prURLStr, parseErr),
-		}, nil
+		glog.V(2).
+			Infof("planning: PR URL parse failed nextPhase=human_review url=%q err=%v", prURLStr, parseErr)
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "human_review",
+			Message: fmt.Sprintf(
+				"planning: failed to parse PR URL %q: %v",
+				prURLStr,
+				parseErr,
+			)}, nil
 	}
-
 	if prInfo.Platform != prurl.PlatformGitHub {
-		// Non-GitHub — skip posting, advance to done.
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "done",
-		}, nil
+		glog.V(2).Infof("planning: non-github platform nextPhase=done platform=%s", prInfo.Platform)
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
 	}
-
 	ref, _ := md.Frontmatter.String("ref")
 	jobRunTime := time.Now()
-
-	// Post the LGTM review.
 	if s.prPoster != nil {
 		result := s.prPoster.PostLGTM(ctx, *prInfo, ref, "", s.botLogin)
-
-		// Always append diagnostics (one entry per Job run, append-only).
 		appendDiagnosticsSection(
 			md,
 			buildDiagnosticBlock(jobRunTime, md.Frontmatter.TriggerCount(), result),
 		)
-
 		if result.Outcome != "success" && result.Class != ErrorClassNotAFailure {
-			return &agentlib.Result{
-				Status:    agentlib.AgentStatusDone,
-				NextPhase: "human_review",
-				Message:   fmt.Sprintf("planning: LGTM POST failed: %s", result.ErrorMessage),
-			}, nil
+			glog.V(2).
+				Infof("planning: LGTM POST failed nextPhase=human_review outcome=%s class=%s http=%d err=%s",
+					result.Outcome, result.Class, result.HTTPStatus, result.ErrorMessage)
+			return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "human_review",
+				Message: fmt.Sprintf("planning: LGTM POST failed: %s", result.ErrorMessage)}, nil
 		}
-
-		// Write ## Verdict section naming review id and COMMENT event.
 		writePlanningVerdict(md, result.ReviewID, "COMMENT")
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "done",
-		}, nil
+		glog.V(2).Infof("planning: LGTM POST success nextPhase=done review_id=%d", result.ReviewID)
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
 	}
+	glog.V(2).Infof("planning: nil poster (local mode) nextPhase=done")
+	return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
+}
 
-	// nil poster — skip posting (cmd/run-task backward-compat), advance to done.
-	return &agentlib.Result{
-		Status:    agentlib.AgentStatusDone,
-		NextPhase: "done",
-	}, nil
+// handleEmptyPRURL handles the case where no GitHub PR URL is found.
+// If any non-GitHub PR URL exists, skip posting and return done.
+// If no PR URL at all, escalate to human_review.
+func (s *planningStep) handleEmptyPRURL(
+	_ context.Context,
+	md *agentlib.Markdown,
+) (*agentlib.Result, error) {
+	if hasAnyPRURL(md) {
+		glog.V(2).Infof("planning: non-github PR URL present nextPhase=done")
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
+	}
+	glog.V(2).Infof("planning: no PR URL nextPhase=human_review")
+	return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "human_review",
+		Message: "planning: no GitHub PR URL found — cannot post LGTM"}, nil
 }
 
 // parsePlanningConcerns extracts the concerns array from the ## Plan JSON body.
