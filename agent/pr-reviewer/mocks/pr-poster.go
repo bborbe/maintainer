@@ -21,6 +21,21 @@ type PrPoster struct {
 	postReturnsOnCall map[int]struct {
 		result1 pkg.PostResult
 	}
+	PostLGTMStub        func(context.Context, pkg.PRInfo, string, string, string) pkg.PostResult
+	postLGTMMutex       sync.RWMutex
+	postLGTMArgsForCall []struct {
+		arg1 context.Context
+		arg2 pkg.PRInfo
+		arg3 string
+		arg4 string
+		arg5 string
+	}
+	postLGTMReturns struct {
+		result1 pkg.PostResult
+	}
+	postLGTMReturnsOnCall map[int]struct {
+		result1 pkg.PostResult
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -83,6 +98,71 @@ func (fake *PrPoster) PostReturnsOnCall(i int, result1 pkg.PostResult) {
 		})
 	}
 	fake.postReturnsOnCall[i] = struct {
+		result1 pkg.PostResult
+	}{result1}
+}
+
+func (fake *PrPoster) PostLGTM(arg1 context.Context, arg2 pkg.PRInfo, arg3 string, arg4 string, arg5 string) pkg.PostResult {
+	fake.postLGTMMutex.Lock()
+	ret, specificReturn := fake.postLGTMReturnsOnCall[len(fake.postLGTMArgsForCall)]
+	fake.postLGTMArgsForCall = append(fake.postLGTMArgsForCall, struct {
+		arg1 context.Context
+		arg2 pkg.PRInfo
+		arg3 string
+		arg4 string
+		arg5 string
+	}{arg1, arg2, arg3, arg4, arg5})
+	stub := fake.PostLGTMStub
+	fakeReturns := fake.postLGTMReturns
+	fake.recordInvocation("PostLGTM", []interface{}{arg1, arg2, arg3, arg4, arg5})
+	fake.postLGTMMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4, arg5)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *PrPoster) PostLGTMCallCount() int {
+	fake.postLGTMMutex.RLock()
+	defer fake.postLGTMMutex.RUnlock()
+	return len(fake.postLGTMArgsForCall)
+}
+
+func (fake *PrPoster) PostLGTMCalls(stub func(context.Context, pkg.PRInfo, string, string, string) pkg.PostResult) {
+	fake.postLGTMMutex.Lock()
+	defer fake.postLGTMMutex.Unlock()
+	fake.PostLGTMStub = stub
+}
+
+func (fake *PrPoster) PostLGTMArgsForCall(i int) (context.Context, pkg.PRInfo, string, string, string) {
+	fake.postLGTMMutex.RLock()
+	defer fake.postLGTMMutex.RUnlock()
+	argsForCall := fake.postLGTMArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
+}
+
+func (fake *PrPoster) PostLGTMReturns(result1 pkg.PostResult) {
+	fake.postLGTMMutex.Lock()
+	defer fake.postLGTMMutex.Unlock()
+	fake.PostLGTMStub = nil
+	fake.postLGTMReturns = struct {
+		result1 pkg.PostResult
+	}{result1}
+}
+
+func (fake *PrPoster) PostLGTMReturnsOnCall(i int, result1 pkg.PostResult) {
+	fake.postLGTMMutex.Lock()
+	defer fake.postLGTMMutex.Unlock()
+	fake.PostLGTMStub = nil
+	if fake.postLGTMReturnsOnCall == nil {
+		fake.postLGTMReturnsOnCall = make(map[int]struct {
+			result1 pkg.PostResult
+		})
+	}
+	fake.postLGTMReturnsOnCall[i] = struct {
 		result1 pkg.PostResult
 	}{result1}
 }

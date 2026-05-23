@@ -166,13 +166,12 @@ func CreateAgent(
 ) *agentlib.Agent {
 	botLogin := ResolveBotLogin(env)
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
-	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
-		Name:          "pr-plan",
-		Runner:        CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools),
-		Instructions:  prompts.BuildPlanningInstructions(),
-		OutputSection: "## Plan",
-		NextPhase:     "in_progress",
-	})
+	planningPhase := agentlib.NewPhase("planning", tokenCheck, prpkg.NewPlanningStep(
+		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools),
+		prompts.BuildPlanningInstructions(),
+		prPoster,
+		botLogin,
+	))
 	executionStep := prpkg.NewCheckoutExecutionStep(
 		repoManager,
 		claudeConfigDir,
@@ -192,7 +191,7 @@ func CreateAgent(
 		botLogin,
 	)
 	return agentlib.NewAgent(
-		agentlib.NewPhase("planning", tokenCheck, planningStep),
+		planningPhase,
 		agentlib.NewPhase("in_progress", tokenCheck, executionStep),
 		agentlib.NewPhase("ai_review", tokenCheck, reviewStep),
 	)

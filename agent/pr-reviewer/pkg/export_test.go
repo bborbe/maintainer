@@ -52,3 +52,8 @@ func PostAndRouteForTest(
 	s := &checkoutExecutionStep{prPoster: prPoster}
 	return s.postAndRoute(ctx, md, prURLStr, worktreePath, jobRunTime)
 }
+
+// ParsePlanningConcernsForTest exposes parsePlanningConcerns for unit testing.
+func ParsePlanningConcernsForTest(body string) ([]struct{}, error) {
+	return parsePlanningConcerns(context.Background(), body)
+}

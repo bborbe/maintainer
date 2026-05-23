@@ -1,7 +1,12 @@
 ---
-status: draft
+status: committing
 spec: [034-pr-reviewer-always-post-review]
+summary: 'Implemented always-post-review invariant: planning phase now POSTs an LGTM COMMENT review when concerns are empty, eliminating silent-skip path; vault task gains ## Verdict section naming review id and event'
+container: maintainer-exec-130-pr-reviewer-always-post-review-core
+dark-factory-version: v0.164.0
 created: "2026-05-23T00:00:00Z"
+queued: "2026-05-23T11:30:19Z"
+started: "2026-05-23T11:30:20Z"
 ---
 
 <summary>
@@ -239,7 +244,7 @@ grep -n "Post(ctx context.Context, req PostRequest) PostResult" agent/pr-reviewe
        ctx context.Context,
        md *agentlib.Markdown,
    ) (*agentlib.Result, error) {
-       prURLStr := ExtractPRURLFromPreamble(md)
+       prURLStr := ExtractPRURL(md)
        if prURLStr == "" {
            return &agentlib.Result{
                Status:    agentlib.AgentStatusDone,
@@ -322,50 +327,19 @@ grep -n "Post(ctx context.Context, req PostRequest) PostResult" agent/pr-reviewe
        md.ReplaceSection(agentlib.Section{Heading: "## Verdict", Body: body})
    }
 
-   // appendPlanningDiagnostics appends a one-liner to ## Diagnostics (creates section if absent).
-   func appendPlanningDiagnostics(md *agentlib.Markdown, block string) {
-       var existingBody string
-       if existing, ok := md.FindSection("## Diagnostics"); ok && existing != nil {
-           existingBody = existing.Body
-       }
-       newBody := strings.TrimLeft(existingBody+"\n"+block, "\n")
-       md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
-   }
-
-   // buildPlanningDiagnosticBlock formats an LGTM posting entry.
-   // Success emits a compact one-liner; failure emits a fenced YAML block.
-   func buildPlanningDiagnosticBlock(jobRunTime time.Time, triggerCount int, result PostResult) string {
-       if result.Outcome == "success" {
-           return fmt.Sprintf("job_run: %s outcome: success review_id: %d\n",
-               jobRunTime.UTC().Format(time.RFC3339), result.ReviewID)
-       }
-       httpStatusStr := "null"
-       if result.HTTPStatus != 0 {
-           httpStatusStr = fmt.Sprintf("%d", result.HTTPStatus)
-       }
-       respBody := result.ResponseBody
-       if respBody == "" {
-           respBody = "<empty>"
-       }
-       return fmt.Sprintf(
-           "```yaml\njob_run: %s\ntrigger_count: %d\noutcome: failed\nfailure_step: %s\nclass: %s\nescalate_hint: %v\nattempt: %d\nhttp_status: %s\nerror_message: %q\nresponse_body: %q\nelapsed_ms: %d\n```\n",
-           jobRunTime.UTC().Format(time.RFC3339),
-           triggerCount,
-           result.FailureStep,
-           result.Class,
-           result.EscalateHint,
-           result.Attempt,
-           httpStatusStr,
-           result.ErrorMessage,
-           respBody,
-           result.ElapsedMs,
-       )
-   }
    ```
 
-   Note: `time` is used via `time.Now()` and `time.RFC3339` — add `"time"` to the import block.
+   **Reuse, don't duplicate, diagnostics helpers.** The `appendDiagnosticsSection(md, block)` + `buildDiagnosticBlock(jobRunTime, triggerCount, result)` helpers already exist in `agent/pr-reviewer/pkg/steps_checkout_execution.go:392-429` — same package, byte-identical to what we need. Call them directly from `postLGTMAndDone`:
 
-   Note: `ExtractPRURLFromPreamble` is the same as `ExtractPRURL` in `steps_checkout_execution.go`. Move it to a shared location or re-implement it in `steps_planning.go`. Since `ExtractPRURL` is unexported and lives in `pkg`, it cannot be called from another file in `pkg` directly. Re-implement it as a private `extractPRURLFromMarkdown` helper in `steps_planning.go` using the same `githubPRURLPattern` regexp (import from `pkg` — it's in the same package).
+   ```go
+   appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, md.Frontmatter.TriggerCount(), result))
+   ```
+
+   Do NOT introduce `appendPlanningDiagnostics` or `buildPlanningDiagnosticBlock` — they would be byte-identical duplicates that invite drift when the diagnostic schema changes.
+
+   Note: `time` is used via `time.Now()` — add `"time"` to the import block.
+
+   Note: `ExtractPRURL` is **exported** in `agent/pr-reviewer/pkg/steps_checkout_execution.go:211` (same package as the new file). Call it directly (`ExtractPRURL(md)`); do NOT re-implement or duplicate the `githubPRURLPattern` regex.
 
    Note: `ParsePRURL` is exported in `pkg` — call it directly. `PRInfo` and `Platform` are also exported. `ErrorClass` constants are in `pkg`.
 
@@ -833,6 +807,63 @@ grep -n "Post(ctx context.Context, req PostRequest) PostResult" agent/pr-reviewe
 
    Note: `ParsePlanningConcernsForTest` must be exposed via `export_test.go` (add it alongside the existing export helpers).
 
+7b. **Add `httptest`-server integration test for `*prPoster.PostLGTM`** in `agent/pr-reviewer/pkg/githubposter/poster_test.go`. The Step-7 tests above mock the `PrPoster` interface — they do NOT exercise the concrete `*prPoster.PostLGTM` body construction. **Spec AC #3 requires** asserting the actual POST request body equals `Reviewed by <BotLogin> — no concerns flagged.` against a real `httptest.Server`. Add this `Describe` block alongside the existing poster tests:
+
+   ```go
+   Describe("*prPoster.PostLGTM (integration boundary)", func() {
+       var (
+           server *httptest.Server
+           client *http.Client
+       )
+
+       AfterEach(func() {
+           if server != nil {
+               server.Close()
+           }
+       })
+
+       It("posts a COMMENT review with the canonical LGTM body and reports success", func(ctx context.Context) {
+           const botLogin = "ben-s-pull-request-reviewer-dev[bot]"
+           const headSHA = "abc123def456abc123def456abc123def456abc1"
+
+           var capturedBody string
+           server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+               if r.URL.Path == "/user" {
+                   _, _ = w.Write([]byte(`{"login":"` + botLogin + `"}`))
+                   return
+               }
+               if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/reviews") {
+                   body, _ := io.ReadAll(r.Body)
+                   capturedBody = string(body)
+                   _, _ = w.Write([]byte(`{"id":99999}`))
+                   return
+               }
+               if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/reviews") {
+                   _, _ = w.Write([]byte(`[{"id":99999,"user":{"login":"` + botLogin + `"},"commit_id":"` + headSHA + `","state":"COMMENTED"}]`))
+                   return
+               }
+               http.NotFound(w, r)
+           }))
+
+           client = server.Client()
+           // Construct a poster targeting the test server. The poster currently hardcodes api.github.com; use the same pkg-internal helper the existing tests use to swap the base URL (see existing poster_test.go for the pattern — likely a package-level var or a test seam).
+           poster := NewPrPosterWithBaseURL(client, "test-iat", botLogin, server.URL)
+
+           result := poster.PostLGTM(ctx, prpkg.PRInfo{Owner: "bborbe", Repo: "go-skeleton", Number: 99}, headSHA, "", botLogin)
+
+           Expect(result.Outcome).To(Equal("success"))
+           Expect(result.PostedEvent).To(Equal("COMMENT"))
+           Expect(result.ReviewID).To(Equal(int64(99999)))
+           // The load-bearing assertion: the actual POST body matches the LGTM template, NOT a typo.
+           Expect(capturedBody).To(MatchRegexp(`"body":\s*"Reviewed by ` + regexp.QuoteMeta(botLogin) + ` — no concerns flagged\."`))
+           Expect(capturedBody).To(MatchRegexp(`"event":\s*"COMMENT"`))
+           Expect(capturedBody).To(MatchRegexp(`"commit_id":\s*"` + headSHA + `"`))
+       })
+   })
+   ```
+
+   If the existing `poster_test.go` already swaps `api.github.com` for `httptest.Server.URL` via a different mechanism (package-level `baseURL` var, constructor option, or `http.Client.Transport` rewrite), use that mechanism — read the existing test setup first and match it. Do NOT add a new public `NewPrPosterWithBaseURL` constructor purely for tests if a less invasive seam already exists.
+
 8. **Add to `export_test.go`** in `agent/pr-reviewer/pkg/`:
 
    ```go
@@ -862,7 +893,8 @@ grep -n "Post(ctx context.Context, req PostRequest) PostResult" agent/pr-reviewe
 </requirements>
 
 <constraints>
-- Only edit files under `agent/pr-reviewer/pkg/` (including `mocks/pr-poster.go` via `go generate`), `agent/pr-reviewer/CHANGELOG.md` (use root `CHANGELOG.md`), and root `CHANGELOG.md`
+- Only edit files under `agent/pr-reviewer/pkg/` (mocks regenerated via `go generate`) AND the repo-root `CHANGELOG.md`. Do NOT create `agent/pr-reviewer/CHANGELOG.md` — there is no per-service changelog in this repo.
+- If the repo-root `CHANGELOG.md` does not have a `## Unreleased` heading yet, **create it** above the most recent released version. The sibling docs prompt (`034-pr-reviewer-always-post-review-docs.md`) depends on this heading existing.
 - Do NOT commit — dark-factory handles git
 - `PrPoster.PostLGTM` MUST be added to the `PrPoster` interface in `poster_types.go` (not just the concrete type) so the mock supports it for testing
 - The `planningStep` MUST accept `PrPoster` as the interface type (not `*githubposter.prPoster` concrete) so mocks can be injected

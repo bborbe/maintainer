@@ -49,6 +49,30 @@ type postReviewResp struct {
 	ID int64 `json:"id"`
 }
 
+// PostLGTM posts a COMMENT review with body "Reviewed by <botLogin> — no concerns flagged."
+// workDir is ignored (no .pr-reviewer.yaml lookup needed for LGTM).
+// Verdict is not applicable — always COMMENT event.
+func (p *prPoster) PostLGTM(
+	ctx context.Context,
+	pr prpkg.PRInfo,
+	headSHA, workDir, botLogin string,
+) prpkg.PostResult {
+	start := time.Now()
+	const event = "COMMENT"
+	body := fmt.Sprintf("Reviewed by %s — no concerns flagged.", botLogin)
+
+	reviewID, result, proceed := p.postReview(ctx, pr, headSHA, event, body)
+	if !proceed {
+		result.ElapsedMs = time.Since(start).Milliseconds()
+		return result
+	}
+	result = p.verifyAfterPost(ctx, pr, headSHA, event, nil)
+	result.ReviewID = reviewID
+	result.PostedEvent = event
+	result.ElapsedMs = time.Since(start).Milliseconds()
+	return result
+}
+
 func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
 	start := time.Now()
 	if result, ok := p.checkBotIdentity(ctx); !ok {
