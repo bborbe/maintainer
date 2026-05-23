@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [034-pr-reviewer-always-post-review]
 summary: 'Implemented always-post-review invariant: planning phase now POSTs an LGTM COMMENT review when concerns are empty, eliminating silent-skip path; vault task gains ## Verdict section naming review id and event'
 container: maintainer-exec-130-pr-reviewer-always-post-review-core
@@ -7,6 +7,7 @@ dark-factory-version: v0.164.0
 created: "2026-05-23T00:00:00Z"
 queued: "2026-05-23T11:30:19Z"
 started: "2026-05-23T11:30:20Z"
+completed: "2026-05-23T11:42:38Z"
 ---
 
 <summary>
