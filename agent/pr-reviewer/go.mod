@@ -2,13 +2,9 @@ module github.com/bborbe/maintainer/agent/pr-reviewer
 
 go 1.26.3
 
-replace (
-	github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
-)
+replace github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0
 
-replace (
-	github.com/bborbe/maintainer/lib => ../../lib
-)
+replace github.com/bborbe/maintainer/lib => ../../lib
 
 require (
 	github.com/bborbe/agent/lib v0.62.17
