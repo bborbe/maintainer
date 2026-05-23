@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.11
+
+- fix(agent/pr-reviewer): planner now advances non-empty-concerns tasks with `NextPhase: "execution"` (via `domain.TaskPhaseExecution`) instead of the stale `"in_progress"` literal that spec 032 renamed; factory + k8s Config CR `trigger.phases` + planner unit test all moved to the canonical value; restores the spec 034 F2 invariant for the non-empty-concerns branch (spec 035)
+
 ## v0.25.10
 
 - feat(agent/pr-reviewer): planning phase now posts an LGTM COMMENT review when concerns are empty, eliminating the silent-skip path; every PR that reaches planning produces at least one visible artifact; vault task gains `## Verdict` section naming the posted review id and event

@@ -44,7 +44,7 @@ spec:
       - in_progress
     phases:
       - planning
-      - in_progress
+      - execution
       - ai_review
   resources:
     requests:

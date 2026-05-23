@@ -10,6 +10,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -260,12 +261,19 @@ https://github.com/bborbe/maintainer/pull/14
 				}, nil)
 			})
 
-			It("returns status done with NextPhase in_progress", func() {
-				result, err := step.Run(ctx, md)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
-				Expect(result.NextPhase).To(Equal("in_progress"))
-			})
+			It(
+				"returns status done with NextPhase execution (canonical phase per spec 032)",
+				func() {
+					result, err := step.Run(ctx, md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					// Boundary contract: the value emitted here must equal the canonical
+					// domain.TaskPhase constant — string-typed because agentlib.Result.NextPhase
+					// is plain string. Reverting to "in_progress" causes the agentlib frontmatter
+					// validator to reject the write at delivery time (spec 035 root cause).
+					Expect(result.NextPhase).To(Equal(string(domain.TaskPhaseExecution)))
+				},
+			)
 
 			It("does NOT call PostLGTM", func() {
 				_, err := step.Run(ctx, md)
