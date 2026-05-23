@@ -19,7 +19,7 @@ import (
 // CreateSinglePRHandler wires a handler that fires a single-PR review by URL.
 func CreateSinglePRHandler(
 	ctx context.Context,
-	ghClient pkg.GitHubClient,
+	auth AuthConfig,
 	createSender task.CreateCommandSender,
 	taskCreationFilter filter.TaskCreationFilter,
 	trustDecision trust.Trust,
@@ -28,6 +28,12 @@ func CreateSinglePRHandler(
 	maxTitleLen int,
 	taskSuffix string,
 ) (handler.SinglePRTriggerHandler, error) {
+	httpClient, err := CreateGitHubHTTPClient(ctx, auth)
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "create GitHub HTTP client")
+	}
+	ghClient := pkg.NewGitHubClient(httpClient)
+
 	if ghClient == nil {
 		return nil, errors.Errorf(ctx, "ghClient is required")
 	}

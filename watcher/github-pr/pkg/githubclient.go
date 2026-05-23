@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path"
 	"time"
 
@@ -89,9 +90,11 @@ type GitHubClient interface {
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
-func NewGitHubClient(token string) GitHubClient {
+// The httpClient must already carry authentication (either App auth via
+// lib/githubapp.NewClient, or static-PAT via oauth2.NewClient).
+func NewGitHubClient(httpClient *http.Client) GitHubClient {
 	return &githubClient{
-		client: gogithub.NewClient(nil).WithAuthToken(token),
+		client: gogithub.NewClient(httpClient),
 	}
 }
 

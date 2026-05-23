@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-23T21:10:53Z"
 generating: "2026-05-23T21:11:21Z"
 prompted: "2026-05-23T21:15:06Z"
+verifying: "2026-05-23T22:19:17Z"
 branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 

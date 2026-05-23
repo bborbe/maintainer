@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [038-migrate-watcher-github-build-to-github-app]
+summary: Wired GitHub App credentials (APP_ID, INSTALLATION_ID, PEM_KEY) into watcher/github-build via Kubernetes Secret, StatefulSet, and .env files
+container: maintainer-exec-139-spec-038-k8s-and-env-files
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:30:00Z"
 queued: "2026-05-23T21:24:11Z"
+started: "2026-05-23T22:17:41Z"
+completed: "2026-05-23T22:19:14Z"
 branch: dark-factory/migrate-watcher-github-build-to-github-app
 ---
 

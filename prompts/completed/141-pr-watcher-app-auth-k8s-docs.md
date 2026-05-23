@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [037-migrate-pr-watcher-to-github-app]
+summary: Wired GitHub App auth (APP_ID, INSTALLATION_ID, PEM_KEY) into PR watcher k8s Secret + StatefulSet, dev/prod env files, and CHANGELOG
+container: maintainer-exec-141-pr-watcher-app-auth-k8s-docs
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:41:43Z"
 queued: "2026-05-23T21:41:43Z"
+started: "2026-05-23T22:25:38Z"
+completed: "2026-05-23T22:26:26Z"
 branch: fix/pr-watcher-github-app-auth-k8s-docs
 ---
 

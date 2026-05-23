@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.5
+
+- chore(agent/pr-reviewer): add `glog.V(2)` logging to every planning-step return site so routing decisions (LGTM short-circuit, execution advance, human_review escalation, POST failures) are visible in pod logs; mirrors the existing `steps_review.go` pattern
+
 All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
@@ -7,6 +11,22 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MAJOR version when you make incompatible API changes,
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
+
+## v0.26.4
+
+- feat(watcher/github-pr): add GitHub App auth via `APP_ID` + `INSTALLATION_ID` + `PEM_KEY` env vars (reuses existing pr-reviewer Apps `3798945` / `3800041`); uses `lib/githubapp.NewClient` (auto-refreshing IAT via `ghinstallation/v2`) because the watcher is a long-lived StatefulSet — a single `MintIAT` call would expire after 1 hour. Partial App env returns an error naming the missing field; legacy `GH_TOKEN` retained as fallback for rollout safety.
+
+## v0.26.3
+
+- feat(watcher/github-pr): migrate from PAT to GitHub App authentication with auto-refreshing IAT transport; supports APP_ID + INSTALLATION_ID + PEM_KEY env vars; static-PAT fallback via GH_TOKEN still works; partial App config produces a named error at startup naming the missing fields
+
+## v0.26.2
+
+- chore(watcher/github-build): wire GitHub App credentials (APP_ID, INSTALLATION_ID, PEM_KEY) into watcher container via Kubernetes Secret and StatefulSet env vars (spec 038)
+
+## v0.26.1
+
+- test: add Ginkgo v2 unit tests for auth resolver in `watcher/github-build/pkg/auth/auth_test.go` covering PAT fallback, conflict warning, refusal, and missing PEMKeyFile (spec 038)
 
 ## v0.26.0
 
