@@ -1,8 +1,14 @@
 ---
-status: approved
+status: committing
 spec: [034-pr-reviewer-always-post-review]
+summary: Updated pr-post-back.md with Always-Post Review Invariant section, planning-phase LGTM posting note, and LGTM failure routing table rows
+container: maintainer-exec-131-pr-reviewer-always-post-review-docs
+dark-factory-version: v0.164.0
 created: "2026-05-23T00:00:00Z"
 queued: "2026-05-23T11:30:19Z"
+started: "2026-05-23T12:35:30Z"
+completed: "2026-05-23T11:43:07Z"
+lastFailReason: 'validate completion report: completion report status: failed'
 ---
 
 <summary>
@@ -20,17 +26,17 @@ Read `agent/pr-reviewer/docs/pr-post-back.md` — full file; understand the exis
 
 **Files to read fully before making any changes:**
 - `agent/pr-reviewer/docs/pr-post-back.md` — full file; understand existing structure: Vault-First Invariant, What Gets Posted, The Posting Flow, Diagnostic Block Format, Failure Routing, nil Poster, Dismissal Contract, Key Files
-- `CHANGELOG.md` — confirm the spec-034 entry is present **under the `## Unreleased` heading**. Note: the repo currently has no `## Unreleased` heading at all; the sibling core prompt creates both the heading and the entry. An entry under any other heading is wrong.
+- `CHANGELOG.md` — confirm the spec-034 entry is present (under any heading). Dark-factory's auto-release flow cuts a new version (e.g. `## v0.25.10`) the moment prompt 1 commits, so the canonical post-release state is the entry under that released heading — NOT under `## Unreleased`.
 
 **Dependency check — run before making any changes:**
 
 ```bash
-# Confirm the spec-034 CHANGELOG entry was added by prompt 1, anchored inside ## Unreleased:
-awk '/^## Unreleased/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md | grep -E "LGTM|no concerns|always.*post" | head -5
-# Expected: at least one match (the entry exists AND lives under ## Unreleased, not under a released section)
+# Confirm the spec-034 CHANGELOG entry was added by prompt 1 (any heading):
+grep -nE "LGTM|no concerns|always.*post" CHANGELOG.md | head -5
+# Expected: at least one match anywhere in CHANGELOG.md
 ```
 
-If the grep returns no match, STOP and report `status: failed` with reason "spec-034 prompt 1 not yet executed — CHANGELOG `## Unreleased` entry missing".
+If the grep returns no match, STOP and report `status: failed` with reason "spec-034 prompt 1 not yet executed — CHANGELOG entry missing".
 </context>
 
 <requirements>
@@ -153,9 +159,9 @@ grep -n "planning phase.*LGTM\|PostLGTM" agent/pr-reviewer/docs/pr-post-back.md
 grep -n "Non-GitHub\|nil poster.*cmd/run-task\|cmd/run-task" agent/pr-reviewer/docs/pr-post-back.md
 # Expected: nil poster backward-compat section updated
 
-# Confirm CHANGELOG entry present (from prompt 1):
-awk '/^## Unreleased/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md | grep -E "LGTM|no concerns flagged|always.*post"
-# Expected: at least one match under ## Unreleased
+# Confirm CHANGELOG entry present (from prompt 1; any heading — dark-factory auto-released):
+grep -nE "LGTM|no concerns flagged|always.*post" CHANGELOG.md | head -5
+# Expected: at least one match anywhere in CHANGELOG.md
 
 # Confirm doc parses as valid markdown (no broken links):
 grep -n "^## " agent/pr-reviewer/docs/pr-post-back.md
