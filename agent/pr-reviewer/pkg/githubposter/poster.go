@@ -16,6 +16,7 @@ import (
 	errors "github.com/bborbe/errors"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 type prPoster struct {
@@ -54,7 +55,7 @@ type postReviewResp struct {
 // Verdict is not applicable — always COMMENT event.
 func (p *prPoster) PostLGTM(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, workDir, botLogin string,
 ) prpkg.PostResult {
 	start := time.Now()
@@ -99,7 +100,7 @@ func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostRe
 
 func (p *prPoster) dismissPriorReviews(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA string,
 ) (prpkg.PostResult, bool) {
 	step := "GET /pulls/N/reviews (dismiss-list)"
@@ -120,7 +121,7 @@ func (p *prPoster) dismissPriorReviews(
 
 func (p *prPoster) listBotReviews(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, step string,
 ) ([]reviewEntry, prpkg.PostResult, bool) {
 	url := fmt.Sprintf(
@@ -171,7 +172,7 @@ func (p *prPoster) listBotReviews(
 
 func (p *prPoster) dismissOne(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	reviewID int64,
 ) (prpkg.PostResult, bool) {
 	step := "PUT .../dismissals"
@@ -211,7 +212,7 @@ func (p *prPoster) dismissOne(
 
 func (p *prPoster) postAndVerify(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event, body string,
 	warnings []string,
 ) prpkg.PostResult {
@@ -228,7 +229,7 @@ func (p *prPoster) postAndVerify(
 
 func (p *prPoster) postReview(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event, body string,
 ) (int64, prpkg.PostResult, bool) {
 	const step = "POST /pulls/N/reviews"
@@ -287,7 +288,7 @@ func (p *prPoster) postReview(
 
 func (p *prPoster) verifyAfterPost(
 	ctx context.Context,
-	pr prpkg.PRInfo,
+	pr prurl.PRInfo,
 	headSHA, event string,
 	warnings []string,
 ) prpkg.PostResult {

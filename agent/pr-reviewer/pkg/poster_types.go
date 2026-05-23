@@ -4,7 +4,11 @@
 
 package pkg
 
-import "context"
+import (
+	"context"
+
+	prurl "github.com/bborbe/maintainer/lib/prurl"
+)
 
 //counterfeiter:generate -o ../mocks/pr-poster.go --fake-name PrPoster . PrPoster
 //counterfeiter:generate -o ../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
@@ -20,12 +24,12 @@ type PrPoster interface {
 	// workDir is optional (empty string is fine — no .pr-reviewer.yaml lookup needed for LGTM).
 	// On success, returns a PostResult with Outcome="success" and PostedEvent="COMMENT".
 	// On failure, returns a PostResult with Outcome="failed" and ErrorClass/ErrorMessage set.
-	PostLGTM(ctx context.Context, pr PRInfo, headSHA, workDir, botLogin string) PostResult
+	PostLGTM(ctx context.Context, pr prurl.PRInfo, headSHA, workDir, botLogin string) PostResult
 }
 
 // PostRequest carries all inputs needed for a single posting sequence.
 type PostRequest struct {
-	PR      PRInfo
+	PR      prurl.PRInfo
 	HeadSHA string
 	Verdict Verdict
 	Summary string
@@ -73,7 +77,7 @@ type ReviewVerifier interface {
 
 // VerifyRequest carries all inputs for a single review-existence check.
 type VerifyRequest struct {
-	PR             PRInfo
+	PR             prurl.PRInfo
 	HeadSHA        string
 	ExpectedStates []string
 }

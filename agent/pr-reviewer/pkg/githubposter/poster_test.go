@@ -21,8 +21,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/mocks"
-	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
+	prpkg "github.com/bborbe/maintainer/lib/prurl"
 )
 
 const (
@@ -104,7 +105,7 @@ func (c *redirectingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 var _ = Describe("PrPoster", func() {
 	var (
 		fakeClient *mocks.HTTPClient
-		poster     prpkg.PrPoster
+		poster     pkg.PrPoster
 		pr         prpkg.PRInfo
 		tmpDir     string
 		ctx        context.Context
@@ -137,10 +138,10 @@ var _ = Describe("PrPoster", func() {
 	}
 
 	DescribeTable("verdict to event/state mapping",
-		func(verdict prpkg.Verdict, autoApprove bool, wantEvent, wantState, wantBodyPrefix string) {
+		func(verdict pkg.Verdict, autoApprove bool, wantEvent, wantState, wantBodyPrefix string) {
 			writeYAML(autoApprove)
 			fakeClient.DoStub = seqStub(happySpecs(wantState))
-			req := prpkg.PostRequest{
+			req := pkg.PostRequest{
 				PR: pr, HeadSHA: testHeadSHA, Verdict: verdict, Summary: "looks good", WorkDir: tmpDir,
 			}
 			result := poster.Post(ctx, req)
@@ -152,23 +153,23 @@ var _ = Describe("PrPoster", func() {
 			}
 		},
 		Entry("approve+autoApprove:true → APPROVE",
-			prpkg.VerdictApprove, true, "APPROVE", "APPROVED", ""),
+			pkg.VerdictApprove, true, "APPROVE", "APPROVED", ""),
 		Entry("approve+autoApprove:false → COMMENT",
-			prpkg.VerdictApprove, false, "COMMENT", "COMMENTED",
+			pkg.VerdictApprove, false, "COMMENT", "COMMENTED",
 			"auto-approve disabled for this repo"),
 		Entry("request-changes → REQUEST_CHANGES",
-			prpkg.VerdictRequestChanges, false, "REQUEST_CHANGES", "CHANGES_REQUESTED", ""),
+			pkg.VerdictRequestChanges, false, "REQUEST_CHANGES", "CHANGES_REQUESTED", ""),
 	)
 
 	DescribeTable("ErrorClass string values",
-		func(class prpkg.ErrorClass, want string) {
+		func(class pkg.ErrorClass, want string) {
 			Expect(string(class)).To(Equal(want))
 		},
-		Entry("transient", prpkg.ErrorClassTransient, "transient"),
-		Entry("permanent", prpkg.ErrorClassPermanent, "permanent"),
-		Entry("unknown", prpkg.ErrorClassUnknown, "unknown"),
-		Entry("not-a-failure", prpkg.ErrorClassNotAFailure, "not-a-failure"),
-		Entry("soft-warning", prpkg.ErrorClassSoftWarning, "soft-warning"),
+		Entry("transient", pkg.ErrorClassTransient, "transient"),
+		Entry("permanent", pkg.ErrorClassPermanent, "permanent"),
+		Entry("unknown", pkg.ErrorClassUnknown, "unknown"),
+		Entry("not-a-failure", pkg.ErrorClassNotAFailure, "not-a-failure"),
+		Entry("soft-warning", pkg.ErrorClassSoftWarning, "soft-warning"),
 	)
 
 	Context("dismissal before POST", func() {
@@ -181,8 +182,8 @@ var _ = Describe("PrPoster", func() {
 				{201, postRespJSON(42), nil},
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
@@ -207,8 +208,8 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil}, // first verify: phantom (empty list)
 				{200, reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED")), nil},
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
@@ -225,12 +226,12 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil}, // verify attempt 1: empty
 				{200, reviewListJSON(), nil}, // verify attempt 2: still empty
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove,
 				Summary: "ok", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassTransient))
+			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
 			Expect(result.FailureStep).To(Equal("GET /pulls/N/reviews (verify)"))
 			Expect(result.ErrorMessage).To(ContainSubstring("phantom POST"))
 		})
@@ -242,11 +243,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil},
 				{422, `{"message":"Unprocessable Entity"}`, nil},
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassNotAFailure))
+			Expect(result.Class).To(Equal(pkg.ErrorClassNotAFailure))
 			Expect(result.HTTPStatus).To(Equal(422))
 			Expect(fakeClient.DoCallCount()).To(Equal(2))
 		})
@@ -258,11 +259,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(), nil},
 				{403, `{"message":"Forbidden"}`, nil},
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(pkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.Attempt).To(Equal(1))
 			Expect(fakeClient.DoCallCount()).To(Equal(2))
@@ -273,8 +274,8 @@ var _ = Describe("PrPoster", func() {
 		It("substitutes default summary and records warning but succeeds", func() {
 			writeYAML(true)
 			fakeClient.DoStub = seqStub(happySpecs("APPROVED"))
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove,
 				Summary: "", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
@@ -289,11 +290,11 @@ var _ = Describe("PrPoster", func() {
 				{200, reviewListJSON(priorReview), nil},
 				{403, `{"message":"Forbidden"}`, nil}, // PUT dismissal fails
 			})
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove, WorkDir: tmpDir,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove, WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(pkg.ErrorClassPermanent))
 			Expect(result.FailureStep).To(Equal("PUT .../dismissals"))
 			Expect(fakeClient.DoCallCount()).To(Equal(2))
 		})
@@ -331,8 +332,8 @@ var _ = Describe("PrPoster", func() {
 		It(
 			"returns success and dismisses exactly APPROVED and CHANGES_REQUESTED, not COMMENTED",
 			func() {
-				result := poster.Post(ctx, prpkg.PostRequest{
-					PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictRequestChanges,
+				result := poster.Post(ctx, pkg.PostRequest{
+					PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictRequestChanges,
 					Summary: "issues found", WorkDir: tmpDir,
 				})
 				Expect(result.Outcome).To(Equal("success"))
@@ -388,8 +389,8 @@ var _ = Describe("PrPoster", func() {
 				}
 				return nil, fmt.Errorf("unexpected call %d", idx)
 			}
-			result := poster.Post(ctx, prpkg.PostRequest{
-				PR: pr, HeadSHA: testHeadSHA, Verdict: prpkg.VerdictApprove,
+			result := poster.Post(ctx, pkg.PostRequest{
+				PR: pr, HeadSHA: testHeadSHA, Verdict: pkg.VerdictApprove,
 				Summary: "my review summary", WorkDir: tmpDir,
 			})
 			Expect(result.Outcome).To(Equal("success"))
@@ -420,10 +421,10 @@ var _ = Describe("PrPoster", func() {
 
 			fakeClient.DoStub = seqStub(specs)
 
-			result := poster.Post(ctx, prpkg.PostRequest{
+			result := poster.Post(ctx, pkg.PostRequest{
 				PR:      pr,
 				HeadSHA: testHeadSHA,
-				Verdict: prpkg.VerdictRequestChanges,
+				Verdict: pkg.VerdictRequestChanges,
 				Summary: "test",
 				WorkDir: tmpDir,
 			})

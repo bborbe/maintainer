@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.25.14
+
+- refactor(agent/pr-reviewer,lib): move `prurl` package from `agent/pr-reviewer/pkg/prurl` to `lib/prurl`; update all callers to import `github.com/bborbe/maintainer/lib/prurl`
+
 ## v0.25.13
 
 - refactor(watcher/github-pr): rename `/trigger` HTTP route to `/check`

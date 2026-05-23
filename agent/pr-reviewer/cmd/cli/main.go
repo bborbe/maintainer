@@ -18,6 +18,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/bitbucket"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/github"
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 func main() {
@@ -61,7 +62,7 @@ func run(ctx context.Context, verbose bool, commentOnly bool) error {
 
 	// Parse PR URL
 	logVerbose(verbose, "parsing URL: %s", rawURL)
-	prInfo, err := prpkg.ParsePRURL(ctx, rawURL)
+	prInfo, err := prurl.ParsePRURL(ctx, rawURL)
 	if err != nil {
 		return err
 	}
@@ -87,9 +88,9 @@ func run(ctx context.Context, verbose bool, commentOnly bool) error {
 
 	// Route based on platform
 	switch prInfo.Platform {
-	case prpkg.PlatformGitHub:
+	case prurl.PlatformGitHub:
 		return runGitHub(ctx, verbose, commentOnly, cfg, prInfo, repoPath, repoInfo)
-	case prpkg.PlatformBitbucket:
+	case prurl.PlatformBitbucket:
 		return runBitbucket(ctx, verbose, commentOnly, cfg, prInfo, repoPath, repoInfo)
 	default:
 		return fmt.Errorf("unsupported platform: %s", prInfo.Platform)
@@ -102,7 +103,7 @@ func runGitHub(
 	verbose bool,
 	commentOnly bool,
 	cfg *prpkg.Config,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	repoPath string,
 	repoInfo *prpkg.RepoInfo,
 ) error {
@@ -173,7 +174,7 @@ func runBitbucket(
 	verbose bool,
 	commentOnly bool,
 	cfg *prpkg.Config,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	repoPath string,
 	repoInfo *prpkg.RepoInfo,
 ) error {
@@ -294,7 +295,7 @@ func runReview(
 	ctx context.Context,
 	reviewer prpkg.Reviewer,
 	worktreePath, reviewCommand, model string,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 ) (string, prpkg.Result, error) {
 	// Run review
 	logAlways(
@@ -328,7 +329,7 @@ func submitGitHubReview(
 	autoApprove bool,
 	result prpkg.Result,
 	ghClient github.Client,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	reviewText string,
 ) error {
 	// --comment-only flag overrides verdict
@@ -363,7 +364,7 @@ func submitGitHubReview(
 func postGitHubComment(
 	ctx context.Context,
 	ghClient github.Client,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	reviewText string,
 ) error {
 	logAlways("posting comment...")
@@ -386,7 +387,7 @@ func handleGitHubApprove(
 	autoApprove bool,
 	result prpkg.Result,
 	ghClient github.Client,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	reviewText string,
 ) error {
 	if !autoApprove {
@@ -401,7 +402,7 @@ func submitGitHubStructuredReview(
 	ctx context.Context,
 	result prpkg.Result,
 	ghClient github.Client,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	reviewText string,
 ) error {
 	logAlways("submitting review: %s...", result.Verdict)
@@ -426,7 +427,7 @@ func submitBitbucketReview(
 	autoApprove bool,
 	result prpkg.Result,
 	bbClient bitbucket.Client,
-	prInfo *prpkg.PRInfo,
+	prInfo *prurl.PRInfo,
 	reviewText string,
 	username string,
 ) error {

@@ -1,5 +1,7 @@
 ---
-status: draft
+status: approved
+created: "2026-05-23T21:38:55Z"
+queued: "2026-05-23T21:41:43Z"
 branch: fix/pr-watcher-github-app-auth-code
 ---
 

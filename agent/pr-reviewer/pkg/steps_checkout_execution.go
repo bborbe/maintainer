@@ -18,6 +18,7 @@ import (
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/prompts"
+	prurl "github.com/bborbe/maintainer/lib/prurl"
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
@@ -334,7 +335,7 @@ func (s *checkoutExecutionStep) resolvePRInfo(
 	md *agentlib.Markdown,
 	prURLStr string,
 	jobRunTime time.Time,
-) (*PRInfo, *agentlib.Result) {
+) (*prurl.PRInfo, *agentlib.Result) {
 	tc := md.Frontmatter.TriggerCount()
 	if prURLStr == "" {
 		appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, tc, PostResult{
@@ -349,7 +350,7 @@ func (s *checkoutExecutionStep) resolvePRInfo(
 		}
 	}
 
-	prInfo, parseErr := ParsePRURL(ctx, prURLStr)
+	prInfo, parseErr := prurl.ParsePRURL(ctx, prURLStr)
 	if parseErr != nil {
 		appendDiagnosticsSection(md, buildDiagnosticBlock(jobRunTime, tc, PostResult{
 			Outcome:      "failed",
@@ -363,7 +364,7 @@ func (s *checkoutExecutionStep) resolvePRInfo(
 		}
 	}
 
-	if prInfo.Platform != PlatformGitHub {
+	if prInfo.Platform != prurl.PlatformGitHub {
 		glog.Warningf(
 			"posting skipped: non-GitHub platform %q for URL %q",
 			prInfo.Platform,

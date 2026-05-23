@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [036-watcher-pr-rename-trigger-add-single-pr-trigger]
+summary: Move prurl package from agent/pr-reviewer/pkg to lib/prurl and update all callers
+container: maintainer-exec-134-spec-036-extract-prurl
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:00:00Z"
 queued: "2026-05-23T21:13:16Z"
+started: "2026-05-23T21:38:58Z"
+completed: "2026-05-23T21:46:10Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
 ---
 

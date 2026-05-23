@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	"github.com/bborbe/maintainer/lib/prurl"
 )
 
 type PrPoster struct {
@@ -21,11 +22,11 @@ type PrPoster struct {
 	postReturnsOnCall map[int]struct {
 		result1 pkg.PostResult
 	}
-	PostLGTMStub        func(context.Context, pkg.PRInfo, string, string, string) pkg.PostResult
+	PostLGTMStub        func(context.Context, prurl.PRInfo, string, string, string) pkg.PostResult
 	postLGTMMutex       sync.RWMutex
 	postLGTMArgsForCall []struct {
 		arg1 context.Context
-		arg2 pkg.PRInfo
+		arg2 prurl.PRInfo
 		arg3 string
 		arg4 string
 		arg5 string
@@ -102,12 +103,12 @@ func (fake *PrPoster) PostReturnsOnCall(i int, result1 pkg.PostResult) {
 	}{result1}
 }
 
-func (fake *PrPoster) PostLGTM(arg1 context.Context, arg2 pkg.PRInfo, arg3 string, arg4 string, arg5 string) pkg.PostResult {
+func (fake *PrPoster) PostLGTM(arg1 context.Context, arg2 prurl.PRInfo, arg3 string, arg4 string, arg5 string) pkg.PostResult {
 	fake.postLGTMMutex.Lock()
 	ret, specificReturn := fake.postLGTMReturnsOnCall[len(fake.postLGTMArgsForCall)]
 	fake.postLGTMArgsForCall = append(fake.postLGTMArgsForCall, struct {
 		arg1 context.Context
-		arg2 pkg.PRInfo
+		arg2 prurl.PRInfo
 		arg3 string
 		arg4 string
 		arg5 string
@@ -131,13 +132,13 @@ func (fake *PrPoster) PostLGTMCallCount() int {
 	return len(fake.postLGTMArgsForCall)
 }
 
-func (fake *PrPoster) PostLGTMCalls(stub func(context.Context, pkg.PRInfo, string, string, string) pkg.PostResult) {
+func (fake *PrPoster) PostLGTMCalls(stub func(context.Context, prurl.PRInfo, string, string, string) pkg.PostResult) {
 	fake.postLGTMMutex.Lock()
 	defer fake.postLGTMMutex.Unlock()
 	fake.PostLGTMStub = stub
 }
 
-func (fake *PrPoster) PostLGTMArgsForCall(i int) (context.Context, pkg.PRInfo, string, string, string) {
+func (fake *PrPoster) PostLGTMArgsForCall(i int) (context.Context, prurl.PRInfo, string, string, string) {
 	fake.postLGTMMutex.RLock()
 	defer fake.postLGTMMutex.RUnlock()
 	argsForCall := fake.postLGTMArgsForCall[i]
