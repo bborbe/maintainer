@@ -7,11 +7,13 @@ for each new or force-pushed PR so the `agent/pr-reviewer` picks it up automatic
 
 Dev:
 https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
-https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/check
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger?url=https://github.com/owner/repo/pull/123
 
 Prod:
 https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
-https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/check
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger?url=https://github.com/owner/repo/pull/123
 
 ## How It Works
 
@@ -33,7 +35,7 @@ Two independent decision chains run per PR — see [`docs/watcher-decision-chain
 | `KAFKA_BROKERS` | yes | — | Comma-separated Kafka broker list |
 | `STAGE` | yes | — | Deployment stage (`dev` or `prod`) |
 | `TRUSTED_AUTHORS` | yes | — | Comma-separated trusted GitHub logins; empty list refuses startup |
-| `LISTEN` | no | `:9090` | HTTP listen address (`/healthz`, `/readiness`, `/metrics`, `/trigger`) |
+| `LISTEN` | no | `:9090` | HTTP listen address (`/healthz`, `/readiness`, `/metrics`, `/check`, `/trigger`) |
 | `POLL_INTERVAL` | no | `5m` | Poll interval (Go duration string) |
 | `REPO_SCOPE` | no | `bborbe` | GitHub user or org to search for PRs |
 | `REPO_ALLOWLIST` | no | — | Comma-separated host-qualified repo allowlist (`host/owner/repo`); empty means allow-all |
@@ -45,12 +47,17 @@ Two independent decision chains run per PR — see [`docs/watcher-decision-chain
 
 ## HTTP Endpoints
 
-| Path | Purpose |
-|---|---|
-| `/healthz` | Liveness probe (always returns 200 OK) |
-| `/readiness` | Readiness probe (always returns 200 OK) |
-| `/metrics` | Prometheus metrics |
-| `/trigger` | Run a poll cycle in the background; returns 200 immediately |
+| Path | Method | Purpose |
+|---|---|---|
+| `/healthz` | GET | Liveness probe (always returns 200 OK) |
+| `/readiness` | GET | Readiness probe (always returns 200 OK) |
+| `/metrics` | GET | Prometheus metrics |
+| `/check` | POST | Run a poll cycle in the background; returns 200 immediately |
+| `/trigger` | POST | Fire a single-PR review by URL (`?url=<pr_url>`); reuses the filter chain and trust evaluation |
+
+### Single-PR Trigger Known Limit
+
+If a vault task already exists for the same `(PR, SHA)`, the controller's `create-if-not-exists` is idempotent and no fresh agent Job spawns. To force a re-run in that case, reset the vault task's frontmatter (`phase`, `status`, `trigger_count`) manually OR push a new commit so the SHA changes.
 
 ## Development
 

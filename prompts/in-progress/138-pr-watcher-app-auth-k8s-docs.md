@@ -1,5 +1,6 @@
 ---
 status: approved
+spec: [037-migrate-pr-watcher-to-github-app]
 created: "2026-05-23T21:41:43Z"
 queued: "2026-05-23T21:41:43Z"
 branch: fix/pr-watcher-github-app-auth-k8s-docs

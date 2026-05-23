@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [036-watcher-pr-rename-trigger-add-single-pr-trigger]
+summary: 'Updated watcher/github-pr/README.md with /check and /trigger?url= endpoints, added known-limit note, and added ## Unreleased section to CHANGELOG.md with three spec-036 entries'
+container: maintainer-exec-135-spec-036-update-callers-and-changelog
+dark-factory-version: v0.169.0
 created: "2026-05-23T21:03:00Z"
 queued: "2026-05-23T21:13:16Z"
+started: "2026-05-23T21:46:14Z"
+completed: "2026-05-23T21:47:41Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
 ---
 
