@@ -49,6 +49,15 @@ spec:
                 secretKeyRef:
                   name: maintainer-watcher-github-build
                   key: GH_TOKEN
+            - name: APP_ID
+              value: '{{ "WATCHER_GITHUB_BUILD_APP_ID" | env }}'
+            - name: INSTALLATION_ID
+              value: '{{ "WATCHER_GITHUB_BUILD_INSTALLATION_ID" | env }}'
+            - name: PEM_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: maintainer-watcher-github-build
+                  key: PEM_KEY
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
