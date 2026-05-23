@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.4
+
+- feat(watcher/github-pr): add GitHub App auth via `APP_ID` + `INSTALLATION_ID` + `PEM_KEY` env vars (reuses existing pr-reviewer Apps `3798945` / `3800041`); uses `lib/githubapp.NewClient` (auto-refreshing IAT via `ghinstallation/v2`) because the watcher is a long-lived StatefulSet — a single `MintIAT` call would expire after 1 hour. Partial App env returns an error naming the missing field; legacy `GH_TOKEN` retained as fallback for rollout safety.
+
 ## v0.26.3
 
 - feat(watcher/github-pr): migrate from PAT to GitHub App authentication with auto-refreshing IAT transport; supports APP_ID + INSTALLATION_ID + PEM_KEY env vars; static-PAT fallback via GH_TOKEN still works; partial App config produces a named error at startup naming the missing fields

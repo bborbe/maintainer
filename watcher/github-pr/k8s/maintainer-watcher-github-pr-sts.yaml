@@ -61,6 +61,15 @@ spec:
               value: '{{"REPO_ALLOWLIST" | env}}'
             - name: WATCHER_GITHUB_PR_TASK_SUFFIX
               value: '{{ "WATCHER_GITHUB_PR_TASK_SUFFIX" | env }}'
+            - name: APP_ID
+              value: '{{ "WATCHER_GITHUB_PR_APP_ID" | env }}'
+            - name: INSTALLATION_ID
+              value: '{{ "WATCHER_GITHUB_PR_INSTALLATION_ID" | env }}'
+            - name: PEM_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: maintainer-watcher-github-pr
+                  key: PEM_KEY
           image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-pr:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:
