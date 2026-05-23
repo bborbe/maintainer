@@ -288,6 +288,58 @@ func (w *watcher) publishCreate(
 	return true
 }
 
+// BuildCreateCommand builds a CreateTaskCommand for a PR given its details and trust result.
+// It is used by both the poll path (via publishCreate) and the single-PR trigger handler.
+func BuildCreateCommand(
+	pr PullRequest,
+	details PRDetails,
+	taskIDStr string,
+	stage string,
+	maxSlugLen int,
+	maxTitleLen int,
+	taskSuffix string,
+	trustResult trust.Result,
+) task.CreateCommand {
+	if trustResult.Success() {
+		return task.CreateCommand{
+			Title: computePRTitle(
+				"github",
+				pr.Owner,
+				pr.Repo,
+				pr.Number,
+				details.HeadSHA,
+				pr.Title,
+				maxSlugLen,
+				maxTitleLen,
+				taskSuffix,
+			),
+			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+			Frontmatter:    buildFrontmatter(pr, taskIDStr, stage, details),
+			Body:           buildTaskBody(pr),
+		}
+	}
+	author := pr.AuthorLogin
+	if author == "" {
+		author = "(unknown)"
+	}
+	return task.CreateCommand{
+		Title: computePRTitle(
+			"github",
+			pr.Owner,
+			pr.Repo,
+			pr.Number,
+			details.HeadSHA,
+			pr.Title,
+			maxSlugLen,
+			maxTitleLen,
+			taskSuffix,
+		),
+		TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+		Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, stage, details),
+		Body:           buildUntrustedBody(author, trustResult.Description()),
+	}
+}
+
 func (w *watcher) fetchPRDetails(
 	ctx context.Context,
 	pr PullRequest,

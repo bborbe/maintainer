@@ -1,11 +1,12 @@
 ---
-status: executing
+status: committing
 spec: [036-watcher-pr-rename-trigger-add-single-pr-trigger]
 container: maintainer-exec-136-spec-036-add-single-pr-trigger-handler
 dark-factory-version: v0.169.0
 created: "2026-05-23T21:02:00Z"
 queued: "2026-05-23T21:23:08Z"
 started: "2026-05-23T21:47:45Z"
+completed: "2026-05-23T22:09:25Z"
 branch: dark-factory/watcher-pr-rename-trigger-add-single-pr-trigger
 ---
 

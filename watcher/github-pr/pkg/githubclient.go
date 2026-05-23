@@ -54,6 +54,18 @@ type PRDetails struct {
 	// BaseRef is the base branch name (e.g. `master`, `main`). Used as
 	// the `base_ref` the execution phase diffs against.
 	BaseRef string
+
+	// AuthorLogin is the GitHub author login; empty for deleted accounts.
+	AuthorLogin string
+
+	// Title is the PR title.
+	Title string
+
+	// IsDraft indicates whether the PR is a draft.
+	IsDraft bool
+
+	// UpdatedAt is the PR last-updated timestamp; required for AgeFilter.
+	UpdatedAt libtime.DateTime
 }
 
 //counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
@@ -154,9 +166,13 @@ func (c *githubClient) GetPRDetails(
 		)
 	}
 	return PRDetails{
-		HeadSHA:  pr.GetHead().GetSHA(),
-		CloneURL: pr.GetHead().GetRepo().GetCloneURL(),
-		BaseRef:  pr.GetBase().GetRef(),
+		HeadSHA:     pr.GetHead().GetSHA(),
+		CloneURL:    pr.GetHead().GetRepo().GetCloneURL(),
+		BaseRef:     pr.GetBase().GetRef(),
+		AuthorLogin: pr.GetUser().GetLogin(),
+		Title:       pr.GetTitle(),
+		IsDraft:     pr.GetDraft(),
+		UpdatedAt:   libtime.DateTime(pr.GetUpdatedAt().Time),
 	}, nil
 }
 
