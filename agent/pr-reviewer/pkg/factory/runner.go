@@ -73,7 +73,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	}
 
 	if err := cfg.AuthSetup.Setup(ctx); err != nil {
-		return nil, errors.Wrap(ctx, err, "github auth setup failed")
+		return nil, deliverStartupFailure(ctx, cfg.Deliverer, err, "github auth setup failed")
 	}
 
 	env := map[string]string{}
@@ -112,4 +112,32 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 		)
 	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)
+}
+
+// deliverStartupFailure wraps err with msg, publishes a Failed result via
+// deliverer so the passthrough content generator splices the wrapped error
+// into the task's ## Failure section, and returns the wrapped error so the
+// caller can still propagate (process exit, metrics, etc.).
+//
+// Without the delivery step, early-startup errors (auth setup, plugin install)
+// exit the pod non-zero and only "Job has reached the specified backoff limit"
+// surfaces in the OpenClaw task body — operators cannot diagnose without
+// racing pod TTL for `kubectl logs`.
+//
+// Delivery errors are logged but do NOT replace the original startup error in
+// the returned chain; the original cause is what operators need to see.
+func deliverStartupFailure(
+	ctx context.Context,
+	deliverer agentlib.ResultDeliverer,
+	err error,
+	msg string,
+) error {
+	wrapped := errors.Wrap(ctx, err, msg)
+	if delivErr := deliverer.DeliverResult(ctx, agentlib.AgentResultInfo{
+		Status:  agentlib.AgentStatusFailed,
+		Message: wrapped.Error(),
+	}); delivErr != nil {
+		glog.Warningf("deliver startup failure %q: %v", msg, delivErr)
+	}
+	return wrapped
 }

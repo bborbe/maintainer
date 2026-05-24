@@ -6,11 +6,17 @@ package githubauth
 
 import (
 	"context"
+	stderrors "errors"
 	"os/exec"
+	"strings"
 
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 )
+
+// maxCapturedOutputBytes bounds the captured gh stdout+stderr included in the
+// wrapped error to avoid runaway error bodies if gh ever spews large output.
+const maxCapturedOutputBytes = 4096
 
 // Configurator configures git credential helpers for GitHub at pod startup.
 // The pod implementation invokes `gh auth setup-git`; the local-CLI noop
@@ -34,7 +40,7 @@ func NewGhAuthSetupGit(ghToken string) Configurator {
 // ghAuthSetupGit is the real implementation; execFunc is injectable for testing.
 type ghAuthSetupGit struct {
 	ghToken  string
-	execFunc func(ctx context.Context, name string, args ...string) error
+	execFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
 func (g *ghAuthSetupGit) Setup(ctx context.Context) error {
@@ -43,26 +49,54 @@ func (g *ghAuthSetupGit) Setup(ctx context.Context) error {
 		return nil
 	}
 	glog.V(2).Infof("github-auth-setup: running gh auth setup-git")
-	if err := g.execFunc(ctx, "gh", "auth", "setup-git"); err != nil {
-		// Intentionally discarding underlying error: gh output may contain GH_TOKEN value.
-		// The exec func already sanitizes its output (defaultExecFunc uses errors.Errorf).
-		// This defense-in-depth ensures injected test funcs can't leak secrets either.
-		glog.V(4).Infof("github-auth-setup: gh auth setup-git error (detail suppressed): %T", err)
-		return errors.Errorf(ctx, "gh auth setup-git failed")
+	out, err := g.execFunc(ctx, "gh", "auth", "setup-git")
+	if err != nil {
+		// Scrub the literal token from both the captured output and the wrapped
+		// underlying error message: gh's stdout/stderr (and exec wrappers that
+		// echo arguments) may embed the token. Bounded tail keeps error bodies
+		// sane even if gh ever produces large output.
+		captured := truncateTail(scrubToken(string(out), g.ghToken), maxCapturedOutputBytes)
+		sanitizedErr := stderrors.New(scrubToken(err.Error(), g.ghToken))
+		glog.V(4).Infof("github-auth-setup: gh auth setup-git failed: %s", captured)
+		if captured == "" {
+			return errors.Wrapf(ctx, sanitizedErr, "gh auth setup-git failed")
+		}
+		return errors.Wrapf(ctx, sanitizedErr, "gh auth setup-git failed: %s", captured)
 	}
 	glog.V(2).Infof("github-auth-setup: gh auth setup-git complete")
 	return nil
 }
 
-// defaultExecFunc is the production exec.CommandContext wrapper.
-func defaultExecFunc(ctx context.Context, name string, args ...string) error {
+// defaultExecFunc is the production exec.CommandContext wrapper. It returns
+// the combined stdout+stderr alongside the exec error so the caller can scrub
+// secrets out of the output before including it in the surfaced error.
+func defaultExecFunc(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input
 	cmd := exec.CommandContext(ctx, name, args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		// out intentionally omitted: gh may print messages including the token; safer to drop entirely than risk leak
-		return errors.Errorf(ctx, "%s %v failed", name, args)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return out, errors.Wrapf(ctx, err, "%s %v failed", name, args)
 	}
-	return nil
+	return out, nil
+}
+
+// scrubToken removes every occurrence of token from s. When token is empty the
+// string is returned unchanged so the helper is safe to call unconditionally.
+func scrubToken(s, token string) string {
+	if token == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, token, "***")
+}
+
+// truncateTail returns the last maxBytes bytes of s. When s is within the
+// limit it is returned unchanged; an oversized prefix is replaced with a
+// "...[truncated]" marker so operators reading the error know output was clipped.
+func truncateTail(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	return "...[truncated]" + s[len(s)-maxBytes:]
 }
 
 // NewNoopAuthSetup returns a Configurator that always returns nil.
@@ -76,11 +110,13 @@ type noopAuthSetup struct{}
 
 func (n *noopAuthSetup) Setup(_ context.Context) error { return nil }
 
-// NewGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
-// exec function for testing. Do not use in production code.
-func NewGhAuthSetupGitWithExecFunc(
+// newGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
+// exec function for testing. Exposed to external _test packages via
+// export_test.go (NewGhAuthSetupGitWithExecFunc); kept unexported here so
+// production callers cannot bypass the production exec wrapper.
+func newGhAuthSetupGitWithExecFunc(
 	ghToken string,
-	execFunc func(ctx context.Context, name string, args ...string) error,
+	execFunc func(ctx context.Context, name string, args ...string) ([]byte, error),
 ) Configurator {
 	return &ghAuthSetupGit{ghToken: ghToken, execFunc: execFunc}
 }

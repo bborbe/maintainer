@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- fix(agent/pr-reviewer): capture combined stdout+stderr from `gh auth setup-git` and include the scrubbed bounded tail (last 4 KiB, GH_TOKEN value replaced with `***`) in the wrapped error so operators can diagnose pod-startup auth failures via the OpenClaw task `## Failure` body — previously the gh output was dropped entirely and only `gh auth setup-git failed` surfaced
+- fix(agent/pr-reviewer): publish a `Status: Failed` result via the deliverer when `RunAgent` aborts on auth-setup failure so the passthrough content generator splices the wrapped error into the task `## Failure` section — previously the pod exited non-zero, k8s retried until backoffLimit, and only `Job has reached the specified backoff limit` reached the OpenClaw task body
+
 ## v0.26.9
 
 - fix(watcher/github-build): suppress noisy stack trace when Dependabot internal graph-update workflows (`Graph Update:` or `Dependabot Updates`) are filtered out — these runs must not affect the red/green state machine
