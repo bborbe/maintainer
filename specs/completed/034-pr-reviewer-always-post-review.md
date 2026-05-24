@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-23T11:11:52Z"
 generating: "2026-05-23T11:12:29Z"
 prompted: "2026-05-23T11:17:50Z"
 verifying: "2026-05-23T12:38:41Z"
+completed: "2026-05-24T09:21:20Z"
 ---
 
 ## Summary
@@ -202,3 +203,19 @@ If we don't ship this, the PR reviewer agent continues to silently skip every tr
 - Goal: `[[GitHub Code Reviewer Agent - Base]]` (F2)
 - Prior spec: `033-migrate-pr-reviewer-to-github-app.md` (just-shipped App auth migration that introduced `BOT_GITHUB_LOGIN` env, which this spec consumes)
 - Reference docs: `agent/pr-reviewer/docs/architecture.md` (three-phase decomposition), `agent/pr-reviewer/docs/pr-post-back.md` (post-back contract — updated by this spec)
+
+## Verification Result
+
+**Verified:** 2026-05-24T09:20:17Z (HEAD 3846b6e)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.169.0)
+**Scenario:** Live dev+prod replay against PR bborbe/go-skeleton#16 with both empty-concerns (dev → LGTM) and non-empty-concerns (prod → execution) branches exercised; deployed images :dev and :prod (maintainer v0.25.10+).
+**Evidence:**
+- Dev Job `pr-reviewer-agent-9366f751-20260524091313` planning emitted `"concerns": []`, NextPhase=done
+- Prod Job `pr-reviewer-agent-7358e1fb-20260524091338` planning emitted non-empty concerns, NextPhase=execution
+- GitHub REST `/repos/bborbe/go-skeleton/pulls/16/reviews` returns id=4352070040 user=`ben-s-pull-request-reviewer-dev[bot]` state=COMMENTED body=`Reviewed by ben-s-pull-request-reviewer-dev[bot] — no concerns flagged.`
+- Vault task dev file `## Verdict` section: `review_id: 4352070040 / event: COMMENT`; frontmatter `phase: done` `trigger_count: 1`
+- `agent/pr-reviewer/pkg/githubposter/poster.go:63` interpolates BotLogin (no hardcoded literal)
+- `agent/pr-reviewer/pkg/steps_planning_test.go` ginkgo covers both LGTM and non-LGTM branches
+- `agent/pr-reviewer/docs/pr-post-back.md:100` documents the LGTM branch
+- `CHANGELOG.md` v0.25.10 records the always-post behavior
+**Verdict:** PASS

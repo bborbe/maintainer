@@ -195,3 +195,17 @@ Expected: a review from the bot identity with non-empty body containing the full
 ## Do-Nothing Option
 
 Not viable. Leaving the stale literal means spec 034's F2 fix delivers only half its promise: the LGTM-on-empty-concerns path works, but the non-empty-concerns path — the more important one, because that is where the agent's actual review value lives — silently exits at planning. Every real PR with actual concerns continues to receive zero feedback. This defeats both spec 033 (App auth, visible reviews) and spec 034 (bot on every PR). The fix is four lines across four files; the do-nothing cost is the entire reason both prior specs were shipped.
+
+## Verification Result
+
+**Verified:** 2026-05-24T09:20:57Z (HEAD 3846b6e)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.169.0)
+**Scenario:** Rung-1 source grep + go test ./pkg/...; Rung-2 dev pod ran planning with accepted NextPhase, zero validator rejections; Rung-3 prod pod emitted `NextPhase:"execution"` and a follow-up `phase=execution` Job spawned and is actively executing on bborbe/go-skeleton#16.
+**Evidence:**
+- Rung-1: `grep -rn '"in_progress"' agent/pr-reviewer/pkg/ agent/pr-reviewer/k8s/` returns only 2 lines, both inside comments documenting the rename; production code is clean.
+- Rung-1: `steps_planning.go:115` → `NextPhase: string(domain.TaskPhaseExecution)`; `factory.go:196` → `agentlib.NewPhase(domain.TaskPhaseExecution, ...)`; `maintainer-agent-pr-reviewer.yaml` `trigger.phases:` contains `execution`; `steps_planning_test.go:274` asserts `Equal(string(domain.TaskPhaseExecution))`.
+- Rung-1: `cd agent/pr-reviewer && go test ./pkg/...` → all 8 packages `ok`.
+- Rung-2 (dev): pod `pr-reviewer-agent-9366f751-20260524091313-62cgh` emitted `{"Status":"done","NextPhase":"done",...}` (LGTM path) with zero `ignoring invalid NextPhase` warnings in last 15m.
+- Rung-3 (prod): pod `pr-reviewer-agent-7358e1fb-20260524091338-6hnv9` emitted `{"Status":"done","NextPhase":"execution","Message":"","ContinueToNext":false}`; follow-up pod `pr-reviewer-agent-7358e1fb-20260524091844-nrjhs` started `phase=execution` and is actively running on bborbe/go-skeleton#16 @ f0e6e36. Zero `ignoring invalid NextPhase` warnings in `kubectlquant -n prod logs -l agent=pr-reviewer --since=30m`.
+- Release: `CHANGELOG.md` v0.25.11 records the spec 035 fix.
+**Verdict:** PASS
