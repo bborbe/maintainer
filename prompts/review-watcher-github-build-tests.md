@@ -28,8 +28,8 @@ Files to read before making changes:
 
 2. For `runPollLoop` error path test:
    - Use a `run.Func` that returns a non-nil error
-   - Use `glog.InMemoryLogger` or a buffer to capture log output
-   - Verify `glog.Errorf` is called with the error message
+   - Capture log output via stderr redirect or use a logger interface seam if available — direct log-capture is OPTIONAL (no `glog.InMemoryLogger` exists in this codebase)
+   - Behavioral assertion sufficient: verify the error path executes (loop continues, no panic, no early return)
    - Verify the loop continues (ticker fires again after a short wait)
    - Use a small poll interval (e.g., 10ms) and `Eventually` to avoid sleeps
 

@@ -4,26 +4,29 @@ created: "2026-05-24T12:00:00Z"
 ---
 
 <summary>
-- Remove unused `context.Context` parameter from `ParseRepoAllowlist` in `pkg/filter/filter.go`
+- Remove unused `context.Context` parameter from `ParseRepoAllowlist` in `pkg/filter/repo_allowlist_filter.go`
 - The ctx parameter is named `_` and never used, violating the project's context usage convention
 - Update the single caller in `main.go` and `cmd/run-once/main.go` if the signature changes
 </summary>
 
 <objective>
-Remove the unused `_ context.Context` parameter from `ParseRepoAllowlist` in `pkg/filter/filter.go`. The function does not use the context parameter and names it `_` indicating it was reserved for future use but never needed.
+Remove the unused `_ context.Context` parameter from `ParseRepoAllowlist` in `pkg/filter/repo_allowlist_filter.go`. The function does not use the context parameter and names it `_` indicating it was reserved for future use but never needed.
 </objective>
 
 <context>
 Read `CLAUDE.md` for project conventions.
 
 Files to read before making changes:
-- `watcher/github-build/pkg/filter/filter.go` lines 1-50 (`ParseRepoAllowlist` function)
+- `watcher/github-build/pkg/filter/repo_allowlist_filter.go` lines 1-50 (`ParseRepoAllowlist` function)
+- `watcher/github-build/pkg/filter/repo_allowlist_filter_test.go` (test callers — must update test invocations too)
 - `watcher/github-build/main.go` lines 113-116 (caller)
 - `watcher/github-build/cmd/run-once/main.go` lines 50-56 (caller)
+
+CONFLICT NOTE: `review-watcher-github-build-error-wrap.md` adds error wrapping around `filter.ParseRepoAllowlist(ctx, ...)` call sites. If both prompts run, the unused-param fix must run FIRST, then error-wrap must be updated to match the new signature `filter.ParseRepoAllowlist(a.RepoAllowlist)`. Suggest approving unused-param first, then re-auditing error-wrap.
 </context>
 
 <requirements>
-1. In `pkg/filter/filter.go`, change the function signature from:
+1. In `pkg/filter/repo_allowlist_filter.go`, change the function signature from:
    ```go
    func ParseRepoAllowlist(_ context.Context, raw string) ([]string, error) {
    ```
@@ -58,7 +61,7 @@ Files to read before making changes:
 </requirements>
 
 <constraints>
-- Only change files in `watcher/github-build/` (pkg/filter/filter.go, main.go, cmd/run-once/main.go)
+- Only change files in `watcher/github-build/` (pkg/filter/repo_allowlist_filter.go, main.go, cmd/run-once/main.go)
 - Do NOT commit — dark-factory handles git
 - Existing tests must still pass
 - Use `errors.Wrap`/`errors.Errorf` from `github.com/bborbe/errors` — never `fmt.Errorf` or bare `return err`

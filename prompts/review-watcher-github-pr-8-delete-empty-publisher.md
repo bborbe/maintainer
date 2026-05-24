@@ -22,9 +22,10 @@ Files to read before making changes:
 </context>
 
 <requirements>
-1. **Delete `watcher/github-pr/pkg/publisher.go`:**
+1. **Delete `watcher/github-pr/pkg/publisher.go` AND its empty sibling `pkg/publisher_export_test.go`:**
    ```bash
    rm watcher/github-pr/pkg/publisher.go
+   rm watcher/github-pr/pkg/publisher_export_test.go
    ```
 
 2. **Confirm no references to publisher.go exist:**
