@@ -363,4 +363,131 @@ var _ = Describe("pkg.GitHubClient", func() {
 			})
 		})
 	})
+
+	Describe("ListOwnerRepos", func() {
+		Context("owner is a user", func() {
+			It("returns non-archived, non-fork repos", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testuser":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testuser","type":"User"}`)
+						case "/users/testuser/repos":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(
+								w,
+								`[{"name":"repo-a","archived":false,"fork":false},{"name":"repo-b","archived":true,"fork":false},{"name":"repo-c","archived":false,"fork":true},{"name":"repo-d","archived":false,"fork":false}]`,
+							)
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"repo-a", "repo-d"}))
+			})
+		})
+
+		Context("owner is an organization", func() {
+			It("calls ListByOrg", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testorg":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testorg","type":"Organization"}`)
+						case "/orgs/testorg/repos":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `[{"name":"org-repo","archived":false,"fork":false}]`)
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testorg")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"org-repo"}))
+			})
+		})
+
+		Context("owner not found (404)", func() {
+			It("returns an error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprintf(w, `{"message":"Not Found"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.ListOwnerRepos(ctx, "nonexistent")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("rate limited during list", func() {
+			It("returns ErrRateLimited", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(
+							w,
+							`{"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).To(MatchError(pkg.ErrRateLimited))
+			})
+		})
+
+		Context("two-page response", func() {
+			It("returns repos from both pages", func() {
+				var serverURL string
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testuser":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testuser","type":"User"}`)
+						case "/users/testuser/repos":
+							page := r.URL.Query().Get("page")
+							w.Header().Set("Content-Type", "application/json")
+							if page == "1" {
+								w.Header().
+									Set("Link", `<`+serverURL+`/users/testuser/repos?page=2>; rel="next"`)
+								fmt.Fprintf(w, `[{"name":"repo-a","archived":false,"fork":false}]`)
+							} else {
+								fmt.Fprintf(w, `[{"name":"repo-b","archived":false,"fork":false}]`)
+							}
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+				serverURL = server.URL
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"repo-a", "repo-b"}))
+			})
+		})
+	})
 })

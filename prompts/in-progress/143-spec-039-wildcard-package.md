@@ -1,11 +1,13 @@
 ---
-status: executing
+status: committing
 spec: [039-expand-watcher-github-build-org-wildcard]
+summary: Created pkg/wildcard/ package with Expander, ResolvedAllowlist, and ListOwnerRepos method on GitHubClient interface; all tests pass
 container: maintainer-exec-143-spec-039-wildcard-package
 dark-factory-version: v0.169.0
 created: "2026-05-24T10:00:00Z"
 queued: "2026-05-24T10:05:07Z"
 started: "2026-05-24T10:19:26Z"
+completed: "2026-05-24T10:27:49Z"
 ---
 
 <summary>
