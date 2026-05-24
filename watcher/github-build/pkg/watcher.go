@@ -29,13 +29,34 @@ type Watcher interface {
 	Poll(ctx context.Context) error
 }
 
+// AllowlistSnapshot returns the current set of concrete "host/owner/repo"
+// entries the poll loop should iterate. Implementations MUST be safe to
+// call from a goroutine concurrent with a refresh writer.
+type AllowlistSnapshot interface {
+	Snapshot() []string
+}
+
+// StaticSnapshot is an AllowlistSnapshot backed by an immutable slice.
+// Used by the pure-literal binary path so no wildcard machinery runs.
+type StaticSnapshot struct {
+	entries []string
+}
+
+// NewStaticSnapshot returns a snapshot holding a defensive copy of entries.
+func NewStaticSnapshot(entries []string) *StaticSnapshot {
+	return &StaticSnapshot{entries: append([]string(nil), entries...)}
+}
+
+// Snapshot returns the held entry slice. Callers MUST NOT mutate it.
+func (s *StaticSnapshot) Snapshot() []string { return s.entries }
+
 // NewWatcher returns a Watcher that polls GitHub Actions and publishes commands.
 func NewWatcher(
 	githubClient GitHubClient,
 	createSender task.CreateCommandSender,
 	metrics Metrics,
 	repoFilter filter.RepoFilter,
-	allowlist []string,
+	allowlist AllowlistSnapshot,
 	cursorPath string,
 	assignee string,
 	taskStatus string,
@@ -63,7 +84,7 @@ type buildWatcher struct {
 	createSender      task.CreateCommandSender
 	metrics           Metrics
 	repoFilter        filter.RepoFilter
-	allowlist         []string
+	allowlist         AllowlistSnapshot
 	cursorPath        string
 	assignee          string
 	taskStatus        string
@@ -78,7 +99,8 @@ func (w *buildWatcher) Poll(ctx context.Context) error {
 		return errors.Wrapf(ctx, err, "load cursor")
 	}
 
-	for _, repoKey := range w.allowlist {
+	snapshot := w.allowlist.Snapshot()
+	for _, repoKey := range snapshot {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

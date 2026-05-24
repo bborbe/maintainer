@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.6
+
+- fix(watcher/github-build): expand owner-level wildcard allowlist entries (e.g. `github.com/bborbe/*`) into concrete repos at startup and refresh hourly — closes the silent-zero-polls bug introduced by the v0.25.0 wildcard rollout (spec 039)
+
 ## v0.26.5
 
 - chore(agent/pr-reviewer): add `glog.V(2)` logging to every planning-step return site so routing decisions (LGTM short-circuit, execution advance, human_review escalation, POST failures) are visible in pod logs; mirrors the existing `steps_review.go` pattern

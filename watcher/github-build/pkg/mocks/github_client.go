@@ -89,6 +89,20 @@ type GitHubClient struct {
 		result1 []pkg.WorkflowRun
 		result2 error
 	}
+	ListOwnerReposStub        func(context.Context, string) ([]string, error)
+	listOwnerReposMutex       sync.RWMutex
+	listOwnerReposArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+	}
+	listOwnerReposReturns struct {
+		result1 []string
+		result2 error
+	}
+	listOwnerReposReturnsOnCall map[int]struct {
+		result1 []string
+		result2 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -424,6 +438,71 @@ func (fake *GitHubClient) GetWorkflowRunsReturnsOnCall(i int, result1 []pkg.Work
 	}
 	fake.getWorkflowRunsReturnsOnCall[i] = struct {
 		result1 []pkg.WorkflowRun
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) ListOwnerRepos(arg1 context.Context, arg2 string) ([]string, error) {
+	fake.listOwnerReposMutex.Lock()
+	ret, specificReturn := fake.listOwnerReposReturnsOnCall[len(fake.listOwnerReposArgsForCall)]
+	fake.listOwnerReposArgsForCall = append(fake.listOwnerReposArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+	}{arg1, arg2})
+	stub := fake.ListOwnerReposStub
+	fakeReturns := fake.listOwnerReposReturns
+	fake.recordInvocation("ListOwnerRepos", []interface{}{arg1, arg2})
+	fake.listOwnerReposMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *GitHubClient) ListOwnerReposCallCount() int {
+	fake.listOwnerReposMutex.RLock()
+	defer fake.listOwnerReposMutex.RUnlock()
+	return len(fake.listOwnerReposArgsForCall)
+}
+
+func (fake *GitHubClient) ListOwnerReposCalls(stub func(context.Context, string) ([]string, error)) {
+	fake.listOwnerReposMutex.Lock()
+	defer fake.listOwnerReposMutex.Unlock()
+	fake.ListOwnerReposStub = stub
+}
+
+func (fake *GitHubClient) ListOwnerReposArgsForCall(i int) (context.Context, string) {
+	fake.listOwnerReposMutex.RLock()
+	defer fake.listOwnerReposMutex.RUnlock()
+	argsForCall := fake.listOwnerReposArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *GitHubClient) ListOwnerReposReturns(result1 []string, result2 error) {
+	fake.listOwnerReposMutex.Lock()
+	defer fake.listOwnerReposMutex.Unlock()
+	fake.ListOwnerReposStub = nil
+	fake.listOwnerReposReturns = struct {
+		result1 []string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitHubClient) ListOwnerReposReturnsOnCall(i int, result1 []string, result2 error) {
+	fake.listOwnerReposMutex.Lock()
+	defer fake.listOwnerReposMutex.Unlock()
+	fake.ListOwnerReposStub = nil
+	if fake.listOwnerReposReturnsOnCall == nil {
+		fake.listOwnerReposReturnsOnCall = make(map[int]struct {
+			result1 []string
+			result2 error
+		})
+	}
+	fake.listOwnerReposReturnsOnCall[i] = struct {
+		result1 []string
 		result2 error
 	}{result1, result2}
 }
