@@ -24,6 +24,30 @@ import (
 
 //counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
 
+// DependabotGraphUpdatePrefixes are workflow-name prefixes used by Dependabot for
+// internal graph-maintenance jobs. These are NOT real CI failures — their HTTP 503s
+// are Dependabot's own service being temporarily flaky. The real CI workflows on
+// the same commits succeed. These runs must not trigger OpenClaw build-failure tasks.
+var DependabotGraphUpdatePrefixes = []string{
+	"Graph Update:",
+	"Dependabot Updates",
+}
+
+// isDependabotGraphUpdateWorkflow returns true when run.Name starts with any
+// prefix in DependabotGraphUpdatePrefixes. Comparison is case-sensitive.
+// An empty or zero Name is NOT considered a Dependabot workflow — returns false.
+func isDependabotGraphUpdateWorkflow(run WorkflowRun) bool {
+	if run.Name == "" {
+		return false
+	}
+	for _, prefix := range DependabotGraphUpdatePrefixes {
+		if strings.HasPrefix(run.Name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // Watcher polls GitHub Actions for build status changes.
 type Watcher interface {
 	Poll(ctx context.Context) error
@@ -241,6 +265,13 @@ func deriveState(runs []WorkflowRun) (state string, episodeSHA string, failingRu
 	var considered []WorkflowRun
 	for _, run := range latestByWorkflow {
 		if run.Conclusion == "failure" || run.Conclusion == "success" {
+			// Skip Dependabot internal graph-maintenance workflows.
+			// They are not real CI and must not affect the red/green state machine.
+			if isDependabotGraphUpdateWorkflow(run) {
+				glog.V(4).
+					Infof("skipping workflow run id=%d name=%q (Dependabot graph-update)", run.RunID, run.Name)
+				continue
+			}
 			considered = append(considered, run)
 		}
 	}

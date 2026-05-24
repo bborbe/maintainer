@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.9
+
+- fix(watcher/github-build): suppress noisy stack trace when Dependabot internal graph-update workflows (`Graph Update:` or `Dependabot Updates`) are filtered out — these runs must not affect the red/green state machine
+
 ## v0.26.8
 
 - chore: Rename `WATCHER_GITHUB_PR_TASK_SUFFIX` to `TASK_SUFFIX` in watcher/github-pr to match build watcher unified naming — breaking change, operator must update env files at deploy time

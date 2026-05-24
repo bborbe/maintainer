@@ -1,7 +1,13 @@
 ---
-status: draft
+status: completed
 spec: [042-github-build-watcher-filter-dependabot-graph-update]
+summary: 'Added Dependabot graph-update workflow filtering to watcher/github-build: skip workflows named Graph Update: or Dependabot Updates from red/green state machine'
+container: maintainer-exec-152-spec-042-add-dependabot-filter
+dark-factory-version: v0.169.0
 created: "2026-05-24T21:30:00Z"
+queued: "2026-05-24T20:37:11Z"
+started: "2026-05-24T20:37:13Z"
+completed: "2026-05-24T20:38:39Z"
 branch: dark-factory/github-build-watcher-filter-dependabot-graph-update
 ---
 
@@ -30,12 +36,14 @@ Files to read fully before making changes:
 
 **Execute steps in order. Run `make test` after step 2. Run `make precommit` only at the final step.**
 
-1. **Read `watcher/github-build/pkg/watcher.go`** — focus on the `deriveState` function (lines 228-269). Understand:
+1. **Read `watcher/github-build/pkg/watcher.go`** — focus on the `deriveState` function (line numbers ~228-269 at spec time, may drift; anchor by the literal `latestByWorkflow := make(map[int64]WorkflowRun)` initialization). Understand:
    - `latestByWorkflow` map construction (de-duplicates by WorkflowID)
    - `considered` slice construction (filters to `failure` or `success` conclusions)
    - `failingRuns` accumulation (only `failure` conclusions)
    - `deriveState` returns `(state, episodeSHA, failingRuns)`
-   - The filter must be inserted inside the `for _, run := range latestByWorkflow` loop OR in the `considered` loop before `failingRuns` is built
+   - The filter goes inside the `for _, run := range latestByWorkflow` loop, immediately inside the existing `if run.Conclusion == "failure" || run.Conclusion == "success"` block, so Dependabot runs are skipped before they are appended to `considered`
+
+   **`strings` package is already imported** at `watcher.go:12` — no new import needed.
 
 2. **Add constants and filter function to `watcher/github-build/pkg/watcher.go`**
 
@@ -73,7 +81,7 @@ Files to read fully before making changes:
 
 3. **Modify `deriveState` to skip Dependabot graph-update workflows**
 
-   In the `for _, run := range latestByWorkflow` loop, add the filter immediately after the `continue` that checks `run.Conclusion`:
+   In the `for _, run := range latestByWorkflow` loop, **inside** the existing `if run.Conclusion == "failure" || run.Conclusion == "success"` block, add the Dependabot-filter check **before** the existing `considered = append(considered, run)` call. After this change the loop body looks like:
 
    ```go
    // Filter: only "failure" or "success" conclusions
@@ -91,7 +99,7 @@ Files to read fully before making changes:
    }
    ```
 
-   The exact position is: after the `if run.Conclusion == "failure" || run.Conclusion == "success"` block, before `considered = append(...)`.
+   Concretely: add 4 new lines (the comment + the `if` block with `continue`) inside the existing outer `if`, immediately before the existing `considered = append(considered, run)`.
 
 4. **Verify the change compiles** by running `make test`:
 
@@ -129,8 +137,9 @@ grep -n "DependabotGraphUpdatePrefixes" watcher/github-build/pkg/watcher.go
 # Confirm filter function exists:
 grep -n "isDependabotGraphUpdateWorkflow" watcher/github-build/pkg/watcher.go
 
-# Confirm filter is called inside deriveState:
-grep -B2 -A2 "isDependabotGraphUpdateWorkflow" watcher/github-build/pkg/watcher.go
+# Confirm filter is called inside deriveState (not just defined as a stray helper):
+awk '/^func deriveState/,/^}/' watcher/github-build/pkg/watcher.go | grep "isDependabotGraphUpdateWorkflow"
+# Expected: ≥1 line
 
 # Confirm strings.HasPrefix is used:
 grep "strings.HasPrefix" watcher/github-build/pkg/watcher.go

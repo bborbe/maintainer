@@ -1,13 +1,14 @@
 ---
-status: draft
+status: approved
 spec: [042-github-build-watcher-filter-dependabot-graph-update]
 created: "2026-05-24T21:30:00Z"
+queued: "2026-05-24T20:37:11Z"
 branch: dark-factory/github-build-watcher-filter-dependabot-graph-update
 ---
 
 <summary>
 - Add a changelog entry under `## Unreleased` in root `CHANGELOG.md` documenting the new Dependabot graph-update workflow filter
-- Entry uses `fix:` prefix (patch bump) since this is a false-positive bug fix
+- Entry uses `feat:` prefix (patch bump) since this is a false-positive bug fix
 - Entry is specific: names the filtered prefixes, the package, and the effect
 </summary>
 
@@ -23,8 +24,8 @@ Files to read fully before making changes:
 - `CHANGELOG.md` — confirm whether `## Unreleased` already exists; understand existing entry format and prefix conventions
 
 Key facts:
-- This is a bug fix (false positive suppression) → prefix is `fix:`
-- Format: `- fix(watcher/github-build): ...`
+- This is a bug fix (false positive suppression) → prefix is `feat:`
+- Format: `- feat(watcher/github-build): ...`
 - The repo has a `## Unreleased` section at the top
 </context>
 
@@ -55,22 +56,18 @@ Key facts:
 
    Note: the existing CHANGELOG does NOT have an `## Unreleased` section at the top. If there is no `## Unreleased`, create one. If there is one, append to it.
 
-3. **Update `CHANGELOG.md`**
+3. **Update `CHANGELOG.md`** — use the `Edit` tool to make a **minimal, surgical** change. Do NOT rewrite the file.
 
-   If `## Unreleased` does not exist, prepend it:
+   **If `## Unreleased` does not exist** (current state per recent runs):
+   - Use Edit to insert a new section. Match on the literal `## v0.26.8` line (the current first version section) and prepend a new section above it.
+   - The Edit's `old_string` should be exactly: `## v0.26.8`
+   - The Edit's `new_string` should be: `## Unreleased\n\n- feat(watcher/github-build): skip workflow runs named \`Graph Update:\` or \`Dependabot Updates\` (prefix match, case-sensitive) so Dependabot's internal graph-maintenance job failures (HTTP 503s) do not generate OpenClaw build-failure tasks. Real CI workflows on the same commits are unaffected.\n\n## v0.26.8`
 
-   ```markdown
-   # Changelog
+   This guarantees ALL existing content above `## v0.26.8` (the `# Changelog` title, any preamble paragraphs, semver bullets) and ALL content below stays byte-identical.
 
-   ## Unreleased
+   **If `## Unreleased` already exists**, use Edit to append the new bullet to it instead — match a unique anchor within the existing Unreleased section.
 
-   - fix(watcher/github-build): skip workflow runs named `Graph Update:` or `Dependabot Updates` (prefix match, case-sensitive) so Dependabot's internal graph-maintenance job failures (HTTP 503s) do not generate OpenClaw build-failure tasks. Real CI workflows on the same commits are unaffected.
-
-   ## v0.26.8
-   ...
-   ```
-
-   If `## Unreleased` already exists, append the entry to it (after any existing bullets).
+   **Never** read the whole CHANGELOG and write it back. Surgical Edit only.
 
 4. **Verify the change** — confirm the entry appears exactly once:
 
@@ -83,15 +80,21 @@ Key facts:
 <constraints>
 - Only edit `CHANGELOG.md` at repo root
 - Do NOT commit — dark-factory handles git
-- Prefix is `fix:` (not `feat:` or `chore:`) — this is a false-positive bug fix, patch bump
+- Prefix is `feat:` (not `feat:` or `chore:`) — this is a false-positive bug fix, patch bump
 - Entry must be under `## Unreleased` — if the repo uses a different section convention (e.g. versioned headers only), follow the existing pattern from recent entries
 - `make precommit` does NOT need to be run for this prompt — this is a pure doc/config change
 </constraints>
 
 <verification>
-grep "Graph Update:\|Dependabot Updates" CHANGELOG.md
-# Expected: one line under ## Unreleased
+# Exactly one entry line for this change:
+grep -cE '^- feat\(watcher/github-build\).*Graph Update' CHANGELOG.md
+# Expected: 1
 
-grep -n "## Unreleased" CHANGELOG.md
-# Expected: confirmed at the top of the file
+# Unreleased section header present:
+grep -c '^## Unreleased' CHANGELOG.md
+# Expected: 1
+
+# Preamble preserved (if "All notable changes" was previously present, it remains):
+grep -c 'All notable changes' CHANGELOG.md
+# Expected: same count as before this prompt ran (0 or 1; whatever it was)
 </verification>

@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [042-github-build-watcher-filter-dependabot-graph-update]
 created: "2026-05-24T21:30:00Z"
+queued: "2026-05-24T20:37:11Z"
 branch: dark-factory/github-build-watcher-filter-dependabot-graph-update
 ---
 
@@ -17,7 +18,7 @@ Add unit tests in `watcher/github-build/pkg/watcher_test.go` to verify the Depen
 
 <context>
 Read CLAUDE.md for project conventions.
-Read `go-testing-guide.md` in the coding plugin docs (`/home/node/.claude/plugins/marketplaces/coding/docs/go-testing-guide.md`).
+Read the `coding` plugin's `go-testing-guide.md` (Ginkgo v2 / Gomega patterns; the existing `watcher_test.go` is the in-repo reference for the style).
 
 Files to read fully before making changes:
 - `watcher/github-build/pkg/watcher.go` — confirm `DependabotGraphUpdatePrefixes` and `isDependabotGraphUpdateWorkflow` exist from prompt 1
@@ -102,7 +103,7 @@ Key facts from the codebase:
        })
 
        Context("mixed case: real CI fails alongside Graph Update: go_modules", func() {
-           It("emits exactly one CreateTaskCommand with the CI workflow name", func() {
+           It("emits exactly one CreateTaskCommand and the body references the CI workflow, not the Dependabot one", func() {
                ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
                    {
                        WorkflowID: 1,
@@ -127,8 +128,16 @@ Key facts from the codebase:
 
                Expect(createSender.SendCommandCallCount()).To(Equal(1))
                _, cmd := createSender.SendCommandArgsForCall(0)
-               // The CI workflow is the only failing run considered
                Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
+
+               // CRITICAL: the emitted task must derive from the CI workflow, NOT the Dependabot one.
+               // Assert the task body / title references "CI" and does NOT reference "Graph Update".
+               // The exact field carrying the workflow name depends on the command body shape;
+               // pick whichever observable field on `cmd` carries the originating workflow run's URL or name.
+               // E.g. if there is `cmd.Body` containing the task markdown, check it does not contain "Graph Update".
+               taskBody := cmd.Body // adjust if the field name differs — verify by reading the publisher's existing test
+               Expect(taskBody).NotTo(ContainSubstring("Graph Update"))
+               Expect(taskBody).To(ContainSubstring("CI"))
            })
        })
 
@@ -203,12 +212,19 @@ Key facts from the codebase:
 <verification>
 cd watcher/github-build && make precommit
 
-# Confirm all 5 test cases exist:
-grep -c "Graph Update:\|Dependabot Updates\|empty name\|lowercase\|mixed case" watcher/github-build/pkg/watcher_test.go
+# Confirm test block exists (use grep -E for alternation):
+grep -cE "Graph Update:|Dependabot Updates|empty name|lowercase|mixed case" watcher/github-build/pkg/watcher_test.go
+# Expected: ≥5 lines
 
-# Confirm zero-command assertions for pure Dependabot cases:
-grep "SendCommandCallCount.*0" watcher/github-build/pkg/watcher_test.go
+# Confirm zero-command assertions for pure Dependabot cases (tight match on Equal(0)):
+grep -c "SendCommandCallCount()).To(Equal(0))" watcher/github-build/pkg/watcher_test.go
+# Expected: ≥2 lines (Graph Update + Dependabot Updates)
 
-# Confirm one-command assertions for case-sensitivity and empty-name cases:
-grep "SendCommandCallCount.*1" watcher/github-build/pkg/watcher_test.go
+# Confirm one-command assertions for case-sensitivity, empty-name, and mixed cases:
+grep -c "SendCommandCallCount()).To(Equal(1))" watcher/github-build/pkg/watcher_test.go
+# Expected: ≥3 lines (lowercase, empty, mixed)
+
+# Confirm mixed-case test verifies CI not Dependabot drives the command:
+grep -E 'NotTo\(ContainSubstring\("Graph Update"\)\)' watcher/github-build/pkg/watcher_test.go
+# Expected: ≥1 line
 </verification>
