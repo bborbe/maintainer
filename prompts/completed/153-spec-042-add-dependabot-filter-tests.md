@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [042-github-build-watcher-filter-dependabot-graph-update]
 summary: Added 5 Dependabot graph-update workflow filter test cases to watcher_test.go covering pure filtering, mixed CI+Dependabot, case sensitivity guard, and empty-name guard
 container: maintainer-exec-153-spec-042-add-dependabot-filter-tests
@@ -7,7 +7,7 @@ dark-factory-version: v0.169.0
 created: "2026-05-24T21:30:00Z"
 queued: "2026-05-24T20:37:11Z"
 started: "2026-05-24T20:38:43Z"
-completed: "2026-05-24T20:40:22Z"
+completed: "2026-05-24T20:40:34Z"
 branch: dark-factory/github-build-watcher-filter-dependabot-graph-update
 ---
 
