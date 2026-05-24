@@ -1,8 +1,12 @@
 ---
-status: approved
+status: completed
 spec: [042-github-build-watcher-filter-dependabot-graph-update]
+container: maintainer-exec-154-spec-042-add-dependabot-filter-changelog
+dark-factory-version: v0.169.0
 created: "2026-05-24T21:30:00Z"
 queued: "2026-05-24T20:37:11Z"
+started: "2026-05-24T20:40:36Z"
+completed: "2026-05-24T22:42:23Z"
 branch: dark-factory/github-build-watcher-filter-dependabot-graph-update
 ---
 
