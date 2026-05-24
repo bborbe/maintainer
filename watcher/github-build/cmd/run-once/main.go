@@ -15,11 +15,14 @@ import (
 	libkafka "github.com/bborbe/kafka"
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
+	"github.com/golang/glog"
 
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/wildcard"
 )
 
 func main() {
@@ -75,12 +78,27 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer httpClient.CloseIdleConnections()
 
+	ghClient := pkg.NewGitHubClient(httpClient)
+
+	var resolved pkg.AllowlistSnapshot
+	if wildcard.HasWildcard(repoAllowlist) {
+		expander := wildcard.NewExpander(ghClient)
+		resolvedSet := wildcard.NewResolvedAllowlist(expander, repoAllowlist)
+		if err := resolvedSet.Refresh(ctx); err != nil {
+			glog.Warningf("initial wildcard refresh failed: %v", err)
+		}
+		resolved = resolvedSet
+	} else {
+		resolved = pkg.NewStaticSnapshot(repoAllowlist)
+	}
+
 	w, cleanup, err := factory.CreateWatcher(
 		ctx,
-		httpClient,
+		ghClient,
 		a.KafkaBrokers,
 		a.Stage,
 		repoAllowlist,
+		resolved,
 		"/data/cursor.json",
 		a.BuildAssignee,
 		a.BuildTaskStatus,

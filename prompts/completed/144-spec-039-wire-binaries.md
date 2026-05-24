@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [039-expand-watcher-github-build-org-wildcard]
+summary: Wire wildcard package into both watcher entry points with snapshot-based allowlist polling
+container: maintainer-exec-144-spec-039-wire-binaries
+dark-factory-version: v0.169.0
 created: "2026-05-24T10:00:01Z"
 queued: "2026-05-24T10:05:07Z"
+started: "2026-05-24T10:28:04Z"
+completed: "2026-05-24T10:32:25Z"
 ---
 
 <summary>
