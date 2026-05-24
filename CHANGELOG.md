@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- fix(agent/pr-reviewer): capture combined stdout+stderr from `gh auth setup-git` and include the scrubbed bounded tail (last 4 KiB, GH_TOKEN value replaced with `***`) in the wrapped error so operators can diagnose pod-startup auth failures via the OpenClaw task `## Failure` body — previously the gh output was dropped entirely and only `gh auth setup-git failed` surfaced
+
 ## v0.26.9
 
 - fix(watcher/github-build): suppress noisy stack trace when Dependabot internal graph-update workflows (`Graph Update:` or `Dependabot Updates`) are filtered out — these runs must not affect the red/green state machine
