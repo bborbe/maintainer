@@ -1,7 +1,12 @@
 ---
-status: approved
+status: committing
+summary: 'Full code review of watcher/github-pr produced 9 fix prompts: 4 Critical (context cancellation, HTTP handler, factory pattern, test coverage) and 5 Important (Ginkgo suite, metrics, error wrapping, empty publisher, SRP refactor)'
+container: maintainer-exec-148-code-review-watcher-github-pr
+dark-factory-version: v0.169.0
 created: "2026-05-24T09:25:48Z"
 queued: "2026-05-24T10:58:10Z"
+started: "2026-05-24T11:16:03Z"
+completed: "2026-05-24T11:24:30Z"
 ---
 
 <summary>
