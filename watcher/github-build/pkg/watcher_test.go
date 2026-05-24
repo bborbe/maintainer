@@ -1134,4 +1134,133 @@ var _ = Describe("Watcher", func() {
 			},
 		)
 	})
+
+	Describe("Dependabot graph-update workflow filter", func() {
+		var t0 time.Time
+
+		BeforeEach(func() {
+			t0 = time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC)
+			ghClient.GetDefaultBranchReturns("main", nil)
+		})
+
+		Context("pure Dependabot case: Graph Update: go_modules", func() {
+			It("emits zero CreateTaskCommands (workflow filtered)", func() {
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "Graph Update: go_modules",
+						HeadSHA:    "sha-dep",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/99",
+						CreatedAt:  t0,
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				// Zero tasks — the Dependabot workflow is filtered out
+				Expect(createSender.SendCommandCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("pure Dependabot case: Dependabot Updates", func() {
+			It("emits zero CreateTaskCommands (workflow filtered)", func() {
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 2,
+						Name:       "Dependabot Updates",
+						HeadSHA:    "sha-dep2",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/88",
+						CreatedAt:  t0,
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(createSender.SendCommandCallCount()).To(Equal(0))
+			})
+		})
+
+		Context("mixed case: real CI fails alongside Graph Update: go_modules", func() {
+			It(
+				"emits exactly one CreateTaskCommand and the body references the CI workflow, not the Dependabot one",
+				func() {
+					ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+						{
+							WorkflowID: 1,
+							Name:       "Graph Update: go_modules",
+							HeadSHA:    "sha-ci",
+							Conclusion: "failure",
+							HTMLURL:    "https://github.com/owner/repo/actions/runs/99",
+							CreatedAt:  t0,
+						},
+						{
+							WorkflowID: 2,
+							Name:       "CI",
+							HeadSHA:    "sha-ci",
+							Conclusion: "failure",
+							HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+							CreatedAt:  t0.Add(time.Second),
+						},
+					}, nil)
+
+					w := makeWatcher([]string{"owner/repo"})
+					Expect(w.Poll(ctx)).To(Succeed())
+
+					Expect(createSender.SendCommandCallCount()).To(Equal(1))
+					_, cmd := createSender.SendCommandArgsForCall(0)
+					Expect(cmd.Frontmatter["repo"]).To(Equal("owner/repo"))
+
+					// CRITICAL: the emitted task must derive from the CI workflow, NOT the Dependabot one.
+					// The task body carries the workflow name in the table; verify it does not contain "Graph Update".
+					taskBody := cmd.Body
+					Expect(taskBody).NotTo(ContainSubstring("Graph Update"))
+					Expect(taskBody).To(ContainSubstring("CI"))
+				},
+			)
+		})
+
+		Context("case sensitivity guard: lowercase graph update: x", func() {
+			It("emits one CreateTaskCommand (lowercase does not match filter)", func() {
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "graph update: x",
+						HeadSHA:    "sha-lower",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+						CreatedAt:  t0,
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			})
+		})
+
+		Context("nil/empty name guard: empty string workflow name", func() {
+			It("emits one CreateTaskCommand (empty name is non-matching, does not crash)", func() {
+				ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+					{
+						WorkflowID: 1,
+						Name:       "",
+						HeadSHA:    "sha-empty",
+						Conclusion: "failure",
+						HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+						CreatedAt:  t0,
+					},
+				}, nil)
+
+				w := makeWatcher([]string{"owner/repo"})
+				Expect(w.Poll(ctx)).To(Succeed())
+
+				Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			})
+		})
+	})
 })
