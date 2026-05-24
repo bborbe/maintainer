@@ -1,5 +1,5 @@
 ---
-status: committing
+status: completed
 spec: [040-github-build-watcher-task-suffix]
 summary: Created filename_internal_test.go with DescribeTable tests for computeBuildTitle taskSuffix parameter covering empty/dev/prod suffix cases and truncation preserving suffix
 container: maintainer-exec-150-spec-040-task-suffix-tests
@@ -7,7 +7,7 @@ dark-factory-version: v0.169.0
 created: "2026-05-24T19:00:00Z"
 queued: "2026-05-24T19:05:04Z"
 started: "2026-05-24T19:09:11Z"
-completed: "2026-05-24T19:12:00Z"
+completed: "2026-05-24T19:12:13Z"
 branch: dark-factory/github-build-watcher-task-suffix
 ---
 
