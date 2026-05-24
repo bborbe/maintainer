@@ -110,9 +110,11 @@ type noopAuthSetup struct{}
 
 func (n *noopAuthSetup) Setup(_ context.Context) error { return nil }
 
-// NewGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
-// exec function for testing. Do not use in production code.
-func NewGhAuthSetupGitWithExecFunc(
+// newGhAuthSetupGitWithExecFunc constructs a GhAuthSetupGit with an injected
+// exec function for testing. Exposed to external _test packages via
+// export_test.go (NewGhAuthSetupGitWithExecFunc); kept unexported here so
+// production callers cannot bypass the production exec wrapper.
+func newGhAuthSetupGitWithExecFunc(
 	ghToken string,
 	execFunc func(ctx context.Context, name string, args ...string) ([]byte, error),
 ) Configurator {
