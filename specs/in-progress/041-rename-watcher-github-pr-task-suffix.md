@@ -1,10 +1,11 @@
 ---
-status: generating
+status: prompted
 tags:
     - dark-factory
     - draft
 approved: "2026-05-24T19:40:13Z"
 generating: "2026-05-24T19:40:13Z"
+prompted: "2026-05-24T19:42:18Z"
 branch: dark-factory/rename-watcher-github-pr-task-suffix
 ---
 

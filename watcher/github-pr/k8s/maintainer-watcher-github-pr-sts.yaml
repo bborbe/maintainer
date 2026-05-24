@@ -54,8 +54,8 @@ spec:
               value: '{{"TRUSTED_AUTHORS" | env}}'
             - name: REPO_ALLOWLIST
               value: '{{"REPO_ALLOWLIST" | env}}'
-            - name: WATCHER_GITHUB_PR_TASK_SUFFIX
-              value: '{{ "WATCHER_GITHUB_PR_TASK_SUFFIX" | env }}'
+            - name: TASK_SUFFIX
+              value: '{{ "TASK_SUFFIX" | env }}'
             - name: APP_ID
               value: '{{ "WATCHER_GITHUB_PR_APP_ID" | env }}'
             - name: INSTALLATION_ID

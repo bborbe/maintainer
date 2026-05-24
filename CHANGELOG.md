@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.8
+
+- chore: Rename `WATCHER_GITHUB_PR_TASK_SUFFIX` to `TASK_SUFFIX` in watcher/github-pr to match build watcher unified naming — breaking change, operator must update env files at deploy time
+
 ## v0.26.7
 
 - feat(watcher/github-build): add `TASK_SUFFIX` env var to disambiguate build-failure task filenames per stage, preventing dev/prod filename collisions in the shared vault
