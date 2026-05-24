@@ -1,6 +1,7 @@
 ---
-status: draft
+status: approved
 created: "2026-05-24T09:25:48Z"
+queued: "2026-05-24T10:58:10Z"
 ---
 
 <summary>
@@ -109,5 +110,5 @@ Print a summary of findings and generated prompt files.
 
 <verification>
 This prompt only generates markdown files — no code changes, no build needed.
-ls prompts/review-watcher-github-pr-*.md
+ls prompts/review-watcher-github-pr-*.md 2>/dev/null || echo "no fix prompts generated (clean review)"
 </verification>

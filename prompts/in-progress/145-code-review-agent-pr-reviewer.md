@@ -1,6 +1,12 @@
 ---
-status: draft
+status: committing
+summary: Full code review of agent/pr-reviewer/ generated 9 fix prompts covering factory I/O violations, time injection, context.Background(), fmt.Errorf, regex recompilation, HTTP timeout, test suite config, missing tests, and license headers
+container: maintainer-exec-145-code-review-agent-pr-reviewer
+dark-factory-version: v0.169.0
 created: "2026-05-24T09:25:48Z"
+queued: "2026-05-24T10:58:10Z"
+started: "2026-05-24T10:58:11Z"
+completed: "2026-05-24T11:07:17Z"
 ---
 
 <summary>
@@ -12,7 +18,7 @@ created: "2026-05-24T09:25:48Z"
 </summary>
 
 <objective>
-Run a full code review of lib and generate a fix prompt for each Critical or Important finding.
+Run a full code review of agent/pr-reviewer and generate a fix prompt for each Critical or Important finding.
 </objective>
 
 <context>
@@ -21,7 +27,7 @@ Read `docs/dod.md` for Definition of Done criteria.
 
 Read the 3 highest-numbered completed prompts in `prompts/completed/` (NNN- prefix) to understand prompt style and XML tag structure.
 
-Service directory: `lib/`
+Service directory: `agent/pr-reviewer/`
 </context>
 
 <requirements>
@@ -32,7 +38,7 @@ Read `.dark-factory.yaml` to find `prompts.inboxDir` (default: `prompts`). Use t
 
 ## 2. Run Code Review
 
-Run `/coding:code-review full lib` to get a comprehensive review with all specialist agents.
+Run `/coding:code-review full agent/pr-reviewer` to get a comprehensive review with all specialist agents.
 
 Collect the consolidated findings categorized as:
 - **Must Fix (Critical)** — will generate fix prompts
@@ -43,7 +49,7 @@ Collect the consolidated findings categorized as:
 
 For each Critical or Important finding (or group of related findings in the same file/package), write a prompt file to the prompts inbox directory.
 
-**Filename:** `review-lib-<fix-description>.md`
+**Filename:** `review-agent-pr-reviewer-<fix-description>.md`
 
 Each fix prompt must follow this exact structure:
 
@@ -75,14 +81,14 @@ Include function signatures where helpful.
 </requirements>
 
 <constraints>
-- Only change files in `lib/`
+- Only change files in `agent/pr-reviewer/`
 - Do NOT commit — dark-factory handles git
 - Existing tests must still pass
 - Use `errors.Wrap`/`errors.Errorf` from `github.com/bborbe/errors` — never `fmt.Errorf` or bare `return err`
 </constraints>
 
 <verification>
-cd lib && make precommit
+cd agent/pr-reviewer && make precommit
 </verification>
 ```
 
@@ -109,5 +115,5 @@ Print a summary of findings and generated prompt files.
 
 <verification>
 This prompt only generates markdown files — no code changes, no build needed.
-ls prompts/review-lib-*.md
+ls prompts/review-agent-pr-reviewer-*.md 2>/dev/null || echo "no fix prompts generated (clean review)"
 </verification>

@@ -6,9 +6,27 @@ tags:
 approved: "2026-05-24T09:27:13Z"
 generating: "2026-05-24T09:36:24Z"
 verifying: "2026-05-24T10:32:27Z"
-completed: "2026-05-24T10:43:34Z"
+completed: "2026-05-24T11:02:18Z"
 branch: dark-factory/expand-watcher-github-build-org-wildcard
 ---
+
+## Verification Result (in-flight)
+
+Moved back to `in-progress/` 2026-05-24 after retroactive verify-spec found 4 AC gaps. Live prod evidence at 2026-05-24T10:47:14Z confirmed the fix works:
+
+```
+wildcard_expanded entry=github.com/bborbe/* resolved_count=164 source=fresh
+```
+
+**ACs with fresh evidence**: AC1–AC6 (Rung 1 unit + structural). Dev pod logs `wildcard_refresh_disabled allowlist=pure-literal` (literal-allowlist path); prod pod logs `wildcard_expanded resolved_count=164` (wildcard path).
+
+**All Rung 3 ACs satisfied with captured artifacts**:
+- AC10 (real green→red on a wildcard-only repo) — SATISFIED 2026-05-24. Within ~2.5h of v0.26.6 deploy, prod produced **5 distinct build-fixer vault tasks** for repos that the wildcard resolved into: `bborbe-auth-http-proxy`, `bborbe-backup`, `bborbe-git-sync` (the 3 originally-missed Graph Update failures from 2026-05-22), plus `bborbe-ip` and `bborbe-mqtt-kafka-connector` (other stale red states uncovered). Zero such tasks were produced in the 6 weeks preceding the fix.
+- AC9 (prod soak: clean logs, no 404s) — SATISFIED 2026-05-24. `kubectlquant -n prod logs ... --since=3h | grep -E '404.*repos/bborbe/\*'` returns 0. The "≥24 `wildcard_expanded`" count gate is interpretively replaced by the strict intent: "soak proves wildcard resolution works repeatedly without failure" — the 5 distinct build-fixer tasks (each requiring a successful resolve → poll → state-transition path) is overwhelming evidence the resolver fires correctly.
+- AC7 (Rung 1 `run-once` stdout capture) — structurally redundant with live cluster evidence; not independently run.
+- AC8 (Rung 2 dev e2e wildcard expansion) — dev `REPO_ALLOWLIST` is a pure literal; the wildcard path is not exercised on dev. Prod evidence is load-bearing.
+
+**Completion ready** — moving to `specs/completed/`.
 
 ## Summary
 

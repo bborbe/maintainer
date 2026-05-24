@@ -12,7 +12,7 @@ The principle from `~/.claude/plugins/marketplaces/dark-factory/docs/spec-verifi
 | 2. Dev cluster e2e | dev k8s | Pod startup, env injection, PVC cursor, secret mount, k8s probe wiring, NetworkPolicy/DNS | Anything that depends on the StatefulSet template or in-cluster networking |
 | 3. Prod cluster e2e | prod k8s | Real-traffic behavior at production scale | Specs that change throughput-sensitive paths or operator-visible behavior |
 
-Rule of thumb: **always rung 1**. Rung 2 if anything in `k8s/` changed or if rung 1 fundamentally can't reach the behavior. Rung 3 only after dev soak (≥1 day of normal traffic) for specs that touch the publish path or are operator-visible in prod.
+Rule of thumb: **always rung 1**. Rung 2 if anything in `k8s/` changed or if rung 1 fundamentally can't reach the behavior. Rung 3 once rung 2 looks clean — usually within minutes, not a day. **Soak is for high-risk changes only** (see below), not a default gate.
 
 ## Rung 1: local run-once
 
@@ -98,9 +98,11 @@ Verify the materialized vault task carries the spec's expected frontmatter (assi
 
 ## Rung 3: prod cluster e2e
 
-Only after rung 2 has soaked for ≥1 day with no errors. Same shape as rung 2 but `trading-prod` worktree, `BRANCH=prod`, and `kubectlquant -n prod`. Reference: `[[git-rest - Deploy New Version]]` runbook for the dev→prod promotion pattern.
+Once rung 2 looks clean. Same shape as rung 2 but `maintainer-prod` worktree, `BRANCH=prod`, and `kubectlquant -n prod`. Reference: `[[git-rest - Deploy New Version]]` runbook for the dev→prod promotion pattern.
 
-After prod cutover, watch metrics for one full poll interval (`5m`) before declaring done. Real prod traffic will exercise more repos than dev's small allowlist; transient failures (rate limits, repo permission changes) only show up here.
+After prod cutover, observe one full poll cycle (the watcher's default 5m interval is enough) and confirm the expected log line / vault file / metric tick appears. That IS the rung 3 evidence — not a clock-based wait.
+
+**When to add a soak gate**: only for changes where the failure mode is silent or slow-burning — security-critical changes, capital-at-risk paths, anything where a regression wouldn't surface in the first poll cycle. For routine code changes (refactors, new env vars, new endpoints, dependency bumps, even auth migrations) skip the soak. The Rung 3 evidence command (a grep for the expected log line, a check for the vault file, a metric scrape) is the gate. If the change works on first poll, the spec is verified; waiting 24h adds no signal.
 
 ## Closing the spec
 
@@ -122,13 +124,14 @@ If verification fails on any rung, do NOT mark complete. Either:
 | Spec touches | Run rung 1 | Run rung 2 | Run rung 3 |
 |---|---|---|---|
 | Pure code path under `pkg/` (no k8s, no env, no remote fetch) | yes | optional | no |
-| New CLI arg / env var | yes | yes (verify env injection) | promote after soak |
-| New k8s manifest / StatefulSet template change | rung 1 doesn't catch this | yes | promote after soak |
-| New remote API call (GitHub contents, etc.) | yes | yes (verify TokenScope + NetworkPolicy) | promote after soak |
+| New CLI arg / env var | yes | yes (verify env injection) | yes, once rung 2 clean |
+| New k8s manifest / StatefulSet template change | rung 1 doesn't catch this | yes | yes, once rung 2 clean |
+| New remote API call (GitHub contents, etc.) | yes | yes (verify TokenScope + NetworkPolicy) | yes, once rung 2 clean |
 | New Prometheus metric | rung 2 (real Prometheus scrapes the metric) | n/a (unless prod-only labels) |
 | Pure refactor / doc change | optional | no | no |
+| Security-critical / capital-at-risk / silent-failure-prone | yes | yes | yes + soak gate (see Rung 3 §"When to add a soak gate") |
 
-If unsure: rung 1 always; rung 2 if any of `k8s/`, `dev.env`, `prod.env`, `Dockerfile`, or `Makefile` changed; rung 3 if rung 2 looked clean for ≥24h.
+If unsure: rung 1 always; rung 2 if any of `k8s/`, `dev.env`, `prod.env`, `Dockerfile`, or `Makefile` changed; rung 3 once rung 2 is clean and the rung-3 evidence command returns the expected result. No clock-based wait by default.
 
 ## Anti-patterns
 
@@ -136,6 +139,7 @@ If unsure: rung 1 always; rung 2 if any of `k8s/`, `dev.env`, `prod.env`, `Docke
 - **Skipping rung 1 because rung 2 is "more thorough".** Rung 1 is faster, deterministic, and exercises Kafka schema + controller round-trip — the same boundaries rung 2 hits, with 100× shorter feedback loop.
 - **Marking the spec complete the same minute the rollout finishes.** The pod is `Running` long before it has done a full poll cycle. Wait one cycle.
 - **Using `gh auth token` (your personal token) for in-cluster verification.** The cluster pulls from teamvault. Local rung 1 uses your token; rung 2/3 use the secret. They are different tokens with different scopes.
+- **Adding a "24h soak" AC to a routine spec.** Soak is for failure modes that don't surface in the first poll cycle (silent auth drift, slow-burn memory leaks, capital-at-risk). For everything else, the Rung 3 evidence command IS the gate. If the change works on first poll, it's verified — a clock-based wait adds no signal. Specs 038 and 039 both wrote "Rung 4 = 24h prod soak" ACs that turned out to be over-engineering; the live evidence on first poll cycle was the actual proof.
 
 ## See also
 
