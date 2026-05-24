@@ -1,7 +1,11 @@
 ---
-status: approved
+status: committing
+container: maintainer-exec-146-code-review-lib
+dark-factory-version: v0.169.0
 created: "2026-05-24T09:25:48Z"
 queued: "2026-05-24T10:58:10Z"
+started: "2026-05-24T11:07:32Z"
+completed: "2026-05-24T11:07:55Z"
 ---
 
 <summary>
