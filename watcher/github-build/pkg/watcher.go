@@ -63,6 +63,7 @@ func NewWatcher(
 	taskPhase string,
 	maintenanceLoader maintenance.Loader,
 	maxTitleLen int,
+	taskSuffix string,
 ) Watcher {
 	return &buildWatcher{
 		githubClient:      githubClient,
@@ -76,6 +77,7 @@ func NewWatcher(
 		taskPhase:         taskPhase,
 		maintenanceLoader: maintenanceLoader,
 		maxTitleLen:       maxTitleLen,
+		taskSuffix:        taskSuffix,
 	}
 }
 
@@ -91,6 +93,7 @@ type buildWatcher struct {
 	taskPhase         string
 	maintenanceLoader maintenance.Loader
 	maxTitleLen       int
+	taskSuffix        string
 }
 
 func (w *buildWatcher) Poll(ctx context.Context) error {
@@ -328,7 +331,14 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		fm["phase"] = taskPhase
 	}
 	return task.CreateCommand{
-		Title:          computeBuildTitle("github", owner, repo, episodeSHA, w.maxTitleLen),
+		Title: computeBuildTitle(
+			"github",
+			owner,
+			repo,
+			episodeSHA,
+			w.maxTitleLen,
+			w.taskSuffix,
+		),
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
 		Frontmatter:    fm,
 		Body:           body,

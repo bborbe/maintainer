@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.7
+
+- feat(watcher/github-build): add `TASK_SUFFIX` env var to disambiguate build-failure task filenames per stage, preventing dev/prod filename collisions in the shared vault
+
 ## v0.26.6
 
 - fix(watcher/github-build): expand owner-level wildcard allowlist entries (e.g. `github.com/bborbe/*`) into concrete repos at startup and refresh hourly — closes the silent-zero-polls bug introduced by the v0.25.0 wildcard rollout (spec 039)

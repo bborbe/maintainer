@@ -67,6 +67,8 @@ spec:
               value: '{{"WATCHER_GITHUB_BUILD_TASK_STATUS" | env}}'
             - name: TASK_PHASE
               value: '{{"WATCHER_GITHUB_BUILD_TASK_PHASE" | env}}'
+            - name: TASK_SUFFIX
+              value: '{{"TASK_SUFFIX" | env}}'
           image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-build:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:

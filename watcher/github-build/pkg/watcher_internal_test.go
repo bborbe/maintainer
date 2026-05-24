@@ -34,8 +34,10 @@ var _ = Describe("splitRepoKey", func() {
 var _ = Describe("computeBuildTitle", func() {
 	DescribeTable(
 		"produces correct title",
-		func(provider, owner, repo, sha string, maxTitle int, want string) {
-			Expect(computeBuildTitle(provider, owner, repo, sha, maxTitle)).To(Equal(want))
+		func(provider, owner, repo, sha string, maxTitle int, taskSuffix, want string) {
+			Expect(
+				computeBuildTitle(provider, owner, repo, sha, maxTitle, taskSuffix),
+			).To(Equal(want))
 		},
 		Entry(
 			"normal github repo",
@@ -44,6 +46,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"maintainer",
 			"5886450abcdef",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - bborbe-maintainer - 5886450",
 		),
 		Entry(
@@ -53,6 +56,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"repo",
 			"abc12",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - org-repo - abc12",
 		),
 		Entry(
@@ -62,6 +66,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"repo",
 			"abc1234",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - org-repo - abc1234",
 		),
 		Entry(
@@ -71,6 +76,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"repo",
 			"abc1234xyz",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - org-repo - abc1234",
 		),
 		Entry(
@@ -80,6 +86,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"MyRepo",
 			"abcdef0",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - myorg-myrepo - abcdef0",
 		),
 		Entry(
@@ -89,6 +96,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"my.repo",
 			"abcdef0",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - org-my-repo - abcdef0",
 		),
 		Entry(
@@ -98,6 +106,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"my:repo",
 			"abcdef0",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - org-my-repo - abcdef0",
 		),
 		Entry(
@@ -107,6 +116,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"my-repo",
 			"abcdef0",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure github - my-org-my-repo - abcdef0",
 		),
 		Entry(
@@ -116,6 +126,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"svc",
 			"a1b2c3d",
 			DefaultMaxTitleLen,
+			"",
 			"Build Failure bitbucket - team-svc - a1b2c3d",
 		),
 		Entry(
@@ -125,6 +136,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"maintainer",
 			"5886450abcdef",
 			40,
+			"",
 			"Build Failure github - bborbe-maintainer",
 		),
 		Entry(
@@ -134,6 +146,7 @@ var _ = Describe("computeBuildTitle", func() {
 			"repo",
 			"abc1234",
 			200,
+			"",
 			"Build Failure github - org-repo - abc1234",
 		),
 	)
@@ -179,7 +192,7 @@ var _ = Describe("task.CreateCommand wire format", func() {
 	// Prevents future drift between watcher's slug rules and lib's Title validator.
 	DescribeTable("computeBuildTitle output passes task.CreateCommand.Validate",
 		func(provider, owner, repo, sha string) {
-			title := computeBuildTitle(provider, owner, repo, sha, DefaultMaxTitleLen)
+			title := computeBuildTitle(provider, owner, repo, sha, DefaultMaxTitleLen, "")
 			cmd := task.CreateCommand{
 				TaskIdentifier: agentlib.TaskIdentifier("00000000-0000-0000-0000-000000000000"),
 				Title:          title,
