@@ -44,11 +44,6 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
-            - name: GH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: maintainer-watcher-github-pr
-                  key: GH_TOKEN
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
