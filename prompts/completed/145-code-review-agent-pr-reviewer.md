@@ -1,12 +1,12 @@
 ---
-status: committing
+status: completed
 summary: Full code review of agent/pr-reviewer/ generated 9 fix prompts covering factory I/O violations, time injection, context.Background(), fmt.Errorf, regex recompilation, HTTP timeout, test suite config, missing tests, and license headers
 container: maintainer-exec-145-code-review-agent-pr-reviewer
 dark-factory-version: v0.169.0
 created: "2026-05-24T09:25:48Z"
 queued: "2026-05-24T10:58:10Z"
 started: "2026-05-24T10:58:11Z"
-completed: "2026-05-24T11:07:17Z"
+completed: "2026-05-24T11:07:29Z"
 ---
 
 <summary>
