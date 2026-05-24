@@ -79,11 +79,15 @@ func (g *ghAuthSetupGit) Setup(ctx context.Context) error {
 // the combined stdout+stderr alongside the exec error so the caller can scrub
 // secrets out of the output before including it in the surfaced error.
 //
-// ghToken is exported as GH_TOKEN in the subprocess env so gh can authenticate
-// without relying on `gh auth login` state in ~/.config/gh/hosts.yml. When
-// ghToken is empty the env entry is omitted so the subprocess inherits the
-// pod env unchanged (preserving the prior behavior for tests that don't care
-// about auth, e.g. `true` / `false`).
+// When ghToken is non-empty the subprocess receives a minimal allowlisted env
+// (HOME, PATH, GH_TOKEN). gh needs HOME to locate ~/.config/gh and PATH to
+// resolve `git` for `gh auth setup-git`. Restricting the env this way prevents
+// other pod secrets (DATABASE_URL, ANTHROPIC_AUTH_TOKEN, GITHUB_APP_PRIVATE_KEY,
+// etc.) from leaking into the gh subprocess or anything gh shells out to.
+//
+// When ghToken is empty the subprocess inherits the parent env unchanged so
+// non-auth callers (tests using `true` / `false`) keep working without
+// special-casing.
 func defaultExecFunc(
 	ctx context.Context,
 	ghToken string,
@@ -93,7 +97,11 @@ func defaultExecFunc(
 	// #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input
 	cmd := exec.CommandContext(ctx, name, args...)
 	if ghToken != "" {
-		cmd.Env = append(os.Environ(), "GH_TOKEN="+ghToken)
+		cmd.Env = []string{
+			"HOME=" + os.Getenv("HOME"),
+			"PATH=" + os.Getenv("PATH"),
+			"GH_TOKEN=" + ghToken,
+		}
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {

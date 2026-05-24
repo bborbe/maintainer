@@ -163,7 +163,10 @@ var _ = Describe("DefaultExecFunc", func() {
 		// "You are not logged into any GitHub hosts" even though the IAT was
 		// minted successfully and held in g.ghToken. Use `sh -c 'echo $GH_TOKEN'`
 		// as a portable probe — exec inherits PATH and `sh` exists on Linux + macOS.
-		const token = "ghs_TESTTOKEN_DO_NOT_LEAK" //nolint:gosec // test literal, not a real credential
+		// Hyphen-after-prefix breaks the real-IAT regex (`ghs_[A-Za-z0-9_]+`) so
+		// gitleaks / TruffleHog / GitHub secret-scanning don't false-positive on this literal.
+		// gosec G101 still trips on the var name; this is a test probe value, not a credential.
+		const token = "ghs-TEST-TOKEN-NOT-A-REAL-IAT" //nolint:gosec // test literal echoed by sh probe, not a real credential
 		out, err := githubauth.DefaultExecFunc(
 			context.Background(),
 			token,
