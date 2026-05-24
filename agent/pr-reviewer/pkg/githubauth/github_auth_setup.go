@@ -7,6 +7,7 @@ package githubauth
 import (
 	"context"
 	stderrors "errors"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -30,10 +31,17 @@ type Configurator interface {
 // NewGhAuthSetupGit returns a Configurator that invokes `gh auth setup-git`
 // when ghToken is non-empty. When ghToken is empty the Setup call is a no-op
 // so pods that target non-GitHub hosts start cleanly without a token.
+//
+// The token is bound into the exec wrapper here so the gh subprocess receives
+// GH_TOKEN in its env — without that, gh inherits the pod env (which has no
+// token under GitHub App auth) and dies with "You are not logged into any
+// GitHub hosts" even though the IAT was minted successfully.
 func NewGhAuthSetupGit(ghToken string) Configurator {
 	return &ghAuthSetupGit{
-		ghToken:  ghToken,
-		execFunc: defaultExecFunc,
+		ghToken: ghToken,
+		execFunc: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return defaultExecFunc(ctx, ghToken, name, args...)
+		},
 	}
 }
 
@@ -70,9 +78,23 @@ func (g *ghAuthSetupGit) Setup(ctx context.Context) error {
 // defaultExecFunc is the production exec.CommandContext wrapper. It returns
 // the combined stdout+stderr alongside the exec error so the caller can scrub
 // secrets out of the output before including it in the surfaced error.
-func defaultExecFunc(ctx context.Context, name string, args ...string) ([]byte, error) {
+//
+// ghToken is exported as GH_TOKEN in the subprocess env so gh can authenticate
+// without relying on `gh auth login` state in ~/.config/gh/hosts.yml. When
+// ghToken is empty the env entry is omitted so the subprocess inherits the
+// pod env unchanged (preserving the prior behavior for tests that don't care
+// about auth, e.g. `true` / `false`).
+func defaultExecFunc(
+	ctx context.Context,
+	ghToken string,
+	name string,
+	args ...string,
+) ([]byte, error) {
 	// #nosec G204 -- binary is hardcoded "gh" and args are hardcoded ["auth", "setup-git"]; no user input
 	cmd := exec.CommandContext(ctx, name, args...)
+	if ghToken != "" {
+		cmd.Env = append(os.Environ(), "GH_TOKEN="+ghToken)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, errors.Wrapf(ctx, err, "%s %v failed", name, args)

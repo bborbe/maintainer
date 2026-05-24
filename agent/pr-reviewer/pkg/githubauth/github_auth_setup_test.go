@@ -143,17 +143,51 @@ var _ = Describe("DefaultExecFunc", func() {
 	It("returns nil error and empty output when the command succeeds", func() {
 		// `true` is in /bin on alpine/Linux containers and in /usr/bin on macOS;
 		// rely on PATH resolution rather than hardcoding either prefix
-		out, err := githubauth.DefaultExecFunc(context.Background(), "true")
+		out, err := githubauth.DefaultExecFunc(context.Background(), "", "true")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(out).To(BeEmpty())
 	})
 
 	It("returns an error and captured output when the command fails", func() {
-		out, err := githubauth.DefaultExecFunc(context.Background(), "false")
+		out, err := githubauth.DefaultExecFunc(context.Background(), "", "false")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed"))
 		// `false` produces no output but the return value must still be a slice
 		// (not nil) so callers can safely string-convert it.
 		Expect(out).NotTo(BeNil())
 	})
+
+	It("exports GH_TOKEN into the subprocess env when token is non-empty", func() {
+		// Mirrors the prod failure mode: without GH_TOKEN exported into the
+		// gh subprocess env, `gh auth setup-git` exits with
+		// "You are not logged into any GitHub hosts" even though the IAT was
+		// minted successfully and held in g.ghToken. Use `sh -c 'echo $GH_TOKEN'`
+		// as a portable probe — exec inherits PATH and `sh` exists on Linux + macOS.
+		const token = "ghs_TESTTOKEN_DO_NOT_LEAK" //nolint:gosec // test literal, not a real credential
+		out, err := githubauth.DefaultExecFunc(
+			context.Background(),
+			token,
+			"sh", "-c", "echo $GH_TOKEN",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(out))).To(Equal(token))
+	})
+
+	It(
+		"does not export GH_TOKEN when token is empty so the subprocess inherits the parent env unchanged",
+		func() {
+			// Defense in depth for the noop / empty-token path: if we set
+			// "GH_TOKEN=" the subprocess sees an empty token (different from
+			// unset) which can change gh's behavior. Verify the empty branch
+			// leaves the env entry absent. We probe with `sh -c 'env | grep ...'`
+			// and expect either no match (rc=1 from grep) or an unchanged value
+			// from the parent env — never a forced empty assignment.
+			out, _ := githubauth.DefaultExecFunc(
+				context.Background(),
+				"",
+				"sh", "-c", "env | grep -c '^GH_TOKEN=$' || true",
+			)
+			Expect(strings.TrimSpace(string(out))).To(Equal("0"))
+		},
+	)
 })
