@@ -1,10 +1,12 @@
 ---
-status: prompted
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-05-24T09:27:13Z"
 generating: "2026-05-24T09:36:24Z"
+verifying: "2026-05-24T10:32:27Z"
+completed: "2026-05-24T10:43:34Z"
 branch: dark-factory/expand-watcher-github-build-org-wildcard
 ---
 
