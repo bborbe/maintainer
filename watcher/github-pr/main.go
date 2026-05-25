@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/bborbe/cqrs/base"
@@ -99,6 +100,14 @@ func parseBackfillDuration(ctx context.Context, raw string) (libtime.Duration, e
 	return *parsed, nil
 }
 
+func getEnvInt(name string) int64 {
+	v, err := strconv.ParseInt(os.Getenv(name), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
 func main() {
 	app := &application{}
 	os.Exit(service.Main(context.Background(), app, &app.SentryDSN, &app.SentryProxy))
@@ -127,6 +136,58 @@ type application struct {
 	TaskSuffix       string           `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"       usage:"Optional suffix appended to PR task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
 
 	TriggerHandler http.Handler
+}
+
+// resolveAuth determines the GitHub auth mode from environment variables and returns
+// an authenticated *http.Client. App auth wins when APP_ID + INSTALLATION_ID + PEM_KEY
+// are all set; otherwise GH_TOKEN PAT fallback is used.
+func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
+	appID := getEnvInt("APP_ID")
+	installationID := getEnvInt("INSTALLATION_ID")
+	pemKey := []byte(os.Getenv("PEM_KEY"))
+	token := os.Getenv("GH_TOKEN")
+
+	appPartial := (appID != 0) || (installationID != 0) || (len(pemKey) != 0)
+	appComplete := (appID != 0) && (installationID != 0) && (len(pemKey) != 0)
+	if appPartial && !appComplete {
+		var missing []string
+		if appID == 0 {
+			missing = append(missing, "APP_ID")
+		}
+		if installationID == 0 {
+			missing = append(missing, "INSTALLATION_ID")
+		}
+		if len(pemKey) == 0 {
+			missing = append(missing, "PEM_KEY")
+		}
+		return nil, errors.Errorf(
+			ctx,
+			"watcher auth: partial GitHub App config — missing %v; set all three or none",
+			missing,
+		)
+	}
+
+	if appComplete {
+		if token != "" {
+			glog.Warningf(
+				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
+			)
+		}
+		glog.Infof(
+			"watcher auth mode=github-app app_id=%d installation_id=%d",
+			appID,
+			installationID,
+		)
+		return factory.CreateGitHubAppClient(ctx, appID, installationID, pemKey)
+	}
+	if token != "" {
+		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
+		return factory.CreateGitHubPATClient(ctx, token), nil
+	}
+	return nil, errors.Errorf(
+		ctx,
+		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
+	)
 }
 
 func (a *application) validateConfig(ctx context.Context) error {
@@ -195,44 +256,46 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	glog.V(2).Infof("trusted-authors count=%d", len(trustedAuthors))
 
 	branch := base.Branch(a.Stage)
-	createSender, cleanup, err := factory.CreateKafkaSender(ctx, a.KafkaBrokers, branch)
+
+	syncProducer, err := libkafka.NewSyncProducerWithName(
+		ctx,
+		a.KafkaBrokers,
+		"maintainer-watcher-github-pr",
+	)
 	if err != nil {
-		return errors.Wrap(ctx, err, "create kafka sender")
+		return errors.Wrap(ctx, err, "create sync producer")
 	}
-	defer cleanup()
+	defer func() {
+		if err := syncProducer.Close(); err != nil {
+			glog.Warningf("close kafka sync producer: %v", err)
+		}
+	}()
+	createSender := factory.CreateKafkaSender(syncProducer, branch)
 
 	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
 
-	w, err := factory.CreateWatcher(
-		ctx,
-		factory.AuthConfig{
-			AppID:          a.AppID,
-			InstallationID: a.InstallationID,
-			PEMKey:         a.PEMKey,
-			GHToken:        a.GHToken,
-		},
+	httpClient, err := a.resolveAuth(ctx)
+	if err != nil {
+		return err
+	}
+
+	w := factory.CreateWatcher(
+		httpClient,
 		createSender,
-		a.Stage,
+		pkg.DefaultCursorPath,
+		startTime,
 		a.RepoScope,
 		taskCreationFilter,
-		startTime,
-		trustedAuthors,
+		a.Stage,
+		pkg.NewMetrics(),
+		trustDecision,
 		a.MaxSlugLen,
 		a.MaxTitleLen,
 		a.TaskSuffix,
 	)
-	if err != nil {
-		return errors.Wrap(ctx, err, "create watcher")
-	}
 
-	triggerHandler, err := factory.CreateSinglePRHandler(
-		ctx,
-		factory.AuthConfig{
-			AppID:          a.AppID,
-			InstallationID: a.InstallationID,
-			PEMKey:         a.PEMKey,
-			GHToken:        a.GHToken,
-		},
+	triggerHandler := factory.CreateSinglePRHandler(
+		httpClient,
 		createSender,
 		taskCreationFilter,
 		trustDecision,
@@ -241,9 +304,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.MaxTitleLen,
 		a.TaskSuffix,
 	)
-	if err != nil {
-		return errors.Wrap(ctx, err, "create single-PR trigger handler")
-	}
 	a.TriggerHandler = triggerHandler
 
 	glog.V(2).

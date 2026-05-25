@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.31
+
+- refactor(watcher/github-pr): split CreateGitHubHTTPClient into CreateGitHubAppClient and CreateGitHubPATClient with zero-business-logic factories; move auth-mode dispatch to main.go
+- refactor(watcher/github-pr): refactor CreateKafkaSender to accept SyncProducer instead of creating one; move cleanup to main.go via defer
+- refactor(watcher/github-pr): refactor CreateWatcher and CreateSinglePRHandler to accept concrete dependencies (*http.Client, trust.Trust) instead of raw config structs
+
 ## v0.26.30
 
 - test(watcher/github-build): add unit tests for runPollLoop error handling path and countWildcards function

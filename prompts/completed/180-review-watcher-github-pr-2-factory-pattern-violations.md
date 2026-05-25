@@ -1,6 +1,12 @@
 ---
-status: draft
+status: completed
+summary: 'Refactored factory functions in watcher/github-pr to follow zero-business-logic rule: split CreateGitHubHTTPClient into CreateGitHubAppClient and CreateGitHubPATClient, refactored CreateKafkaSender to accept SyncProducer, moved auth-mode dispatch and syncProducer lifecycle to main.go, and updated CreateWatcher/CreateSinglePRHandler signatures'
+container: maintainer-exec-180-review-watcher-github-pr-2-factory-pattern-violations
+dark-factory-version: v0.173.0
 created: "2026-05-24T00:00:00Z"
+queued: "2026-05-25T22:30:08Z"
+started: "2026-05-25T22:30:09Z"
+completed: "2026-05-25T22:37:39Z"
 ---
 
 <summary>
