@@ -274,16 +274,8 @@ func createCloneAndFetch(
 	logVerbose(verbose, "created clone: %s", clonePath)
 
 	cleanup := func() {
-		cleanupCtx := context.Background()
-		if cleanupErr := worktreeManager.RemoveClone(
-			cleanupCtx,
-			clonePath,
-		); cleanupErr != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"warning: cleanup failed: %v\n",
-				cleanupErr,
-			)
+		if err := worktreeManager.RemoveClone(ctx, clonePath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: cleanup failed: %v\n", err)
 		}
 	}
 
