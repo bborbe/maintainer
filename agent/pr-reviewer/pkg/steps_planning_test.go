@@ -47,17 +47,22 @@ var _ = Describe("planningStep", func() {
 	})
 
 	Describe("ShouldRun", func() {
-		DescribeTable("decides based on existing ## Plan section",
-			func(content string, expected bool) {
+		// ShouldRun now always returns true. Idempotency for the "## Plan
+		// already present" case is enforced inside Run (skip claude, re-route
+		// from existing body). The previous "skip step if ## Plan present"
+		// behaviour silently dropped the routing decision on retrigger —
+		// see the trading#136 incident (2026-05-25).
+		DescribeTable("always returns true so the routing decision is never skipped",
+			func(content string) {
 				md, err := agentlib.ParseMarkdown(ctx, content)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.ShouldRun(ctx, md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(Equal(expected))
+				Expect(result).To(BeTrue())
 			},
-			Entry("no plan section", "# PR Review\n\nsome text", true),
-			Entry("plan section present", "# PR Review\n\n## Plan\n\n{}", false),
-			Entry("empty content", "", true),
+			Entry("no plan section", "# PR Review\n\nsome text"),
+			Entry("plan section present", "# PR Review\n\n## Plan\n\n{}"),
+			Entry("empty content", ""),
 		)
 	})
 
@@ -294,6 +299,70 @@ https://github.com/bborbe/maintainer/pull/14
 				_, exists := md.FindSection("## Diagnostics")
 				Expect(exists).To(BeFalse())
 			})
+		})
+	})
+
+	Describe("Run — retrigger with existing ## Plan (re-route without claude)", func() {
+		// Reproduces the trading#136 incident: a previous trigger wrote
+		// ## Plan with concerns then execution failed → controller reset
+		// trigger_count → new pod runs planning → with the old skip-via-
+		// ShouldRun behaviour the step was skipped entirely, NextPhase
+		// ended up empty, and the task short-circuited to phase: done
+		// without any review running. The fix is to always run the step
+		// but skip the claude call when ## Plan is already present.
+
+		buildMarkdownWithExistingPlan := func(concerns []map[string]string) *agentlib.Markdown {
+			planJSON, _ := json.Marshal(map[string]interface{}{
+				"pr_url":        "https://github.com/bborbe/maintainer/pull/14",
+				"pr_title":      "test PR",
+				"base_branch":   "main",
+				"head_branch":   "feat/test",
+				"files_changed": []string{"pkg/x.go"},
+				"scope":         "feature",
+				"focus_areas":   []string{"tests"},
+				"concerns":      concerns,
+			})
+			content := "---\nref: abc123\ntask_identifier: 00000000-0000-0000-0000-000000000001\n---\n" +
+				"# PR Review\n\nhttps://github.com/bborbe/maintainer/pull/14\n\n" +
+				"## Plan\n\n```json\n" + string(
+				planJSON,
+			) + "\n```\n"
+			md, err := agentlib.ParseMarkdown(ctx, content)
+			Expect(err).NotTo(HaveOccurred())
+			return md
+		}
+
+		It("does NOT call the claude runner when ## Plan already exists", func() {
+			md := buildMarkdownWithExistingPlan([]map[string]string{
+				{"area": "tests", "file": "pkg/x.go", "note": "missing coverage"},
+			})
+			_, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner.RunCallCount()).To(Equal(0))
+		})
+
+		It("routes non-empty concerns to execution from existing plan", func() {
+			md := buildMarkdownWithExistingPlan([]map[string]string{
+				{"area": "tests", "file": "pkg/x.go", "note": "missing coverage"},
+			})
+			result, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			Expect(result.NextPhase).To(Equal("execution"))
+		})
+
+		It("routes empty concerns to LGTM/done path from existing plan", func() {
+			prPoster.PostLGTMReturns(pkg.PostResult{
+				Outcome:     "success",
+				ReviewID:    12345,
+				PostedEvent: "COMMENT",
+			})
+			md := buildMarkdownWithExistingPlan(nil)
+			result, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			Expect(result.NextPhase).To(Equal("done"))
+			Expect(prPoster.PostLGTMCallCount()).To(Equal(1))
 		})
 	})
 

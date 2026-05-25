@@ -55,15 +55,33 @@ func NewPlanningStep(
 // Name implements agentlib.Step.
 func (s *planningStep) Name() string { return "pr-plan" }
 
-// ShouldRun returns false if ## Plan already exists (idempotent).
-func (s *planningStep) ShouldRun(_ context.Context, md *agentlib.Markdown) (bool, error) {
-	_, exists := md.FindSection("## Plan")
-	return !exists, nil
+// ShouldRun always returns true. Idempotency is handled inside Run: if a
+// ## Plan section already exists in the body (e.g. left over from a previous
+// trigger whose execution phase failed and got retriggered), the step skips
+// the claude call but still parses the existing plan and publishes the
+// routing decision (Done + NextPhase=execution|done|human_review). Returning
+// false here would skip the routing too and the phase would silently
+// short-circuit to done — see the trading#136 retrigger incident
+// (2026-05-25), where the controller reset trigger_count, the stale ## Plan
+// remained, the planning step was skipped, no execution ran, and the task
+// got marked phase: done without any review posted.
+func (s *planningStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool, error) {
+	return true, nil
 }
 
-// Run calls Claude with the planning prompt, writes ## Plan, parses concerns,
-// and routes: empty → LGTM POST → done; non-empty → in_progress.
+// Run handles two paths:
+//   - ## Plan already present → re-parse and re-route from the existing body
+//     without re-calling claude (preserves idempotency for cost reasons).
+//   - ## Plan missing → call claude with the planning prompt, write ## Plan,
+//     parse concerns, route.
+//
+// Routes: empty concerns → LGTM POST → done; non-empty → execution phase.
 func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
+	if section, exists := md.FindSection("## Plan"); exists {
+		glog.V(2).Infof("planning: ## Plan already present — re-routing without claude")
+		return s.routeFromPlan(ctx, md, section.Body)
+	}
+
 	taskContent, err := md.Marshal(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "planning marshal task")
@@ -89,8 +107,19 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		Body:    runResult.Result,
 	})
 
-	// Parse concerns from ## Plan body.
-	concerns, parseErr := parsePlanningConcerns(ctx, runResult.Result)
+	return s.routeFromPlan(ctx, md, runResult.Result)
+}
+
+// routeFromPlan parses concerns from a ## Plan body (freshly produced by
+// claude or read back from the vault on retrigger) and returns the routing
+// decision. Centralised so the "## Plan exists" and "claude just produced
+// ## Plan" paths produce identical Result values.
+func (s *planningStep) routeFromPlan(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	planBody string,
+) (*agentlib.Result, error) {
+	concerns, parseErr := parsePlanningConcerns(ctx, planBody)
 	if parseErr != nil {
 		// Malformed JSON in ## Plan is a planning failure — escalate.
 		glog.V(2).Infof("planning: parse failed nextPhase=human_review err=%v", parseErr)

@@ -68,40 +68,47 @@ func NewCheckoutExecutionStep(
 // Name implements agentlib.Step.
 func (s *checkoutExecutionStep) Name() string { return "pr-execute" }
 
-// ShouldRun returns false if ## Review already exists (idempotent).
-func (s *checkoutExecutionStep) ShouldRun(_ context.Context, md *agentlib.Markdown) (bool, error) {
-	_, exists := md.FindSection("## Review")
-	return !exists, nil
+// ShouldRun always returns true. Idempotency for the "## Review already
+// present" case is enforced inside Run (skip clone+claude, publish
+// NextPhase=ai_review). Returning false here would skip the routing too and
+// the phase would silently short-circuit to done — same failure mode as the
+// trading#136 incident in planning.
+func (s *checkoutExecutionStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool, error) {
+	return true, nil
 }
 
-// Run checks out the target ref as a worktree, then runs Claude in that
-// directory to produce the ## Review section.
+// advanceIfAlreadyReviewed returns a Done+NextPhase=ai_review result when a
+// previous trigger already produced ## Review (typical retrigger case after
+// the controller resets trigger_count). nil means "no shortcut — do the full
+// clone+claude+post flow".
+func (s *checkoutExecutionStep) advanceIfAlreadyReviewed(md *agentlib.Markdown) *agentlib.Result {
+	if _, exists := md.FindSection("## Review"); !exists {
+		return nil
+	}
+	glog.V(2).Infof("execution: ## Review already present — advancing to ai_review")
+	return &agentlib.Result{
+		Status:    agentlib.AgentStatusDone,
+		NextPhase: "ai_review",
+	}
+}
+
+// Run handles two paths:
+//   - ## Review already present → publish NextPhase=ai_review without
+//     re-cloning or re-running claude (the previous trigger already produced
+//     the review body; advance the phase so ai_review consumes it).
+//   - ## Review missing → clone the worktree, run claude in it, write
+//     ## Review, post the review comment, route.
 func (s *checkoutExecutionStep) Run(
 	ctx context.Context,
 	md *agentlib.Markdown,
 ) (*agentlib.Result, error) {
-	cloneURL, _ := md.Frontmatter.String("clone_url")
-	ref, _ := md.Frontmatter.String("ref")
-	taskID, _ := md.Frontmatter.String("task_identifier")
-	baseRef, _ := md.Frontmatter.String("base_ref")
+	if result := s.advanceIfAlreadyReviewed(md); result != nil {
+		return result, nil
+	}
 
-	if cloneURL == "" {
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: "execution step: clone_url is missing from task frontmatter",
-		}, nil
-	}
-	if ref == "" {
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: "execution step: ref is missing from task frontmatter",
-		}, nil
-	}
-	if baseRef == "" {
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: "execution step: base_ref is missing from task frontmatter",
-		}, nil
+	cloneURL, ref, taskID, baseRef, missingResult := extractRequiredFrontmatter(md)
+	if missingResult != nil {
+		return missingResult, nil
 	}
 
 	// Pre-parse clone_url to extract host/owner/repo for allowlist and
@@ -427,4 +434,34 @@ func buildDiagnosticBlock(jobRunTime time.Time, triggerCount int, result PostRes
 		respBody,
 		result.ElapsedMs,
 	)
+}
+
+// extractRequiredFrontmatter pulls the four required frontmatter fields for
+// the execution phase and returns a Failed result when any is missing. The
+// caller short-circuits with the result; nil means all fields are present.
+func extractRequiredFrontmatter(
+	md *agentlib.Markdown,
+) (cloneURL, ref, taskID, baseRef string, missing *agentlib.Result) {
+	cloneURL, _ = md.Frontmatter.String("clone_url")
+	ref, _ = md.Frontmatter.String("ref")
+	taskID, _ = md.Frontmatter.String("task_identifier")
+	baseRef, _ = md.Frontmatter.String("base_ref")
+	switch {
+	case cloneURL == "":
+		missing = &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "execution step: clone_url is missing from task frontmatter",
+		}
+	case ref == "":
+		missing = &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "execution step: ref is missing from task frontmatter",
+		}
+	case baseRef == "":
+		missing = &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "execution step: base_ref is missing from task frontmatter",
+		}
+	}
+	return cloneURL, ref, taskID, baseRef, missing
 }
