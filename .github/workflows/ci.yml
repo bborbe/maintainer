@@ -8,8 +8,18 @@ on:
 
 jobs:
   test:
+    name: precommit (${{ matrix.module }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - lib
+          - agent/pr-reviewer
+          - watcher/github-pr
+          - watcher/github-build
 
     steps:
       - uses: actions/checkout@v4
@@ -17,8 +27,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: agent/pr-reviewer/go.mod
-          cache: true
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
 
       - name: Install Trivy
         run: |
@@ -30,6 +40,7 @@ jobs:
           sudo apt-get install -y trivy
 
       - name: Run precommit checks
+        working-directory: ${{ matrix.module }}
         env:
           RACE: "false"
         run: make precommit
