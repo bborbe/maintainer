@@ -6,12 +6,18 @@ package filter_test
 
 import (
 	"testing"
+	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/format"
 )
 
 func TestFilter(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "watcher/github/pkg/filter Suite")
+	time.Local = time.UTC
+	format.TruncatedDiff = false
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	suiteConfig.Timeout = 60 * time.Second
+	ginkgo.RunSpecs(t, "Filter Suite", suiteConfig, reporterConfig)
 }

@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.22
+
+- test(watcher/github-pr): standardize Ginkgo suite setup with UTC timezone, untruncated diffs, and 60s timeout
+
 ## v0.26.21
 
 - fix(watcher/github-pr): add context cancellation checks to Poll, fetchAllPRs, and processPRs to enable prompt shutdown when context is cancelled
