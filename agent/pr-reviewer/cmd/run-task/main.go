@@ -168,7 +168,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return errors.Wrap(ctx, err, "agent run failed")
 	}
-	return agentlib.PrintResult(result)
+	return agentlib.PrintResult(ctx, result)
 }
 
 // resolveCachePaths fills in defaults for ReposPath/WorkPath when unset
