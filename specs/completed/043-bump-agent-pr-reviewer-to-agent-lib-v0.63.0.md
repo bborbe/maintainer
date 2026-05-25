@@ -1,10 +1,11 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-05-25T18:22:23Z"
 verifying: "2026-05-25T19:52:10Z"
+completed: "2026-05-25T20:00:40Z"
 branch: dark-factory/bump-agent-pr-reviewer-to-agent-lib-v0-63-0
 ---
 
