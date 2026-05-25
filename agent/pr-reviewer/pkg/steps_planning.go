@@ -15,6 +15,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
@@ -30,10 +31,11 @@ type planningOutput struct {
 // - concerns empty → POST LGTM via PrPoster → write ## Verdict → done
 // - concerns non-empty → advance to the execution phase
 type planningStep struct {
-	runner       claudelib.ClaudeRunner
-	instructions claudelib.Instructions
-	prPoster     PrPoster // nil = skip posting (cmd/run-task mode)
-	botLogin     string
+	runner          claudelib.ClaudeRunner
+	instructions    claudelib.Instructions
+	prPoster        PrPoster // nil = skip posting (cmd/run-task mode)
+	botLogin        string
+	currentDateTime libtime.CurrentDateTimeGetter
 }
 
 // NewPlanningStep constructs the planning-phase step.
@@ -43,12 +45,14 @@ func NewPlanningStep(
 	instructions claudelib.Instructions,
 	prPoster PrPoster,
 	botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.Step {
 	return &planningStep{
-		runner:       runner,
-		instructions: instructions,
-		prPoster:     prPoster,
-		botLogin:     botLogin,
+		runner:          runner,
+		instructions:    instructions,
+		prPoster:        prPoster,
+		botLogin:        botLogin,
+		currentDateTime: currentDateTime,
 	}
 }
 
@@ -174,12 +178,12 @@ func (s *planningStep) postLGTMAndDone(
 		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
 	}
 	ref, _ := md.Frontmatter.String("ref")
-	jobRunTime := time.Now()
+	jobRunTime := s.currentDateTime.Now()
 	if s.prPoster != nil {
 		result := s.prPoster.PostLGTM(ctx, *prInfo, ref, "", s.botLogin)
 		appendDiagnosticsSection(
 			md,
-			buildDiagnosticBlock(jobRunTime, md.Frontmatter.TriggerCount(), result),
+			buildDiagnosticBlock(time.Time(jobRunTime), md.Frontmatter.TriggerCount(), result),
 		)
 		if result.Outcome != "success" && result.Class != ErrorClassNotAFailure {
 			glog.V(2).

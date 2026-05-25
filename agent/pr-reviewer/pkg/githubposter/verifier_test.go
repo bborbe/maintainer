@@ -9,6 +9,7 @@ import (
 	stderrors "errors"
 	"net/http"
 
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -29,7 +30,13 @@ var _ = Describe("ReviewVerifier", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		fakeClient = &mocks.HTTPClient{}
-		verifier = githubposter.NewReviewVerifier(fakeClient, "test-token", testBotLogin)
+		currentDateTime := libtime.NewCurrentDateTime()
+		verifier = githubposter.NewReviewVerifier(
+			fakeClient,
+			"test-token",
+			testBotLogin,
+			currentDateTime,
+		)
 		pr = prpkg.PRInfo{Owner: "owner", Repo: "repo", Number: 1}
 	})
 

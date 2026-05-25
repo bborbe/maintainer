@@ -11,6 +11,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -28,6 +29,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		repoManager = &mocks.RepoManager{}
+		currentDateTime := libtime.NewCurrentDateTime()
 		step = pkg.NewCheckoutExecutionStep(
 			repoManager,
 			"",
@@ -38,6 +40,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 			"standard",
 			nil,
 			nil,
+			currentDateTime,
 		)
 	})
 
@@ -279,6 +282,7 @@ prior review body
 
 			Context("when allowlist is empty", func() {
 				It("proceeds to EnsureWorktree (allow-all behavior)", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithEmpty := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -289,6 +293,7 @@ prior review body
 						"standard",
 						nil,
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -302,6 +307,7 @@ prior review body
 
 			Context("when allowlist is non-empty and clone_url matches", func() {
 				It("proceeds to EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -312,6 +318,7 @@ prior review body
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -325,6 +332,7 @@ prior review body
 
 			Context("when allowlist is non-empty and clone_url does NOT match", func() {
 				It("returns NeedsInput and does not call EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -335,6 +343,7 @@ prior review body
 						"standard",
 						[]string{"github.com/bborbe/other-repo"},
 						nil,
+						currentDateTime,
 					)
 					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/maintainer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
@@ -351,6 +360,7 @@ prior review body
 
 			Context("when allowlist contains a wildcard and clone_url matches the owner", func() {
 				It("permits the clone (wildcard match)", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithWildcard := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -361,6 +371,7 @@ prior review body
 						"standard",
 						[]string{"github.com/bborbe/*"},
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -379,6 +390,7 @@ prior review body
 
 			Context("when allowlist is non-empty and clone_url is unparseable", func() {
 				It("returns Failed (not NeedsInput) and does not call EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -389,6 +401,7 @@ prior review body
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
 						nil,
+						currentDateTime,
 					)
 					const badURLTask = "---\nclone_url: not-a-url\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 

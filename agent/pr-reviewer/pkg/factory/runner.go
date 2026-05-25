@@ -10,6 +10,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
@@ -45,6 +46,8 @@ type RunConfig struct {
 	// Set by main.go after dispatching via CreateAgentProvider. cmd/run-task leaves
 	// this nil so CreateAgent is used for backward compatibility.
 	Agent *agentlib.Agent
+	// CurrentDateTime is the time source injected into step structs and poster/verifier.
+	CurrentDateTime libtime.CurrentDateTimeGetter
 }
 
 // RunAgent performs the shared startup + execution flow for the maintainer-agent-pr-reviewer binary.
@@ -96,8 +99,8 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	agent := cfg.Agent
 	if agent == nil {
 		botLogin := ResolveBotLogin(env)
-		poster := CreatePrPoster(cfg.GHToken, botLogin)
-		verifier := CreateReviewVerifier(cfg.GHToken, botLogin)
+		poster := CreatePrPoster(cfg.GHToken, botLogin, cfg.CurrentDateTime)
+		verifier := CreateReviewVerifier(cfg.GHToken, botLogin, cfg.CurrentDateTime)
 		agent = CreateAgent(
 			cfg.ClaudeConfigDir,
 			cfg.AgentDir,
@@ -109,6 +112,7 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 			cfg.RepoAllowlist,
 			poster,
 			verifier,
+			cfg.CurrentDateTime,
 		)
 	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)

@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -114,7 +115,8 @@ var _ = Describe("PrPoster", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		fakeClient = &mocks.HTTPClient{}
-		poster = githubposter.NewPrPoster(fakeClient, "test-token", testBotLogin)
+		currentDateTime := libtime.NewCurrentDateTime()
+		poster = githubposter.NewPrPoster(fakeClient, "test-token", testBotLogin, currentDateTime)
 		pr = prpkg.PRInfo{Owner: "owner", Repo: "repo", Number: 1}
 		var err error
 		tmpDir, err = os.MkdirTemp("", "poster-test-*")
@@ -549,8 +551,13 @@ var _ = Describe("PrPoster", func() {
 				testURL, _ := url.Parse(baseURL)
 				transport := &http.Transport{}
 				redirectingClient := &redirectingHTTPClient{base: transport, testURL: testURL}
-
-				poster := githubposter.NewPrPoster(redirectingClient, "test-iat", botLogin)
+				currentDateTime := libtime.NewCurrentDateTime()
+				poster := githubposter.NewPrPoster(
+					redirectingClient,
+					"test-iat",
+					botLogin,
+					currentDateTime,
+				)
 
 				result := poster.PostLGTM(
 					ctx,

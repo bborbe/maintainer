@@ -136,14 +136,30 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 // CreatePrPoster wires a PrPoster backed by a scoped http.Client.
 // token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
 // (BOT_GITHUB_LOGIN env, default "ben-s-pull-request-reviewer[bot]" if empty). Pure plumbing; no logic.
-func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
-	return githubposter.NewPrPoster(&http.Client{Timeout: 15 * time.Second}, token, botLogin)
+func CreatePrPoster(
+	token, botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
+) prpkg.PrPoster {
+	return githubposter.NewPrPoster(
+		&http.Client{Timeout: 15 * time.Second},
+		token,
+		botLogin,
+		currentDateTime,
+	)
 }
 
 // CreateReviewVerifier wires a ReviewVerifier backed by a scoped http.Client.
 // token is the bot PAT; botLogin is the expected bot login.
-func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
-	return githubposter.NewReviewVerifier(&http.Client{Timeout: 15 * time.Second}, token, botLogin)
+func CreateReviewVerifier(
+	token, botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
+) prpkg.ReviewVerifier {
+	return githubposter.NewReviewVerifier(
+		&http.Client{Timeout: 15 * time.Second},
+		token,
+		botLogin,
+		currentDateTime,
+	)
 }
 
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase
@@ -165,6 +181,7 @@ func CreateAgent(
 	repoAllowlist []string,
 	prPoster prpkg.PrPoster,
 	verifier prpkg.ReviewVerifier,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) *agentlib.Agent {
 	botLogin := ResolveBotLogin(env)
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
@@ -173,6 +190,7 @@ func CreateAgent(
 		prompts.BuildPlanningInstructions(),
 		prPoster,
 		botLogin,
+		currentDateTime,
 	))
 	executionStep := prpkg.NewCheckoutExecutionStep(
 		repoManager,
@@ -184,6 +202,7 @@ func CreateAgent(
 		reviewMode,
 		repoAllowlist,
 		prPoster,
+		currentDateTime,
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
@@ -212,10 +231,11 @@ func CreateAgentProvider(
 	repoManager git.RepoManager,
 	reviewMode string,
 	repoAllowlist []string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.AgentProvider {
 	botLogin := ResolveBotLogin(env)
-	poster := CreatePrPoster(ghToken, botLogin)
-	verifier := CreateReviewVerifier(ghToken, botLogin)
+	poster := CreatePrPoster(ghToken, botLogin, currentDateTime)
+	verifier := CreateReviewVerifier(ghToken, botLogin, currentDateTime)
 	domainAgent := CreateAgent(
 		claudeConfigDir,
 		agentDir,
@@ -227,6 +247,7 @@ func CreateAgentProvider(
 		repoAllowlist,
 		poster,
 		verifier,
+		currentDateTime,
 	)
 	healthcheckRunner := CreateClaudeRunner(
 		claudeConfigDir,

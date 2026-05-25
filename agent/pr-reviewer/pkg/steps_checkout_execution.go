@@ -14,6 +14,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
@@ -37,6 +38,7 @@ type checkoutExecutionStep struct {
 	reviewMode      string
 	repoAllowlist   []string
 	prPoster        PrPoster // nil = skip posting
+	currentDateTime libtime.CurrentDateTimeGetter
 }
 
 // NewCheckoutExecutionStep constructs the execution-phase step that wires
@@ -51,6 +53,7 @@ func NewCheckoutExecutionStep(
 	reviewMode string,
 	repoAllowlist []string,
 	prPoster PrPoster,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.Step {
 	return &checkoutExecutionStep{
 		repoManager:     repoManager,
@@ -62,6 +65,7 @@ func NewCheckoutExecutionStep(
 		reviewMode:      reviewMode,
 		repoAllowlist:   repoAllowlist,
 		prPoster:        prPoster,
+		currentDateTime: currentDateTime,
 	}
 }
 
@@ -269,7 +273,7 @@ func (s *checkoutExecutionStep) runClaude(
 		Body:    runResult.Result,
 	})
 
-	return s.postAndRoute(ctx, md, prURLStr, worktreePath, time.Now())
+	return s.postAndRoute(ctx, md, prURLStr, worktreePath, time.Time(s.currentDateTime.Now()))
 }
 
 // postAndRoute handles the posting sequence after ## Review has been written to

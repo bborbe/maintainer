@@ -14,20 +14,32 @@ import (
 	"time"
 
 	errors "github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	prurl "github.com/bborbe/maintainer/lib/prurl"
 )
 
 type prPoster struct {
-	httpClient HTTPClient
-	ghToken    string
-	botLogin   string
+	httpClient      HTTPClient
+	ghToken         string
+	botLogin        string
+	currentDateTime libtime.CurrentDateTimeGetter
 }
 
 // NewPrPoster creates a prpkg.PrPoster. botLogin must already be resolved by the caller.
-func NewPrPoster(httpClient HTTPClient, ghToken string, botLogin string) prpkg.PrPoster {
-	return &prPoster{httpClient: httpClient, ghToken: ghToken, botLogin: botLogin}
+func NewPrPoster(
+	httpClient HTTPClient,
+	ghToken string,
+	botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
+) prpkg.PrPoster {
+	return &prPoster{
+		httpClient:      httpClient,
+		ghToken:         ghToken,
+		botLogin:        botLogin,
+		currentDateTime: currentDateTime,
+	}
 }
 
 // reviewEntry is the GitHub API shape for a single pull-request review.
@@ -58,7 +70,7 @@ func (p *prPoster) PostLGTM(
 	pr prurl.PRInfo,
 	headSHA, workDir, botLogin string,
 ) prpkg.PostResult {
-	start := time.Now()
+	start := time.Time(p.currentDateTime.Now())
 	const event = "COMMENT"
 	body := fmt.Sprintf("Reviewed by %s — no concerns flagged.", botLogin)
 
@@ -75,7 +87,7 @@ func (p *prPoster) PostLGTM(
 }
 
 func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
-	start := time.Now()
+	start := time.Time(p.currentDateTime.Now())
 	config, err := ReadAutoApproveConfig(ctx, req.WorkDir)
 	if err != nil {
 		return prpkg.PostResult{

@@ -10,6 +10,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	libtime "github.com/bborbe/time"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,11 +33,13 @@ var _ = Describe("planningStep", func() {
 		runner = &mocks.ClaudeRunnerMock{}
 		prPoster = &mocks.PrPoster{}
 		botLogin = "ben-s-pull-request-reviewer-dev[bot]"
+		currentDateTime := libtime.NewCurrentDateTime()
 		step = pkg.NewPlanningStep(
 			runner,
 			claudelib.Instructions{},
 			prPoster,
 			botLogin,
+			currentDateTime,
 		)
 	})
 
@@ -202,7 +205,14 @@ https://github.com/bborbe/maintainer/pull/14
 
 		Context("when prPoster is nil (cmd/run-task mode)", func() {
 			BeforeEach(func() {
-				step = pkg.NewPlanningStep(runner, claudelib.Instructions{}, nil, botLogin)
+				currentDateTime := libtime.NewCurrentDateTime()
+				step = pkg.NewPlanningStep(
+					runner,
+					claudelib.Instructions{},
+					nil,
+					botLogin,
+					currentDateTime,
+				)
 				planBody, _ := json.Marshal(map[string]interface{}{
 					"pr_url":        "https://github.com/bborbe/maintainer/pull/14",
 					"pr_title":      "test PR",

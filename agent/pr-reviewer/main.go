@@ -117,7 +117,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		glog.V(2).Infof("prometheus push completed")
 	}()
 	start := libtime.NewCurrentDateTime().Now().Time()
-
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
 
 	if err := a.resolveAuth(ctx); err != nil {
@@ -155,8 +154,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		jobMetrics.RecordDuration(time.Since(start))
 		return errors.Wrap(ctx, err, "task type dispatch")
 	}
-
-	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir:    a.ClaudeConfigDir,
 		AgentDir:           a.AgentDir,
@@ -168,12 +165,13 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		WorkPath:           a.WorkPath,
 		ReviewMode:         a.ReviewMode,
 		RepoAllowlist:      repoAllowlist,
-		AuthSetup:          authSetup,
+		AuthSetup:          githubauth.NewGhAuthSetupGit(a.GHToken),
 		Phase:              a.Phase,
 		BotLogin:           a.BotLogin,
 		TaskContent:        a.TaskContent,
 		Deliverer:          deliverer,
 		Agent:              agent,
+		CurrentDateTime:    libtime.NewCurrentDateTime(),
 	})
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
@@ -219,6 +217,7 @@ func (a *application) dispatchAgent(
 		repoManager,
 		a.ReviewMode,
 		repoAllowlist,
+		libtime.NewCurrentDateTime(),
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
 	if err != nil {

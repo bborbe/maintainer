@@ -50,6 +50,7 @@ var _ = Describe("Factory", func() {
 	Describe("CreateAgent", func() {
 		It("returns a non-nil agent with empty token and env", func() {
 			var repoManager git.RepoManager
+			currentDateTime := libtime.NewCurrentDateTime()
 			agent := factory.CreateAgent(
 				"",
 				"agent",
@@ -61,12 +62,14 @@ var _ = Describe("Factory", func() {
 				nil,
 				nil,
 				nil,
+				currentDateTime,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
 
 		It("returns a non-nil agent with token set in env", func() {
 			var repoManager git.RepoManager
+			currentDateTime := libtime.NewCurrentDateTime()
 			agent := factory.CreateAgent(
 				"",
 				"agent",
@@ -78,6 +81,7 @@ var _ = Describe("Factory", func() {
 				nil,
 				nil,
 				nil,
+				currentDateTime,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
@@ -189,6 +193,7 @@ var _ = Describe("Factory", func() {
 		)
 		BeforeEach(func() {
 			ctx = context.Background()
+			currentDateTime := libtime.NewCurrentDateTime()
 			provider = factory.CreateAgentProvider(
 				"",
 				"agent",
@@ -198,6 +203,7 @@ var _ = Describe("Factory", func() {
 				repoManager,
 				"standard",
 				nil,
+				currentDateTime,
 			)
 			Expect(provider).NotTo(BeNil())
 		})
