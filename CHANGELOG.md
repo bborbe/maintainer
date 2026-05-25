@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.11
+
+- perf(agent/pr-reviewer): move envVarRefRegexp compilation to package level in config.go — eliminates redundant regex recompilation on every resolveEnvVar call
+
 ## v0.26.10
 
 - chore(agent/pr-reviewer): bump `github.com/bborbe/agent/lib` from v0.62.17 to v0.63.0 to collapse multi-phase pod boots into one pod on the happy path (lib spec 040); pr-reviewer's 3-phase chain now runs in a single pod boot once the new binary is deployed. Test assertions updated to match lib v0.62.27/v0.62.29 behavior change (`needs_input` / `failed` no longer write `phase: human_review`).

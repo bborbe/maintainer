@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Moved envVarRefRegexp compilation from inside resolveEnvVar to package level in agent/pr-reviewer/pkg/config.go
+container: maintainer-exec-157-review-agent-pr-reviewer-4-regex-recompilation
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:01:57Z"
+completed: "2026-05-25T21:04:06Z"
 ---
 
 <summary>
