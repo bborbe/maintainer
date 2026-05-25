@@ -192,15 +192,18 @@ func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
 
 func (a *application) validateConfig(ctx context.Context) error {
 	if err := validateRepoScope(ctx, a.RepoScope); err != nil {
-		return err
+		return errors.Wrap(ctx, err, "validate repo scope")
 	}
-	return validateLengthCaps(ctx, a.MaxSlugLen, a.MaxTitleLen)
+	if err := validateLengthCaps(ctx, a.MaxSlugLen, a.MaxTitleLen); err != nil {
+		return errors.Wrap(ctx, err, "validate length caps")
+	}
+	return nil
 }
 
 //nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 82 lines, 2 over the 80-line cap.
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err := a.validateConfig(ctx); err != nil {
-		return err
+		return errors.Wrap(ctx, err, "validate config")
 	}
 
 	pollInterval, err := time.ParseDuration(a.PollInterval)
@@ -213,12 +216,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	maxAge, err := parseMaxPRAge(ctx, a.MaxPRAge)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse max PR age")
 	}
 
 	backfillDuration, err := parseBackfillDuration(ctx, a.BackfillDuration)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse backfill duration")
 	}
 	if backfillDuration > 0 {
 		startTime = startTime.Add(-backfillDuration)
@@ -228,7 +231,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse repo allowlist")
 	}
 	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
 		glog.Warningf("repo-allowlist: malformed entries ignored at match time: %v", validationErr)
@@ -276,7 +279,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	httpClient, err := a.resolveAuth(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "resolve auth")
 	}
 
 	w := factory.CreateWatcher(

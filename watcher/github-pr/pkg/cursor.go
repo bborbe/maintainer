@@ -34,7 +34,7 @@ func LoadCursor(ctx context.Context, path string, startTime libtime.DateTime) (C
 				Infof("cursor file not found, using cold-start time=%s", startTime.Format(time.RFC3339))
 			return Cursor{LastUpdatedAt: startTime, HeadSHAs: make(map[string]string)}, nil
 		}
-		return Cursor{}, errors.Wrapf(ctx, err, "read cursor file path=%s", path)
+		return Cursor{}, errors.Wrap(ctx, err, "read cursor file")
 	}
 	var state Cursor
 	if err := json.Unmarshal(data, &state); err != nil {
@@ -51,13 +51,13 @@ func LoadCursor(ctx context.Context, path string, startTime libtime.DateTime) (C
 func SaveCursor(ctx context.Context, path string, state Cursor) error {
 	data, err := json.Marshal(state)
 	if err != nil {
-		return errors.Wrapf(ctx, err, "marshal cursor state path=%s", path)
+		return errors.Wrap(ctx, err, "marshal cursor state")
 	}
 	if err := os.WriteFile(path+".tmp", data, 0600); err != nil { // #nosec G306 -- intentional 0600
-		return errors.Wrapf(ctx, err, "save cursor path=%s", path)
+		return errors.Wrap(ctx, err, "write cursor file")
 	}
 	if err := os.Rename(path+".tmp", path); err != nil {
-		return errors.Wrapf(ctx, err, "save cursor path=%s", path)
+		return errors.Wrap(ctx, err, "rename cursor file")
 	}
 	return nil
 }

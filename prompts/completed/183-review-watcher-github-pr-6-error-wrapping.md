@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Wrapped all bare error returns in main.go, replaced errors.Wrapf with errors.Wrap in cursor.go and trust.go, and explicitly discarded unused ctx in ParseRepoAllowlist
+container: maintainer-exec-183-review-watcher-github-pr-6-error-wrapping
+dark-factory-version: v0.173.0
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T22:38:58Z"
+started: "2026-05-25T23:11:32Z"
+completed: "2026-05-25T23:15:12Z"
 ---
 
 <summary>

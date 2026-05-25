@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.34
+
+- fix(watcher/github-pr): wrap errors at validation call sites in main.go to avoid bare returns
+- fix(watcher/github-pr): replace errors.Wrapf with errors.Wrap in cursor.go and trust.go where no format args present
+- fix(watcher/github-pr): explicitly discard unused ctx parameter in ParseRepoAllowlist
+
 ## v0.26.33
 
 - feat(watcher/github-pr): record IncPRPublished metrics for /trigger endpoint outcomes; distinguish trust_error and kafka_error from generic error
