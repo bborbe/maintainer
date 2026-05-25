@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.25
+
+- test(agent/pr-reviewer): standardize Ginkgo suite setup across all test suites — add `//go:generate` directive to factory, GinkgoConfiguration with timeout to all suites, and rename non-standard test functions to `TestSuite`
+
 ## v0.26.24
 
 - refactor(agent/pr-reviewer): inject libtime.CurrentDateTimeGetter into step structs and githubposter components replacing direct time.Now() calls

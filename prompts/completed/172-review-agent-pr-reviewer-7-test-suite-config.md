@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Standardized Ginkgo test suite infrastructure across 5 test suites — added //go:generate directive to factory, GinkgoConfiguration with timeout to all suites, and renamed non-standard TestGitHubAuth/TestGitHubPoster to TestSuite
+container: maintainer-exec-172-review-agent-pr-reviewer-7-test-suite-config
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:43:22Z"
+completed: "2026-05-25T21:45:24Z"
 ---
 
 <summary>
