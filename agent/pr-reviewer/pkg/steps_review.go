@@ -58,17 +58,30 @@ func NewReviewStep(
 // Name implements agentlib.Step.
 func (s *reviewStep) Name() string { return "pr-ai-review" }
 
-// ShouldRun returns false if ## Verdict already exists (idempotent).
-func (s *reviewStep) ShouldRun(_ context.Context, md *agentlib.Markdown) (bool, error) {
-	_, exists := md.FindSection("## Verdict")
-	return !exists, nil
+// ShouldRun always returns true. Idempotency for the "## Verdict already
+// present" case is enforced inside Run (skip claude, publish NextPhase=done).
+// Returning false here would skip the routing too and the phase would
+// silently short-circuit — same failure mode as the trading#136 incident
+// in planning.
+func (s *reviewStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool, error) {
+	return true, nil
 }
 
-// Run calls Claude with the task body (which includes ## Plan + ## Review
-// from earlier phases), writes ## Verdict, optionally verifies the in_progress
-// post persisted on GitHub, parses the verdict, and returns Done with
-// conditional NextPhase.
+// Run handles two paths:
+//   - ## Verdict already present → publish NextPhase=done without re-calling
+//     claude (the previous trigger already produced the verdict; just close
+//     out the task).
+//   - ## Verdict missing → call claude with planning + review context,
+//     write ## Verdict, verify the in_progress post, parse + route.
 func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
+	if _, exists := md.FindSection("## Verdict"); exists {
+		glog.V(2).Infof("ai-review: ## Verdict already present — advancing to done")
+		return &agentlib.Result{
+			Status:    agentlib.AgentStatusDone,
+			NextPhase: "done",
+		}, nil
+	}
+
 	taskContent, err := md.Marshal(ctx)
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "ai-review marshal task")

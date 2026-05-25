@@ -99,18 +99,44 @@ var _ = Describe("reviewStep", func() {
 	})
 
 	Describe("ShouldRun", func() {
-		DescribeTable("decides based on existing ## Verdict section",
-			func(content string, expected bool) {
+		// ShouldRun always returns true. Idempotency for the "## Verdict
+		// already present" case is enforced inside Run (skip claude, publish
+		// NextPhase=done). The previous skip-via-ShouldRun guard silently
+		// dropped the routing decision on retrigger.
+		DescribeTable("always returns true so the routing decision is never skipped",
+			func(content string) {
 				md, err := agentlib.ParseMarkdown(ctx, content)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.ShouldRun(ctx, md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(Equal(expected))
+				Expect(result).To(BeTrue())
 			},
-			Entry("no verdict section", "# PR Review\n\nsome text", true),
-			Entry("verdict section present", "# PR Review\n\n## Verdict\n\npass", false),
-			Entry("empty content", "", true),
+			Entry("no verdict section", "# PR Review\n\nsome text"),
+			Entry("verdict section present", "# PR Review\n\n## Verdict\n\npass"),
+			Entry("empty content", ""),
 		)
+	})
+
+	Describe("Run — retrigger with existing ## Verdict (advance without claude)", func() {
+		// Same pattern as planning/execution: skip the claude call but still
+		// publish NextPhase=done so the controller closes out the task.
+		It("publishes NextPhase=done without invoking the runner", func() {
+			md, err := agentlib.ParseMarkdown(ctx, `---
+task_identifier: 00000000-0000-0000-0000-000000000001
+---
+# PR Review
+
+## Verdict
+
+prior verdict body
+`)
+			Expect(err).NotTo(HaveOccurred())
+			result, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			Expect(result.NextPhase).To(Equal("done"))
+			Expect(runner.RunCallCount()).To(Equal(0))
+		})
 	})
 
 	Describe("Run", func() {
