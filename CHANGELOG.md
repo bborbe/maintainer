@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.13
+
+- fix(agent/pr-reviewer): add 15-second timeout to http.Client used by PrPoster and ReviewVerifier to prevent indefinite hangs on stalled GitHub API connections
+
 ## v0.26.12
 
 - fix(agent/pr-reviewer/cmd/cli): replace fmt.Errorf with errors.Errorf in main.go to follow project error-handling conventions

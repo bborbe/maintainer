@@ -11,6 +11,7 @@ package factory
 import (
 	"context"
 	"net/http"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -132,17 +133,17 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
-// CreatePrPoster wires a PrPoster backed by net/http.DefaultClient.
+// CreatePrPoster wires a PrPoster backed by a scoped http.Client.
 // token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
 // (BOT_GITHUB_LOGIN env, default "ben-s-pull-request-reviewer[bot]" if empty). Pure plumbing; no logic.
 func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
-	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
+	return githubposter.NewPrPoster(&http.Client{Timeout: 15 * time.Second}, token, botLogin)
 }
 
-// CreateReviewVerifier wires a ReviewVerifier backed by net/http.DefaultClient.
+// CreateReviewVerifier wires a ReviewVerifier backed by a scoped http.Client.
 // token is the bot PAT; botLogin is the expected bot login.
 func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
-	return githubposter.NewReviewVerifier(http.DefaultClient, token, botLogin)
+	return githubposter.NewReviewVerifier(&http.Client{Timeout: 15 * time.Second}, token, botLogin)
 }
 
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase

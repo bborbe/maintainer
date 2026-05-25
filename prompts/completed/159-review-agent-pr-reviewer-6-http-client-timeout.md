@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added 15-second timeout to http.Client used by PrPoster and ReviewVerifier in factory.go, matching the pattern from bitbucket/client.go and steps_gh_token.go
+container: maintainer-exec-159-review-agent-pr-reviewer-6-http-client-timeout
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:06:01Z"
+completed: "2026-05-25T21:07:28Z"
 ---
 
 <summary>
