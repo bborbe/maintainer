@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added unit tests for ExpandHome, normalizeURL, classifyError, eventToState, truncateBody, isGitHubPRURL, hasAnyPRURL, writePlanningVerdict, and appendVerifyDiagnostic
+container: maintainer-exec-173-review-agent-pr-reviewer-8-missing-tests
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:45:27Z"
+completed: "2026-05-25T21:54:24Z"
 ---
 
 <summary>

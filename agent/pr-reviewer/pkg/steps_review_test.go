@@ -437,3 +437,27 @@ var _ = Describe("shouldVerifyPost", func() {
 		})
 	})
 })
+
+var _ = Describe("appendVerifyDiagnostic", func() {
+	It("appends diagnostic line to ## Diagnostics section", func() {
+		md, err := agentlib.ParseMarkdown(
+			context.Background(),
+			"---\nref: abc\n---\n\n## Review\n\nsome content\n\n## Diagnostics\n\nexisting line\n",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		result := pkg.VerifyResult{
+			Class:        pkg.ErrorClassTransient,
+			EscalateHint: true,
+			HTTPStatus:   429,
+			ErrorMessage: "rate limited",
+		}
+		pkg.AppendVerifyDiagnosticForTest(context.Background(), md, result)
+		sec, exists := md.FindSection("## Diagnostics")
+		Expect(exists).To(BeTrue())
+		Expect(sec).NotTo(BeNil())
+		Expect(sec.Body).To(ContainSubstring("ai_review verify:"))
+		Expect(sec.Body).To(ContainSubstring("class=transient"))
+		Expect(sec.Body).To(ContainSubstring("http_status=429"))
+		Expect(sec.Body).To(ContainSubstring("rate limited"))
+	})
+})

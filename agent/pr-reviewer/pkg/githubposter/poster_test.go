@@ -580,3 +580,27 @@ var _ = Describe("PrPoster", func() {
 		)
 	})
 })
+
+var _ = Describe("eventToState", func() {
+	It("maps APPROVE to APPROVED", func() {
+		Expect(githubposter.EventToStateForTest("APPROVE")).To(Equal("APPROVED"))
+	})
+	It("maps REQUEST_CHANGES to CHANGES_REQUESTED", func() {
+		Expect(githubposter.EventToStateForTest("REQUEST_CHANGES")).To(Equal("CHANGES_REQUESTED"))
+	})
+	It("maps COMMENT to COMMENTED", func() {
+		Expect(githubposter.EventToStateForTest("COMMENT")).To(Equal("COMMENTED"))
+	})
+})
+
+var _ = Describe("truncateBody", func() {
+	It("truncates to 500 bytes", func() {
+		long := strings.Repeat("x", 1000)
+		result := githubposter.TruncateBodyForTest([]byte(long))
+		Expect(len(result)).To(BeNumerically("<=", 500))
+	})
+	It("returns input unchanged when under limit", func() {
+		short := "hello world"
+		Expect(githubposter.TruncateBodyForTest([]byte(short))).To(Equal(short))
+	})
+})

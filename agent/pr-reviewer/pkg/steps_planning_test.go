@@ -500,3 +500,58 @@ https://github.com/bborbe/maintainer/pull/14
 		)
 	})
 })
+
+var _ = Describe("isGitHubPRURL", func() {
+	DescribeTable(
+		"identifies GitHub PR URLs",
+		func(rawURL string, want bool) {
+			Expect(pkg.IsGitHubPRURLForTest(rawURL)).To(Equal(want))
+		},
+		Entry("github.com PR URL", "https://github.com/owner/repo/pull/123", true),
+		Entry(
+			"github.com PR URL with extra path",
+			"https://github.com/owner/repo/pull/123/head",
+			true,
+		),
+		Entry("bitbucket PR URL", "https://bitbucket.org/owner/repo/pull/123", false),
+		Entry("gitlab PR URL", "https://gitlab.com/owner/repo/-/merge_requests/123", false),
+		Entry("random URL", "https://example.com/something", false),
+		Entry("empty string", "", false),
+	)
+})
+
+var _ = Describe("hasAnyPRURL", func() {
+	It("returns true when preamble contains a PR URL", func() {
+		md, err := agentlib.ParseMarkdown(
+			context.Background(),
+			"See https://github.com/owner/repo/pull/123\n\n## Review\n\nsome content",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pkg.HasAnyPRURLForTest(md)).To(BeTrue())
+	})
+
+	It("returns false when no PR URL is present", func() {
+		md, err := agentlib.ParseMarkdown(
+			context.Background(),
+			"No PR here, just some content\n\n## Review\n\nsome content",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pkg.HasAnyPRURLForTest(md)).To(BeFalse())
+	})
+})
+
+var _ = Describe("writePlanningVerdict", func() {
+	It("writes verdict section with review ID and event", func() {
+		md, err := agentlib.ParseMarkdown(
+			context.Background(),
+			"---\nref: abc\n---\n\n## Plan\n\nsome plan",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		pkg.WritePlanningVerdictForTest(md, 42, "APPROVE")
+		sec, exists := md.FindSection("## Verdict")
+		Expect(exists).To(BeTrue())
+		Expect(sec).NotTo(BeNil())
+		Expect(sec.Body).To(ContainSubstring("review_id: 42"))
+		Expect(sec.Body).To(ContainSubstring("event: APPROVE"))
+	})
+})

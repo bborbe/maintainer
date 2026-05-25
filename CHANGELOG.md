@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.26
+
+- test(agent/pr-reviewer): add unit tests for ExpandHome, normalizeURL, classifyError, eventToState, truncateBody, isGitHubPRURL, hasAnyPRURL, writePlanningVerdict, appendVerifyDiagnostic
+
 ## v0.26.25
 
 - test(agent/pr-reviewer): standardize Ginkgo suite setup across all test suites — add `//go:generate` directive to factory, GinkgoConfiguration with timeout to all suites, and rename non-standard test functions to `TestSuite`
