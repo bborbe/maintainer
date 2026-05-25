@@ -1,6 +1,10 @@
 ---
-status: draft
+status: executing
+container: maintainer-exec-171-review-agent-pr-reviewer-2-time-injection
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
+queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:25:47Z"
 ---
 
 <summary>
