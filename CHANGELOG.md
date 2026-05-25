@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.29
+
+- test(watcher/github-build): add unit tests for GetJobsForRun covering successful response with failed jobs, no failed jobs, HTTP error, and rate limit scenarios
+
 ## v0.26.28
 
 - refactor(watcher/github-build): extract CreateAllowlistSnapshot to factory eliminating duplicated wildcard resolution logic in main.go and cmd/run-once/main.go

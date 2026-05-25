@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added unit tests for GetJobsForRun covering successful response with failed jobs, no failed jobs, HTTP error, and rate limit scenarios
+container: maintainer-exec-176-review-watcher-github-build-getjobsforrun-test
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:59:44Z"
+completed: "2026-05-25T22:05:45Z"
 ---
 
 <summary>

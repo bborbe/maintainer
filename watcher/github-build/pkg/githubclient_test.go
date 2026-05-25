@@ -364,6 +364,134 @@ var _ = Describe("pkg.GitHubClient", func() {
 		})
 	})
 
+	Describe("GetJobsForRun", func() {
+		Context("server returns jobs with failed steps", func() {
+			It("returns failed job info with correct failed step name", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(
+							r.URL.Path,
+						).To(ContainSubstring("/repos/owner/repo/actions/runs/42/jobs"))
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(w, `{
+							"total_count": 2,
+							"jobs": [
+								{
+									"id": 101,
+									"name": "build",
+									"conclusion": "failure",
+									"steps": [
+										{"name": "setup", "conclusion": "success"},
+										{"name": "compile", "conclusion": "failure"},
+										{"name": "teardown", "conclusion": "skipped"}
+									]
+								},
+								{
+									"id": 102,
+									"name": "test",
+									"conclusion": "failure",
+									"steps": [
+										{"name": "unit-tests", "conclusion": "failure"},
+										{"name": "integration-tests", "conclusion": "skipped"}
+									]
+								}
+							]
+						}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(HaveLen(2))
+
+				Expect(result[0].JobID).To(Equal(int64(101)))
+				Expect(result[0].JobName).To(Equal("build"))
+				Expect(result[0].FailedStepName).To(Equal("compile"))
+
+				Expect(result[1].JobID).To(Equal(int64(102)))
+				Expect(result[1].JobName).To(Equal("test"))
+				Expect(result[1].FailedStepName).To(Equal("unit-tests"))
+			})
+		})
+
+		Context("server returns only successful jobs", func() {
+			It("returns an empty slice", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(w, `{
+							"total_count": 2,
+							"jobs": [
+								{
+									"id": 201,
+									"name": "lint",
+									"conclusion": "success",
+									"steps": [
+										{"name": "lint-check", "conclusion": "success"}
+									]
+								},
+								{
+									"id": 202,
+									"name": "format",
+									"conclusion": "success",
+									"steps": [
+										{"name": "fmt-check", "conclusion": "success"}
+									]
+								}
+							]
+						}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Context("server returns HTTP 401", func() {
+			It("returns an error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusUnauthorized)
+						fmt.Fprintf(w, `{"message":"Bad credentials"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("server returns rate limit response", func() {
+			It("returns ErrRateLimited", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(
+							w,
+							`{"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).To(MatchError(pkg.ErrRateLimited))
+			})
+		})
+	})
+
 	Describe("ListOwnerRepos", func() {
 		Context("owner is a user", func() {
 			It("returns non-archived, non-fork repos", func() {
