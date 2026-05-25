@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.15
+
+- fix(watcher/github-build): narrow redactOpaqueHexRE from 40+ to exactly 40 hex chars to reduce false positives; add #nosec G101 to AWS secret key redaction regex
+
 ## v0.26.14
 
 - chore(watcher/github-build): delete empty pkg/publisher.go; fix duplicate comment in main.go

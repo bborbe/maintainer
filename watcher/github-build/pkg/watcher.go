@@ -535,10 +535,11 @@ var (
 	redactGitHubTokenRE  = regexp.MustCompile(`gh[opsu]_[a-zA-Z0-9]{16,}`)
 	redactBearerAuthRE   = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]{16,}`)
 	redactAWSAccessKeyRE = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	// #nosec G101 — this pattern redacts user-provided AWS secret keys from CI logs, it is not a hardcoded credential
 	redactAWSSecretKeyRE = regexp.MustCompile(
 		`(aws_secret_access_key[\s=:]+["']?)[A-Za-z0-9/+]{40}["']?`,
 	)
-	redactOpaqueHexRE = regexp.MustCompile(`\b[a-f0-9]{40,}\b`)
+	redactOpaqueHexRE = regexp.MustCompile(`\b[a-f0-9]{40}\b`)
 )
 
 func redactLogSnippet(s string) string {
@@ -554,9 +555,8 @@ func redactLogSnippet(s string) string {
 	// 4. AWS secret access keys: keep the key= prefix, redact the 40-char base64 secret
 	s = redactAWSSecretKeyRE.ReplaceAllString(s, "${1}[REDACTED]")
 
-	// 5. Long opaque hex strings (≥40 chars) — generic auth hashes catch-all.
-	//    Will also match the episode SHA if present in log output — acceptable per spec.
-	//    MUST run last so the specific patterns above (1-4) match their tokens first.
+	// 5. SHA-1 hashes (exactly 40 hex chars) — generic auth hash catch-all.
+	//    Runs last so specific patterns above (1-4) match their tokens first.
 	s = redactOpaqueHexRE.ReplaceAllString(s, "[REDACTED]")
 
 	return s

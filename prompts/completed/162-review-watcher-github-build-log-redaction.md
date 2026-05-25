@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: 'Narrowed redactOpaqueHexRE from 40+ to exactly 40 hex chars and added #nosec G101 to AWS secret key regex'
+container: maintainer-exec-162-review-watcher-github-build-log-redaction
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:12:42Z"
+completed: "2026-05-25T21:13:49Z"
 ---
 
 <summary>
