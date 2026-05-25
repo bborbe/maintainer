@@ -60,7 +60,7 @@ type RunConfig struct {
 //  4. Run the requested phase against the supplied task content
 func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	workdirCfg := git.WorkdirConfig{ReposPath: cfg.ReposPath, WorkPath: cfg.WorkPath}
-	repoManager := git.NewRepoManager(workdirCfg)
+	repoManager := git.NewRepoManager(workdirCfg, cfg.GHToken)
 	if err := repoManager.PruneAllWorktrees(ctx); err != nil {
 		glog.Warningf("startup worktree prune: %v", err)
 	}

@@ -209,7 +209,7 @@ func (a *application) dispatchAgent(
 	repoManager := git.NewRepoManager(git.WorkdirConfig{
 		ReposPath: a.ReposPath,
 		WorkPath:  a.WorkPath,
-	})
+	}, a.GHToken)
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,

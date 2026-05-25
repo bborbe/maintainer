@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- fix(agent/pr-reviewer): export GH_TOKEN into every git subprocess env (clone, fetch, worktree add, worktree prune) so the credential helper installed by `gh auth setup-git` (`gh auth git-credential`) can authenticate HTTPS operations. Without this, git inherited the pod env (no GH_TOKEN), the helper returned nothing, and clone failed with `authentication required (set GH_TOKEN and re-trigger)` even after PR #11 fixed the gh-auth-setup-git step itself. Allowlist env to `{HOME, PATH, GH_TOKEN}` to keep unrelated pod secrets out of git and any helper it shells out to.
+
 - fix(agent/pr-reviewer): export the minted GitHub App IAT as `GH_TOKEN` in the `gh auth setup-git` subprocess env — without this, gh inherits the pod env (no token) and fails with `You are not logged into any GitHub hosts` even though the IAT was minted successfully. Surfaced by the previous diagnostic-capture fix; reproduced on `bborbe/agent#3` and `bborbe/trading#135` in prod
 - fix(agent/pr-reviewer): capture combined stdout+stderr from `gh auth setup-git` and include the scrubbed bounded tail (last 4 KiB, GH_TOKEN value replaced with `***`) in the wrapped error so operators can diagnose pod-startup auth failures via the OpenClaw task `## Failure` body — previously the gh output was dropped entirely and only `gh auth setup-git failed` surfaced
 - fix(agent/pr-reviewer): publish a `Status: Failed` result via the deliverer when `RunAgent` aborts on auth-setup failure so the passthrough content generator splices the wrapped error into the task `## Failure` section — previously the pod exited non-zero, k8s retried until backoffLimit, and only `Job has reached the specified backoff limit` reached the OpenClaw task body

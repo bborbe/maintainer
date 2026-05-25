@@ -33,12 +33,43 @@ type RepoManager interface {
 }
 
 // NewRepoManager creates a RepoManager backed by the given WorkdirConfig.
-func NewRepoManager(cfg WorkdirConfig) RepoManager {
-	return &repoManager{cfg: cfg}
+//
+// ghToken is exported as GH_TOKEN in every git subprocess env so the credential
+// helper installed by `gh auth setup-git` (which shells out to `gh auth
+// git-credential`) can authenticate HTTPS clones / fetches against private
+// repos. Without this, git inherits the pod env (no GH_TOKEN) → `gh auth
+// git-credential` returns nothing → clone fails with "authentication required"
+// even though the IAT was minted successfully at startup.
+//
+// When ghToken is empty, git subprocesses inherit the parent env unchanged so
+// the local-CLI / noop-auth path (using the operator's own gh state) keeps
+// working.
+func NewRepoManager(cfg WorkdirConfig, ghToken string) RepoManager {
+	return &repoManager{cfg: cfg, ghToken: ghToken}
 }
 
 type repoManager struct {
-	cfg WorkdirConfig
+	cfg     WorkdirConfig
+	ghToken string
+}
+
+// cmdEnv returns the allowlisted env for git subprocesses: HOME (for
+// ~/.gitconfig), PATH (to resolve git + gh), GH_TOKEN (for the gh credential
+// helper). Mirrors the env-allowlist hardening in githubauth.defaultExecFunc
+// — prevents unrelated pod secrets (DATABASE_URL, ANTHROPIC_AUTH_TOKEN, etc.)
+// from leaking into git or any helper it shells out to.
+//
+// When ghToken is empty the parent env is returned unchanged so noop paths
+// (cmd/run-task with operator's own gh state) keep working.
+func (r *repoManager) cmdEnv() []string {
+	if r.ghToken == "" {
+		return nil
+	}
+	return []string{
+		"HOME=" + os.Getenv("HOME"),
+		"PATH=" + os.Getenv("PATH"),
+		"GH_TOKEN=" + r.ghToken,
+	}
 }
 
 var taskIDRegexp = regexp.MustCompile(
@@ -81,6 +112,7 @@ func (r *repoManager) cloneBare(ctx context.Context, cloneURL, barePath string) 
 
 	// #nosec G204 -- cloneURL is validated by ParseCloneURL; barePath is constructed from validated components
 	cmd := exec.CommandContext(ctx, "git", "clone", "--bare", cloneURL, barePath)
+	cmd.Env = r.cmdEnv()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -115,6 +147,7 @@ func (r *repoManager) EnsureWorktree(
 
 	// #nosec G204 -- barePath constructed from validated URL; worktreePath joined from UUID-validated taskID; ref validated by isValidBranchName
 	cmd := exec.CommandContext(ctx, "git", "-C", barePath, "worktree", "add", worktreePath, ref)
+	cmd.Env = r.cmdEnv()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -139,6 +172,7 @@ func (r *repoManager) PruneAllWorktrees(ctx context.Context) error {
 
 		// #nosec G204 -- path comes from WalkDir over r.cfg.ReposPath (operator-controlled); name ends in ".git" (validated above)
 		cmd := exec.CommandContext(ctx, "git", "-C", path, "worktree", "prune")
+		cmd.Env = r.cmdEnv()
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if runErr := cmd.Run(); runErr != nil {
@@ -156,6 +190,7 @@ func (r *repoManager) PruneAllWorktrees(ctx context.Context) error {
 func (r *repoManager) runGitCmd(ctx context.Context, repoPath string, args ...string) error {
 	// #nosec G204 -- repoPath is from validated bare clone path; args are hardcoded git subcommands
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	cmd.Env = r.cmdEnv()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

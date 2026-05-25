@@ -33,7 +33,7 @@ var _ = Describe("RepoManager", func() {
 		manager = git.NewRepoManager(git.WorkdirConfig{
 			ReposPath: reposDir,
 			WorkPath:  workDir,
-		})
+		}, "")
 		origin = newTestOrigin()
 		DeferCleanup(os.RemoveAll, origin.Path)
 	})
@@ -181,7 +181,7 @@ var _ = Describe("RepoManager", func() {
 				m := git.NewRepoManager(git.WorkdirConfig{
 					ReposPath: filepath.Join(GinkgoT().TempDir(), "nonexistent"),
 					WorkPath:  workDir,
-				})
+				}, "")
 				Expect(m.PruneAllWorktrees(ctx)).To(BeNil())
 			})
 		})
@@ -214,6 +214,54 @@ var _ = Describe("RepoManager", func() {
 				Expect(gitErr).To(BeNil())
 				Expect(string(out)).NotTo(ContainSubstring(staleDir))
 			})
+		})
+	})
+
+	Describe("cmdEnv (subprocess env for git invocations)", func() {
+		It(
+			"returns nil when no token is configured so git inherits the parent env unchanged",
+			func() {
+				// The local-CLI / noop path constructs RepoManager with an empty token
+				// because credentials come from the operator's own gh state in
+				// ~/.config/gh/hosts.yml. Returning nil makes exec.Cmd inherit the
+				// parent env so SSH_AUTH_SOCK / GIT_* / locale propagate as expected.
+				m := git.NewRepoManager(
+					git.WorkdirConfig{ReposPath: reposDir, WorkPath: workDir},
+					"",
+				)
+				Expect(git.CmdEnv(m)).To(BeNil())
+			},
+		)
+
+		It("returns an allowlist env containing GH_TOKEN when token is configured", func() {
+			// The pod path passes the minted IAT so git subprocesses can
+			// authenticate via the gh credential helper installed by
+			// `gh auth setup-git`. Without GH_TOKEN in the git subprocess env,
+			// the helper subprocess (`gh auth git-credential`) returns nothing
+			// and git fails with "authentication required" — the failure mode
+			// surfaced on bborbe/trading#136 even after PR #11 landed.
+			const token = "ghs-TEST-IAT-NOT-REAL" //nolint:gosec // test literal, not a real credential
+			m := git.NewRepoManager(
+				git.WorkdirConfig{ReposPath: reposDir, WorkPath: workDir},
+				token,
+			)
+			env := git.CmdEnv(m)
+			Expect(env).To(ContainElement("GH_TOKEN=" + token))
+			// HOME + PATH must be present so git can read ~/.gitconfig and resolve gh.
+			homeFound, pathFound := false, false
+			for _, e := range env {
+				if strings.HasPrefix(e, "HOME=") {
+					homeFound = true
+				}
+				if strings.HasPrefix(e, "PATH=") {
+					pathFound = true
+				}
+			}
+			Expect(homeFound).To(BeTrue(), "HOME must be in subprocess env (for ~/.gitconfig)")
+			Expect(pathFound).To(BeTrue(), "PATH must be in subprocess env (to resolve git + gh)")
+			// Defense in depth: env must NOT leak unrelated pod secrets. Only the
+			// three allowlisted entries should be present.
+			Expect(env).To(HaveLen(3))
 		})
 	})
 })
