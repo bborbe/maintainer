@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.23
+
+- refactor(watcher/github-pr): remove empty pkg/publisher.go and its export test file
+
 ## v0.26.22
 
 - test(watcher/github-pr): standardize Ginkgo suite setup with UTC timezone, untruncated diffs, and 60s timeout

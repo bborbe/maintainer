@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Removed empty pkg/publisher.go and pkg/publisher_export_test.go from watcher/github-pr
+container: maintainer-exec-170-review-watcher-github-pr-8-delete-empty-publisher
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:24:08Z"
+completed: "2026-05-25T21:25:42Z"
 ---
 
 <summary>
