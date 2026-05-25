@@ -1,7 +1,12 @@
 ---
-status: approved
+status: committing
+summary: Added integration tests for cmd/run-once/main.go covering error paths and success path using injectable WatcherFactory
+container: maintainer-exec-177-review-watcher-github-build-run-once-tests
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T22:05:49Z"
+completed: "2026-05-25T22:14:12Z"
 ---
 
 <summary>

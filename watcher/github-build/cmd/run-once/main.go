@@ -26,11 +26,18 @@ import (
 )
 
 func main() {
-	app := &application{}
+	app := NewApplication()
 	os.Exit(service.Main(context.Background(), app, &app.SentryDSN, &app.SentryProxy))
 }
 
-type application struct {
+// NewApplication creates an Application with default dependencies.
+func NewApplication() *Application {
+	return &Application{
+		CreateWatcher: factory.CreateWatcher,
+	}
+}
+
+type Application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
@@ -48,9 +55,27 @@ type application struct {
 	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
 	MaxTitleLen     int    `required:"true"  arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                                          default:"200"`
 	TaskSuffix      string `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"   usage:"Optional suffix appended to build-failure task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
+
+	CreateWatcher WatcherFactory
 }
 
-func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+// WatcherFactory creates a Watcher and its cleanup function.
+type WatcherFactory func(
+	ctx context.Context,
+	ghClient pkg.GitHubClient,
+	brokers libkafka.Brokers,
+	stage string,
+	inputAllowlist []string,
+	resolved pkg.AllowlistSnapshot,
+	cursorPath string,
+	assignee string,
+	taskStatus string,
+	taskPhase string,
+	maxTitleLen int,
+	taskSuffix string,
+) (pkg.Watcher, func(), error)
+
+func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
 		return err
@@ -96,7 +121,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}
 
-	w, cleanup, err := factory.CreateWatcher(
+	w, cleanup, err := a.CreateWatcher(
 		ctx,
 		ghClient,
 		a.KafkaBrokers,
