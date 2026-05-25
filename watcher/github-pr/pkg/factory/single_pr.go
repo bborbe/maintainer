@@ -28,6 +28,18 @@ func CreateSinglePRTriggerHandler(
 	taskSuffix string,
 	metrics pkg.Metrics,
 ) handler.SinglePRTriggerHandler {
+	if httpClient == nil {
+		panic("httpClient is required")
+	}
+	if createSender == nil {
+		panic("createSender is required")
+	}
+	if taskCreationFilter == nil {
+		panic("taskCreationFilter is required")
+	}
+	if trustDecision == nil {
+		panic("trustDecision is required")
+	}
 	ghClient := pkg.NewGitHubClient(httpClient)
 	h := handler.NewSinglePRTriggerHandler(
 		ghClient,

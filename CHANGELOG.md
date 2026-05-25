@@ -8,6 +8,12 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.35
+
+- test(watcher/github-pr): add unit tests for BuildCreateCommand covering trusted/untrusted author branches, empty author login, title sanitization, and maxTitleLen truncation
+- test(watcher/github-pr): add nil-check tests for CreateSinglePRTriggerHandler factory; add panic guards for nil httpClient, createSender, taskCreationFilter, and trustDecision
+- test(watcher/github-pr): add pkg/factory/single_pr_test.go with panic assertions for all nil parameters
+
 ## v0.26.34
 
 - fix(watcher/github-pr): wrap errors at validation call sites in main.go to avoid bare returns
