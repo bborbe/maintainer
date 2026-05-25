@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.21
+
+- fix(watcher/github-pr): add context cancellation checks to Poll, fetchAllPRs, and processPRs to enable prompt shutdown when context is cancelled
+
 ## v0.26.20
 
 - refactor(watcher/github-build): remove unused context.Context parameter from ParseRepoAllowlist

@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added non-blocking ctx.Done() checks in Poll, fetchAllPRs, and processPRs to enable prompt shutdown when context is cancelled
+container: maintainer-exec-168-review-watcher-github-pr-1-context-cancellation-in-loops
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:20:45Z"
+completed: "2026-05-25T21:22:29Z"
 ---
 
 <summary>

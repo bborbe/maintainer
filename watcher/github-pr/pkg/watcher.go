@@ -83,6 +83,12 @@ func (w *watcher) Poll(ctx context.Context) error {
 		return nil
 	}
 
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
 	maxUpdatedAt := w.processPRs(ctx, &cursorState, allPRs)
 
 	if maxUpdatedAt.After(cursorState.LastUpdatedAt) {
@@ -106,6 +112,13 @@ func (w *watcher) fetchAllPRs(
 	var allPRs []PullRequest
 
 	for {
+		select {
+		case <-ctx.Done():
+			glog.V(2).Infof("fetchAllPRs cancelled before page search")
+			return nil, ""
+		default:
+		}
+
 		result, err := w.ghClient.SearchPRs(ctx, w.scope, since, page)
 		if err != nil {
 			glog.Errorf("github search failed err=%v", err)
@@ -118,12 +131,6 @@ func (w *watcher) fetchAllPRs(
 			break
 		}
 		page = result.NextPage
-
-		select {
-		case <-ctx.Done():
-			return nil, ""
-		default:
-		}
 	}
 	return allPRs, ""
 }
@@ -158,6 +165,13 @@ func (w *watcher) processPRs(
 	newHeadSHAs := make(map[string]string, len(allPRs))
 
 	for _, pr := range allPRs {
+		select {
+		case <-ctx.Done():
+			glog.V(2).Infof("poll cancelled during processPRs at pr %d", pr.Number)
+			return maxUpdatedAt
+		default:
+		}
+
 		if w.taskCreationFilter.Skip(
 			filter.PR{
 				AuthorLogin: pr.AuthorLogin,
