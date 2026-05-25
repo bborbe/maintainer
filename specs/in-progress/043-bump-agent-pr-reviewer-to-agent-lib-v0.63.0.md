@@ -1,9 +1,10 @@
 ---
-status: approved
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-25T18:22:23Z"
+verifying: "2026-05-25T19:52:10Z"
 branch: dark-factory/bump-agent-pr-reviewer-to-agent-lib-v0-63-0
 ---
 
@@ -135,3 +136,20 @@ These four steps are NOT part of this PR's AC list. They are the unblocker for S
 ## Do-Nothing Option
 
 If this spec is not landed: `lib/v0.63.0` exists in the agent repo and is tagged, but `pr-reviewer` keeps consuming `v0.62.17` and keeps booting one pod per phase. The bug-fix verification loop on this very repo continues to pay 15 min per PR review on the happy path. The work in agent spec 040 is shipped-but-dark — no consumer benefits. Status quo is acceptable only if the operator is willing to accept that every pr-review cycle costs 15 min indefinitely, which contradicts the driving Obsidian task's Goal ("happy-path PR review wall-clock under 5 min on the 3-phase agent"). Reject do-nothing.
+
+## Verification Result
+
+**Verified:** 2026-05-25T20:00:12Z (HEAD efe7a6c)
+**Binary:** installed dark-factory (maintainer repo is not dark-factory itself; no Phase 0 build)
+**Scenario:** no scenario (spec declares "NO new scenario"); verified via direct evidence per spec Verification block
+**Evidence:**
+- `go.mod` line 14: `github.com/bborbe/agent/lib v0.63.0` (grep count 1; zero v0.62 lines)
+- `go.sum`: two `v0.63.0` checksum lines (module + go.mod); zero `v0.62` lines for agent/lib
+- `go mod verify` → `all modules verified`, exit 0
+- `make precommit` → tests pass (factory 48.4%, git 88.9%, github 76.2%, githubauth 93.8%, githubposter 85.2%, prompts 85.7%), golangci-lint 0 issues, vet clean, govulncheck/osv/trivy clean, ending with `ready to commit`, exit 0
+- CHANGELOG.md line 5 bullet: `- chore(agent/pr-reviewer): bump github.com/bborbe/agent/lib from v0.62.17 to v0.63.0 ...` (now under `## v0.26.10` because the release commit `efe7a6c` renamed the `## Unreleased` heading at release-cut; bullet content and prefix exactly match AC #6 intent)
+- `git diff 459d93b efe7a6c --name-only` (excluding dark-factory `prompts/` + `specs/` metadata): four files — `CHANGELOG.md`, `agent/pr-reviewer/go.mod`, `agent/pr-reviewer/go.sum`, `agent/pr-reviewer/pkg/factory/factory_test.go` (test edit allowed by amended Files Touched section)
+- `factory_test.go` diff carries inline comment `// updated for lib v0.62.29: needs_input no longer writes phase: human_review ...` per amendment requirement
+- `replace (...)` block in go.mod: zero +/- lines (only the `require github.com/bborbe/agent/lib` line changed)
+- No other `github.com/bborbe/*` require pins changed
+**Verdict:** PASS
