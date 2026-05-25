@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added panic-recover wrapper around wildcard refresh loop closure in buildAllowlistSnapshot
+container: maintainer-exec-165-review-watcher-github-build-refresh-panic
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:16:56Z"
+completed: "2026-05-25T21:17:29Z"
 ---
 
 <summary>

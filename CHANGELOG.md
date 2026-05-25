@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.18
+
+- fix(watcher/github-build): add panic-recover wrapper around wildcard refresh loop closure in buildAllowlistSnapshot to prevent panics outside safeRefresh from killing the CancelOnFirstFinish task set
+
 ## v0.26.17
 
 - fix(watcher/github-build): add context cancellation checks inside pollRepo before GetDefaultBranch, GetWorkflowRuns, and each fetchJobInfoForRun call to prevent SIGTERM from being deferred until after all API calls complete

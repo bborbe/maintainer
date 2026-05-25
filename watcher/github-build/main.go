@@ -65,6 +65,11 @@ func buildAllowlistSnapshot(
 			countWildcards(repoAllowlist), wildcard.RefreshInterval(),
 		)
 		return resolvedSet, func(ctx context.Context) error {
+			defer func() {
+				if rec := recover(); rec != nil {
+					glog.Errorf("wildcard refresh loop panic recovered: %v", rec)
+				}
+			}()
 			return resolvedSet.RunRefreshLoop(ctx)
 		}
 	}
