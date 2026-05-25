@@ -303,6 +303,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.MaxSlugLen,
 		a.MaxTitleLen,
 		a.TaskSuffix,
+		pkg.NewMetrics(),
 	)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 

@@ -53,6 +53,7 @@ var _ = Describe("TriggerHandler", func() {
 			trustDecision,
 			"dev",
 			80, 200, "",
+			pkg.NewMetrics(),
 		))
 	})
 

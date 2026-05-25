@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.33
+
+- feat(watcher/github-pr): record IncPRPublished metrics for /trigger endpoint outcomes; distinguish trust_error and kafka_error from generic error
+
 ## v0.26.32
 
 - refactor(watcher/github-pr): refactor SinglePRTriggerHandler to use libhttp.WithError interface pattern; return errors naturally instead of calling writeError/writeSuccess

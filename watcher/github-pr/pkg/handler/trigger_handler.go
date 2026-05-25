@@ -36,6 +36,7 @@ func NewSinglePRTriggerHandler(
 	maxSlugLen int,
 	maxTitleLen int,
 	taskSuffix string,
+	metrics pkg.Metrics,
 ) SinglePRTriggerHandler {
 	return &singlePRTriggerHandler{
 		ghClient:           ghClient,
@@ -46,6 +47,7 @@ func NewSinglePRTriggerHandler(
 		maxSlugLen:         maxSlugLen,
 		maxTitleLen:        maxTitleLen,
 		taskSuffix:         taskSuffix,
+		metrics:            metrics,
 	}
 }
 
@@ -58,6 +60,7 @@ type singlePRTriggerHandler struct {
 	maxSlugLen         int
 	maxTitleLen        int
 	taskSuffix         string
+	metrics            pkg.Metrics
 }
 
 func (h *singlePRTriggerHandler) ServeHTTP(
@@ -81,6 +84,7 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 
 	filterPR := h.buildFilterPR(prInfo, details)
 	if h.taskCreationFilter.Skip(filterPR) {
+		h.metrics.IncPRPublished("skipped")
 		return libhttp.WrapWithStatusCode(
 			errors.Errorf(ctx, "PR skipped by filter"),
 			http.StatusUnprocessableEntity,
@@ -89,6 +93,7 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 
 	trustResult, err := h.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: details.AuthorLogin})
 	if err != nil {
+		h.metrics.IncPRPublished("trust_error")
 		return libhttp.WrapWithStatusCode(
 			errors.Wrap(ctx, err, "check trust"),
 			http.StatusBadGateway,
@@ -111,12 +116,14 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 	)
 
 	if err := h.createSender.SendCommand(ctx, cmd); err != nil {
+		h.metrics.IncPRPublished("kafka_error")
 		return libhttp.WrapWithStatusCode(
 			errors.Wrap(ctx, err, "send create task command"),
 			http.StatusBadGateway,
 		)
 	}
 
+	h.metrics.IncPRPublished("create")
 	glog.V(2).Infof(
 		"trigger: published task_id=%s pr=%s/%s#%d sha=%s",
 		taskIDStr,

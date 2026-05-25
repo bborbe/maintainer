@@ -35,7 +35,7 @@ func init() {
 	for _, result := range []string{"success", "rate_limited", "github_error"} {
 		pollCyclesTotal.WithLabelValues(result).Add(0)
 	}
-	for _, cmd := range []string{"create", "update_frontmatter", "skipped", "error"} {
+	for _, cmd := range []string{"create", "update_frontmatter", "skipped", "error", "trust_error", "kafka_error"} {
 		prPublishedTotal.WithLabelValues(cmd).Add(0)
 	}
 }

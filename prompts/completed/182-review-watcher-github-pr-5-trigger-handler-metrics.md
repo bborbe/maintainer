@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Injected Metrics into singlePRTriggerHandler, added IncPRPublished calls for all outcomes (skipped, trust_error, kafka_error, create), refined error label to distinguish trust_error and kafka_error, and pre-initialized both new labels in metrics init()
+container: maintainer-exec-182-review-watcher-github-pr-5-trigger-handler-metrics
+dark-factory-version: v0.173.0
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T22:38:58Z"
+started: "2026-05-25T23:08:49Z"
+completed: "2026-05-25T23:11:28Z"
 ---
 
 <summary>

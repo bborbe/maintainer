@@ -26,6 +26,7 @@ func CreateSinglePRTriggerHandler(
 	maxSlugLen int,
 	maxTitleLen int,
 	taskSuffix string,
+	metrics pkg.Metrics,
 ) handler.SinglePRTriggerHandler {
 	ghClient := pkg.NewGitHubClient(httpClient)
 	h := handler.NewSinglePRTriggerHandler(
@@ -37,6 +38,7 @@ func CreateSinglePRTriggerHandler(
 		maxSlugLen,
 		maxTitleLen,
 		taskSuffix,
+		metrics,
 	)
 	return libhttp.WithErrorFunc(h.ServeHTTP)
 }
