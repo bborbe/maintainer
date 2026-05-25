@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added context cancellation select checks inside pollRepo before GetDefaultBranch, GetWorkflowRuns, and each fetchJobInfoForRun call to prevent SIGTERM deferral
+container: maintainer-exec-164-review-watcher-github-build-pollrepo-cancel
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:15:15Z"
+completed: "2026-05-25T21:16:50Z"
 ---
 
 <summary>

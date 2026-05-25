@@ -166,6 +166,11 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 	repoState := GetOrCreateRepoState(cursor, repoKey)
 
 	if repoState.DefaultBranch == "" {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
 		branch, err := w.githubClient.GetDefaultBranch(ctx, owner, repo)
 		if err != nil {
 			glog.Warningf("get default branch failed repo=%s err=%v", repoKey, err)
@@ -175,6 +180,11 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 		repoState.DefaultBranch = branch
 	}
 
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
 	runs, err := w.githubClient.GetWorkflowRuns(ctx, owner, repo, repoState.DefaultBranch)
 	if err != nil {
 		if errors.Is(err, ErrRateLimited) {
@@ -337,6 +347,11 @@ func (w *buildWatcher) buildCreateTaskCommand(
 
 	var primaryJobID int64 // job ID for failingRuns[0] — used for log fetch
 	for i, run := range failingRuns {
+		select {
+		case <-ctx.Done():
+			return task.CreateCommand{}
+		default:
+		}
 		jobName, stepName, jobID := w.fetchJobInfoForRun(ctx, owner, repo, run.RunID)
 		if i == 0 {
 			primaryJobID = jobID

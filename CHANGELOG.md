@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.17
+
+- fix(watcher/github-build): add context cancellation checks inside pollRepo before GetDefaultBranch, GetWorkflowRuns, and each fetchJobInfoForRun call to prevent SIGTERM from being deferred until after all API calls complete
+
 ## v0.26.16
 
 - fix(watcher/github-build): add context cancellation check in listOwnerReposPaginated to stop pagination immediately when context is cancelled
