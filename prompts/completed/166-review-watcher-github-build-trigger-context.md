@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Use context.Background() in /trigger handler to prevent requests during graceful shutdown from being dropped
+container: maintainer-exec-166-review-watcher-github-build-trigger-context
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:17:33Z"
+completed: "2026-05-25T21:18:56Z"
 ---
 
 <summary>

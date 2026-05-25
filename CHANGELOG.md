@@ -1,5 +1,17 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+Please choose versions by [Semantic Versioning](http://semver.org/).
+
+* MAJOR version when you make incompatible API changes,
+* MINOR version when you add functionality in a backwards-compatible manner, and
+* PATCH version when you make backwards-compatible bug fixes.
+
+## v0.26.19
+
+- fix(watcher/github-build): use context.Background() for /trigger handler to prevent requests during graceful shutdown from being dropped
+
 ## v0.26.18
 
 - fix(watcher/github-build): add panic-recover wrapper around wildcard refresh loop closure in buildAllowlistSnapshot to prevent panics outside safeRefresh from killing the CancelOnFirstFinish task set

@@ -216,7 +216,7 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(context.Background(), poll))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}
