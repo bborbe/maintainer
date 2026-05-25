@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.14
+
+- chore(watcher/github-build): delete empty pkg/publisher.go; fix duplicate comment in main.go
+
 ## v0.26.13
 
 - fix(agent/pr-reviewer): add 15-second timeout to http.Client used by PrPoster and ReviewVerifier to prevent indefinite hangs on stalled GitHub API connections

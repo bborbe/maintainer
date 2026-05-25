@@ -53,8 +53,6 @@ func countWildcards(entries []string) int {
 
 // buildAllowlistSnapshot creates the snapshot provider and (if wildcards are present)
 // a background refresh task for the daemon's run loop.
-// buildAllowlistSnapshot creates the snapshot provider and (if wildcards are present)
-// a background refresh task for the daemon's run loop.
 func buildAllowlistSnapshot(
 	ghClient pkg.GitHubClient,
 	repoAllowlist []string,
