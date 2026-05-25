@@ -2,78 +2,98 @@
 // Copyright (c) 2026 Benjamin Borbe All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-// Copyright (c) 2026 Benjamin Borbe All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
 package mocks
 
 import (
+	"context"
 	"net/http"
 	"sync"
 
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
 )
 
-type SinglePRTriggerHandler struct {
-	ServeHTTPStub        func(http.ResponseWriter, *http.Request)
+type FakeSinglePRTriggerHandler struct {
+	ServeHTTPStub        func(context.Context, http.ResponseWriter, *http.Request) error
 	serveHTTPMutex       sync.RWMutex
 	serveHTTPArgsForCall []struct {
-		arg1 http.ResponseWriter
-		arg2 *http.Request
+		arg1 context.Context
+		arg2 http.ResponseWriter
+		arg3 *http.Request
+	}
+	serveHTTPReturns struct {
+		result1 error
+	}
+	serveHTTPReturnsOnCall map[int]struct {
+		result1 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *SinglePRTriggerHandler) ServeHTTP(arg1 http.ResponseWriter, arg2 *http.Request) {
+func (fake *FakeSinglePRTriggerHandler) ServeHTTP(arg1 context.Context, arg2 http.ResponseWriter, arg3 *http.Request) error {
 	fake.serveHTTPMutex.Lock()
+	ret, specificReturn := fake.serveHTTPReturnsOnCall[len(fake.serveHTTPArgsForCall)]
 	fake.serveHTTPArgsForCall = append(fake.serveHTTPArgsForCall, struct {
-		arg1 http.ResponseWriter
-		arg2 *http.Request
-	}{arg1, arg2})
+		arg1 context.Context
+		arg2 http.ResponseWriter
+		arg3 *http.Request
+	}{arg1, arg2, arg3})
 	stub := fake.ServeHTTPStub
-	fake.recordInvocation("ServeHTTP", []interface{}{arg1, arg2})
+	fakeReturns := fake.serveHTTPReturns
+	fake.recordInvocation("ServeHTTP", []interface{}{arg1, arg2, arg3})
 	fake.serveHTTPMutex.Unlock()
 	if stub != nil {
-		fake.ServeHTTPStub(arg1, arg2)
+		return stub(arg1, arg2, arg3)
 	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
 }
 
-func (fake *SinglePRTriggerHandler) ServeHTTPCallCount() int {
+func (fake *FakeSinglePRTriggerHandler) ServeHTTPCallCount() int {
 	fake.serveHTTPMutex.RLock()
 	defer fake.serveHTTPMutex.RUnlock()
 	return len(fake.serveHTTPArgsForCall)
 }
 
-func (fake *SinglePRTriggerHandler) ServeHTTPCalls(stub func(http.ResponseWriter, *http.Request)) {
+func (fake *FakeSinglePRTriggerHandler) ServeHTTPCalls(stub func(context.Context, http.ResponseWriter, *http.Request) error) {
 	fake.serveHTTPMutex.Lock()
 	defer fake.serveHTTPMutex.Unlock()
 	fake.ServeHTTPStub = stub
 }
 
-func (fake *SinglePRTriggerHandler) ServeHTTPArgsForCall(i int) (http.ResponseWriter, *http.Request) {
+func (fake *FakeSinglePRTriggerHandler) ServeHTTPArgsForCall(i int) (context.Context, http.ResponseWriter, *http.Request) {
 	fake.serveHTTPMutex.RLock()
 	defer fake.serveHTTPMutex.RUnlock()
 	argsForCall := fake.serveHTTPArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
 }
 
-func (fake *SinglePRTriggerHandler) Invocations() map[string][][]interface{} {
+func (fake *FakeSinglePRTriggerHandler) ServeHTTPReturns(result1 error) {
+	fake.serveHTTPMutex.Lock()
+	defer fake.serveHTTPMutex.Unlock()
+	fake.ServeHTTPStub = nil
+	fake.serveHTTPReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeSinglePRTriggerHandler) ServeHTTPReturnsOnCall(i int, result1 error) {
+	fake.serveHTTPMutex.Lock()
+	defer fake.serveHTTPMutex.Unlock()
+	fake.ServeHTTPStub = nil
+	if fake.serveHTTPReturnsOnCall == nil {
+		fake.serveHTTPReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.serveHTTPReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeSinglePRTriggerHandler) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
@@ -83,7 +103,7 @@ func (fake *SinglePRTriggerHandler) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
-func (fake *SinglePRTriggerHandler) recordInvocation(key string, args []interface{}) {
+func (fake *FakeSinglePRTriggerHandler) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
 	if fake.invocations == nil {
@@ -95,4 +115,4 @@ func (fake *SinglePRTriggerHandler) recordInvocation(key string, args []interfac
 	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
-var _ handler.SinglePRTriggerHandler = new(SinglePRTriggerHandler)
+var _ handler.SinglePRTriggerHandler = new(FakeSinglePRTriggerHandler)

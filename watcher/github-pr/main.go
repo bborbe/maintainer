@@ -294,7 +294,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.TaskSuffix,
 	)
 
-	triggerHandler := factory.CreateSinglePRHandler(
+	triggerHandler := factory.CreateSinglePRTriggerHandler(
 		httpClient,
 		createSender,
 		taskCreationFilter,
@@ -304,7 +304,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.MaxTitleLen,
 		a.TaskSuffix,
 	)
-	a.TriggerHandler = triggerHandler
+	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
 	glog.V(2).
 		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	task "github.com/bborbe/agent/lib/command/task"
+	libhttp "github.com/bborbe/http"
 
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
@@ -15,8 +16,8 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-// CreateSinglePRHandler wires a handler that fires a single-PR review by URL.
-func CreateSinglePRHandler(
+// CreateSinglePRTriggerHandler wires a handler that fires a single-PR review by URL.
+func CreateSinglePRTriggerHandler(
 	httpClient *http.Client,
 	createSender task.CreateCommandSender,
 	taskCreationFilter filter.TaskCreationFilter,
@@ -27,7 +28,7 @@ func CreateSinglePRHandler(
 	taskSuffix string,
 ) handler.SinglePRTriggerHandler {
 	ghClient := pkg.NewGitHubClient(httpClient)
-	return handler.NewSinglePRTriggerHandler(
+	h := handler.NewSinglePRTriggerHandler(
 		ghClient,
 		createSender,
 		taskCreationFilter,
@@ -37,4 +38,5 @@ func CreateSinglePRHandler(
 		maxTitleLen,
 		taskSuffix,
 	)
+	return libhttp.WithErrorFunc(h.ServeHTTP)
 }

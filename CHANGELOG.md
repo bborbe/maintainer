@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.32
+
+- refactor(watcher/github-pr): refactor SinglePRTriggerHandler to use libhttp.WithError interface pattern; return errors naturally instead of calling writeError/writeSuccess
+
 ## v0.26.31
 
 - refactor(watcher/github-pr): split CreateGitHubHTTPClient into CreateGitHubAppClient and CreateGitHubPATClient with zero-business-logic factories; move auth-mode dispatch to main.go

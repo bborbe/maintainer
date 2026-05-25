@@ -14,6 +14,7 @@ import (
 	task "github.com/bborbe/agent/lib/command/task"
 	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
 	"github.com/bborbe/errors"
+	libhttp "github.com/bborbe/http"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,38 +46,31 @@ var _ = Describe("TriggerHandler", func() {
 		taskCreationFilter.SkipReturns(false)
 		trustDecision.IsTrustedReturns(trust.NewResult(true, "trusted"), nil)
 
-		h = handler.NewSinglePRTriggerHandler(
+		h = libhttp.NewErrorHandler(handler.NewSinglePRTriggerHandler(
 			ghClient,
 			createSender,
 			taskCreationFilter,
 			trustDecision,
 			"dev",
 			80, 200, "",
-		)
+		))
 	})
 
 	DescribeTable(
 		"error cases",
-		func(rawURL string, expectedStatus int, expectPRURL bool) {
+		func(rawURL string, expectedStatus int) {
 			req := httptest.NewRequest("POST", "/trigger?"+rawURL, nil)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
 			Expect(resp.Code).To(Equal(expectedStatus))
-			var body map[string]string
-			//nolint:errcheck // test code; response body is controlled
-			_ = json.Unmarshal(resp.Body.Bytes(), &body)
-			if expectPRURL {
-				Expect(body["pr_url"]).ToNot(BeEmpty())
-			}
 		},
-		Entry("missing url returns 400", "foo=bar", http.StatusBadRequest, false),
-		Entry("empty url returns 400", "url=", http.StatusBadRequest, false),
-		Entry("invalid url returns 400", "url=not-a-url", http.StatusBadRequest, true),
+		Entry("missing url returns 400", "foo=bar", http.StatusBadRequest),
+		Entry("empty url returns 400", "url=", http.StatusBadRequest),
+		Entry("invalid url returns 400", "url=not-a-url", http.StatusBadRequest),
 		Entry(
 			"non-github platform returns 400",
 			"url=https://bitbucket.org/owner/repo/pull-requests/1",
 			http.StatusBadRequest,
-			true,
 		),
 	)
 
@@ -94,10 +88,6 @@ var _ = Describe("TriggerHandler", func() {
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
 			Expect(resp.Code).To(Equal(http.StatusBadGateway))
-			var body map[string]string
-			//nolint:errcheck // test code; response body is controlled
-			_ = json.Unmarshal(resp.Body.Bytes(), &body)
-			Expect(body["error"]).To(ContainSubstring("github fetch failed"))
 		})
 	})
 
@@ -120,7 +110,7 @@ var _ = Describe("TriggerHandler", func() {
 				}
 			})
 
-			It("returns 422 with filter name", func() {
+			It("returns 422", func() {
 				req := httptest.NewRequest(
 					"POST",
 					"/trigger?url=https://github.com/bborbe/repo/pull/1",
@@ -129,10 +119,6 @@ var _ = Describe("TriggerHandler", func() {
 				resp := httptest.NewRecorder()
 				h.ServeHTTP(resp, req)
 				Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
-				var body map[string]string
-				//nolint:errcheck // test code; response body is controlled
-				_ = json.Unmarshal(resp.Body.Bytes(), &body)
-				Expect(body["filter"]).ToNot(BeEmpty())
 			})
 		})
 
@@ -151,7 +137,7 @@ var _ = Describe("TriggerHandler", func() {
 				}
 			})
 
-			It("returns 422 with filter name", func() {
+			It("returns 422", func() {
 				req := httptest.NewRequest(
 					"POST",
 					"/trigger?url=https://github.com/bborbe/repo/pull/1",
@@ -160,10 +146,6 @@ var _ = Describe("TriggerHandler", func() {
 				resp := httptest.NewRecorder()
 				h.ServeHTTP(resp, req)
 				Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
-				var body map[string]string
-				//nolint:errcheck // test code; response body is controlled
-				_ = json.Unmarshal(resp.Body.Bytes(), &body)
-				Expect(body["filter"]).To(Equal("WIPTitleFilter"))
 			})
 		})
 	})
@@ -187,10 +169,6 @@ var _ = Describe("TriggerHandler", func() {
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
 			Expect(resp.Code).To(Equal(http.StatusBadGateway))
-			var body map[string]string
-			//nolint:errcheck // test code; response body is controlled
-			_ = json.Unmarshal(resp.Body.Bytes(), &body)
-			Expect(body["error"]).To(ContainSubstring("kafka publish failed"))
 		})
 	})
 
