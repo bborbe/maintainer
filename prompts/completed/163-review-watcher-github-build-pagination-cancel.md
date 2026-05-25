@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added context cancellation check to listOwnerReposPaginated to stop pagination immediately when context is cancelled
+container: maintainer-exec-163-review-watcher-github-build-pagination-cancel
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:13:52Z"
+completed: "2026-05-25T21:15:12Z"
 ---
 
 <summary>

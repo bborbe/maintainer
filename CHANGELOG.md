@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.16
+
+- fix(watcher/github-build): add context cancellation check in listOwnerReposPaginated to stop pagination immediately when context is cancelled
+
 ## v0.26.15
 
 - fix(watcher/github-build): narrow redactOpaqueHexRE from 40+ to exactly 40 hex chars to reduce false positives; add #nosec G101 to AWS secret key redaction regex

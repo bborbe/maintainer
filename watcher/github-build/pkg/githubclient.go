@@ -316,6 +316,11 @@ func (c *githubClient) listOwnerReposPaginated(
 	names := make([]string, 0, 32)
 	page := 1
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		repos, resp, err := c.fetchRepoPage(ctx, owner, isOrg, page)
 		if err != nil {
 			return nil, c.wrapRateLimitErr(ctx, err, "list repos for %s page=%d", owner, page)
