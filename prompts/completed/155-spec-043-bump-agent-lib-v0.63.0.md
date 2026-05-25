@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["043"]
+spec: [043-bump-agent-pr-reviewer-to-agent-lib-v0.63.0]
 summary: 'Bumped agent/pr-reviewer dependency on github.com/bborbe/agent/lib from v0.62.17 to v0.63.0, updated factory_test.go assertion to match lib v0.62.29 behavior change (needs_input no longer writes phase: human_review), documented in root CHANGELOG.md'
 container: maintainer-exec-155-spec-043-bump-agent-lib-v0-63-0
 dark-factory-version: v0.171.1-3-gd94f1fa
