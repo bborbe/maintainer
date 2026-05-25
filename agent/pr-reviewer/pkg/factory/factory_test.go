@@ -165,8 +165,9 @@ var _ = Describe("Factory", func() {
 			})
 		})
 
+		// updated for lib v0.62.29: needs_input no longer writes phase: human_review in passthrough content generator (see github.com/bborbe/agent/lib CHANGELOG v0.62.27 / v0.62.29)
 		Context("when result status is needs_input with Output containing frontmatter", func() {
-			It("sets phase: human_review in frontmatter and writes ## Failure", func() {
+			It("writes ## Failure with the message and preserves existing phase", func() {
 				result := agentlib.AgentResultInfo{
 					Status:  agentlib.AgentStatusNeedsInput,
 					Message: "GH_TOKEN unauthorized (HTTP 401)",
@@ -176,7 +177,6 @@ var _ = Describe("Factory", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(generated).To(ContainSubstring("## Failure"))
 				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
-				Expect(generated).To(ContainSubstring("phase: human_review"))
 			})
 		})
 	})

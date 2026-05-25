@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.26.10
+
+- chore(agent/pr-reviewer): bump `github.com/bborbe/agent/lib` from v0.62.17 to v0.63.0 to collapse multi-phase pod boots into one pod on the happy path (lib spec 040); pr-reviewer's 3-phase chain now runs in a single pod boot once the new binary is deployed. Test assertions updated to match lib v0.62.27/v0.62.29 behavior change (`needs_input` / `failed` no longer write `phase: human_review`).
 
 - fix(agent/pr-reviewer): every pr-review step now publishes its routing decision on retrigger instead of silently skipping. Previously `planningStep`, `checkoutExecutionStep`, and `reviewStep` returned `ShouldRun=false` when their output section (`## Plan` / `## Review` / `## Verdict`) already existed in the body. On a retrigger (controller resets `trigger_count` but leaves the body intact), the step was skipped entirely — including the `NextPhase` decision — so the `tokenCheck` step's `Done + NextPhase=""` became the last delivered result and the task short-circuited to `phase: done` without any review running. Surfaced on `bborbe/trading#136` (2026-05-25). Fix: each step's `ShouldRun` always returns `true`; the `## <heading> already present` check moves into `Run`, which then publishes the same `NextPhase` it would have published on a fresh run (planning re-parses concerns from the existing plan; execution and ai-review just advance the phase).
 
