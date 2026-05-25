@@ -1,7 +1,12 @@
 ---
-status: approved
+status: committing
+summary: Added BSD copyright headers to all 11 Counterfeiter-generated mock files by modifying Makefile.precommit to insert headers after the counterfeiter comment
+container: maintainer-exec-160-review-agent-pr-reviewer-9-license-headers
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:07:32Z"
+completed: "2026-05-25T21:11:18Z"
 ---
 
 <summary>
