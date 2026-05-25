@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Replaced 3 fmt.Errorf calls with errors.Errorf in agent/pr-reviewer/cmd/cli/main.go
+container: maintainer-exec-158-review-agent-pr-reviewer-5-fmt-errorf
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:04:10Z"
+completed: "2026-05-25T21:05:57Z"
 ---
 
 <summary>

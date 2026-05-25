@@ -53,7 +53,7 @@ func main() {
 func run(ctx context.Context, verbose bool, commentOnly bool) error {
 	// Parse args
 	if flag.NArg() < 1 {
-		return fmt.Errorf("usage: pr-reviewer [-v] [--comment-only] <pr-url>")
+		return errors.Errorf(ctx, "usage: pr-reviewer [-v] [--comment-only] <pr-url>")
 	}
 	rawURL := flag.Arg(0)
 
@@ -93,7 +93,7 @@ func run(ctx context.Context, verbose bool, commentOnly bool) error {
 	case prurl.PlatformBitbucket:
 		return runBitbucket(ctx, verbose, commentOnly, cfg, prInfo, repoPath, repoInfo)
 	default:
-		return fmt.Errorf("unsupported platform: %s", prInfo.Platform)
+		return errors.Errorf(ctx, "unsupported platform: %s", prInfo.Platform)
 	}
 }
 
@@ -188,7 +188,7 @@ func runBitbucket(
 		prpkg.DefaultBitbucketToken,
 	)
 	if resolvedToken == "" {
-		return fmt.Errorf("BITBUCKET_TOKEN not set")
+		return errors.Errorf(ctx, "BITBUCKET_TOKEN not set")
 	}
 	bbClient := bitbucket.NewClient(resolvedToken)
 

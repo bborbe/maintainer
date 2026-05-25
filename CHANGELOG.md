@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.26.12
+
+- fix(agent/pr-reviewer/cmd/cli): replace fmt.Errorf with errors.Errorf in main.go to follow project error-handling conventions
+
 ## v0.26.11
 
 - perf(agent/pr-reviewer): move envVarRefRegexp compilation to package level in config.go — eliminates redundant regex recompilation on every resolveEnvVar call
