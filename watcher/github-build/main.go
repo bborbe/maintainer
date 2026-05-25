@@ -11,7 +11,6 @@ package main
 import (
 	"context"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/bborbe/errors"
@@ -30,7 +29,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-build/pkg/wildcard"
 )
 
 func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
@@ -38,43 +36,6 @@ func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
 		return errors.Errorf(ctx, "MAX_TITLE_LEN must be > 0; got %d", maxTitleLen)
 	}
 	return nil
-}
-
-func countWildcards(entries []string) int {
-	n := 0
-	for _, e := range entries {
-		parts := strings.Split(strings.TrimSpace(e), "/")
-		if len(parts) == 3 && parts[2] == "*" {
-			n++
-		}
-	}
-	return n
-}
-
-// buildAllowlistSnapshot creates the snapshot provider and (if wildcards are present)
-// a background refresh task for the daemon's run loop.
-func buildAllowlistSnapshot(
-	ghClient pkg.GitHubClient,
-	repoAllowlist []string,
-) (pkg.AllowlistSnapshot, run.Func) {
-	if wildcard.HasWildcard(repoAllowlist) {
-		expander := wildcard.NewExpander(ghClient)
-		resolvedSet := wildcard.NewResolvedAllowlist(expander, repoAllowlist)
-		glog.V(2).Infof(
-			"wildcard_refresh_enabled entries=%d (interval=%s)",
-			countWildcards(repoAllowlist), wildcard.RefreshInterval(),
-		)
-		return resolvedSet, func(ctx context.Context) error {
-			defer func() {
-				if rec := recover(); rec != nil {
-					glog.Errorf("wildcard refresh loop panic recovered: %v", rec)
-				}
-			}()
-			return resolvedSet.RunRefreshLoop(ctx)
-		}
-	}
-	glog.V(2).Infof("wildcard_refresh_disabled allowlist=pure-literal")
-	return pkg.NewStaticSnapshot(repoAllowlist), nil
 }
 
 func main() {
@@ -145,7 +106,10 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	ghClient := pkg.NewGitHubClient(httpClient)
 
-	resolved, refreshTask := buildAllowlistSnapshot(ghClient, repoAllowlist)
+	resolved, refreshTask, err := factory.CreateAllowlistSnapshot(ghClient, repoAllowlist)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create allowlist snapshot")
+	}
 
 	w, cleanup, err := factory.CreateWatcher(
 		ctx,

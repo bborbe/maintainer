@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Extracted CreateAllowlistSnapshot to factory, removing duplicated wildcard resolution logic from main.go and cmd/run-once/main.go
+container: maintainer-exec-175-review-watcher-github-build-factory-wildcard
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:57:43Z"
+completed: "2026-05-25T21:59:41Z"
 ---
 
 <summary>

@@ -81,16 +81,19 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	ghClient := pkg.NewGitHubClient(httpClient)
 
-	var resolved pkg.AllowlistSnapshot
-	if wildcard.HasWildcard(repoAllowlist) {
-		expander := wildcard.NewExpander(ghClient)
-		resolvedSet := wildcard.NewResolvedAllowlist(expander, repoAllowlist)
+	resolved, refreshTask, err := factory.CreateAllowlistSnapshot(ghClient, repoAllowlist)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create allowlist snapshot")
+	}
+	// For run-once, we call Refresh synchronously instead of using the background refresh task.
+	if refreshTask != nil {
+		resolvedSet, ok := resolved.(*wildcard.ResolvedAllowlist)
+		if !ok {
+			return errors.Errorf(ctx, "expected *ResolvedAllowlist when refreshTask is non-nil")
+		}
 		if err := resolvedSet.Refresh(ctx); err != nil {
 			glog.Warningf("initial wildcard refresh failed: %v", err)
 		}
-		resolved = resolvedSet
-	} else {
-		resolved = pkg.NewStaticSnapshot(repoAllowlist)
 	}
 
 	w, cleanup, err := factory.CreateWatcher(
