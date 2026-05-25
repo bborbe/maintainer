@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Removed unused context.Context parameter from ParseRepoAllowlist and updated all callers
+container: maintainer-exec-167-review-watcher-github-build-unused-param
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:00:21Z"
+started: "2026-05-25T21:19:00Z"
+completed: "2026-05-25T21:20:41Z"
 ---
 
 <summary>

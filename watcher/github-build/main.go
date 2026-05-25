@@ -114,7 +114,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrapf(ctx, err, "parse poll interval %q", a.PollInterval)
 	}
 
-	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
+	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
 		return err
 	}

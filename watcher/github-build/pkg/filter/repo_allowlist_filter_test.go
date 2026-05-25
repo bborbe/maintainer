@@ -5,8 +5,6 @@
 package filter_test
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -14,60 +12,56 @@ import (
 )
 
 var _ = Describe("ParseRepoAllowlist", func() {
-	var ctx context.Context
-	BeforeEach(func() { ctx = context.Background() })
-
 	It("returns nil for empty string (allow-all)", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "")
+		result, err := filter.ParseRepoAllowlist("")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeNil())
 	})
 
 	It("parses a single valid entry", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/go-skeleton")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/go-skeleton")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal([]string{"github.com/bborbe/go-skeleton"}))
 	})
 
 	It("parses multiple valid entries", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/a,github.com/bborbe/b")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/a,github.com/bborbe/b")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(ConsistOf("github.com/bborbe/a", "github.com/bborbe/b"))
 	})
 
 	It("strips whitespace and drops empty entries from trailing comma", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/a , github.com/bborbe/b,")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/a , github.com/bborbe/b,")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(ConsistOf("github.com/bborbe/a", "github.com/bborbe/b"))
 	})
 
 	It("silently drops whitespace-only entries", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/a, ,github.com/bborbe/b")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/a, ,github.com/bborbe/b")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(ConsistOf("github.com/bborbe/a", "github.com/bborbe/b"))
 	})
 
 	It("returns nil for comma-only input (all entries empty after trim)", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, ",")
+		result, err := filter.ParseRepoAllowlist(",")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(BeNil())
 	})
 
 	It("accepts wildcard entry without error", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/*")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/*")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal([]string{"github.com/bborbe/*"}))
 	})
 
 	It("accepts malformed entry without error", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "bborbe/repo")
+		result, err := filter.ParseRepoAllowlist("bborbe/repo")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal([]string{"bborbe/repo"}))
 	})
 
 	It("parses real dev.env value (regression: startup shape)", func() {
 		result, err := filter.ParseRepoAllowlist(
-			ctx,
 			"github.com/bborbe/go-skeleton,github.com/bborbe/jira-task-creator",
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -77,7 +71,7 @@ var _ = Describe("ParseRepoAllowlist", func() {
 	})
 
 	It("parses wildcard value (future dev.env shape after env update)", func() {
-		result, err := filter.ParseRepoAllowlist(ctx, "github.com/bborbe/*")
+		result, err := filter.ParseRepoAllowlist("github.com/bborbe/*")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result).To(Equal([]string{"github.com/bborbe/*"}))
 	})

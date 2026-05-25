@@ -51,7 +51,7 @@ type application struct {
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
-	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
+	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
 		return err
 	}

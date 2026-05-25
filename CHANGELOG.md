@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.20
+
+- refactor(watcher/github-build): remove unused context.Context parameter from ParseRepoAllowlist
+
 ## v0.26.19
 
 - fix(watcher/github-build): use context.Background() for /trigger handler to prevent requests during graceful shutdown from being dropped
