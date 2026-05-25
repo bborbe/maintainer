@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.27
+
+- fix(watcher/github-build): use write-to-temp + atomic rename in SaveCursor to prevent cursor file corruption from concurrent read-modify-write races
+
 ## v0.26.26
 
 - test(agent/pr-reviewer): add unit tests for ExpandHome, normalizeURL, classifyError, eventToState, truncateBody, isGitHubPRURL, hasAnyPRURL, writePlanningVerdict, appendVerifyDiagnostic

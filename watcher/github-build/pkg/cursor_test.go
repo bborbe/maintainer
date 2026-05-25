@@ -93,6 +93,23 @@ var _ = Describe("Cursor", func() {
 		})
 	})
 
+	Describe("SaveCursor Rename failure", func() {
+		It("returns an error when Rename fails", func() {
+			// Create a directory at cursorPath so Rename fails (cannot replace dir with file).
+			cursorPath := filepath.Join(tmpDir, "cursor.json")
+			Expect(os.MkdirAll(cursorPath, 0750)).To(Succeed())
+
+			c := &pkg.Cursor{
+				Repos: map[string]*pkg.RepoState{
+					"owner/repo": {LastKnownState: "green"},
+				},
+			}
+			err := pkg.SaveCursor(ctx, cursorPath, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("rename cursor tmp"))
+		})
+	})
+
 	Describe("GetOrCreateRepoState", func() {
 		It("returns an existing state for a known repo", func() {
 			c := &pkg.Cursor{

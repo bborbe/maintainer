@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Fixed cursor file race by adding Rename failure test - SaveCursor already used write-to-temp + atomic rename pattern, added test for Rename failure path
+container: maintainer-exec-174-review-watcher-github-build-cursor-race
+dark-factory-version: v0.171.1-3-gd94f1fa
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-25T21:25:46Z"
+started: "2026-05-25T21:54:27Z"
+completed: "2026-05-25T21:57:38Z"
 ---
 
 <summary>
