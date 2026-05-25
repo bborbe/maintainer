@@ -180,7 +180,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	jobMetrics.RecordRun(result.Status)
 	jobMetrics.RecordDuration(time.Since(start))
-	return agentlib.PrintResult(result)
+	return agentlib.PrintResult(ctx, result)
 }
 
 // dispatchAgent builds the correct agent for the configured task type.
