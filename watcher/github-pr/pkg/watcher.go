@@ -25,50 +25,112 @@ type Watcher interface {
 	Poll(ctx context.Context) error
 }
 
+// TaskConfig groups the per-task publishing configuration.
+type TaskConfig struct {
+	Stage       string
+	MaxSlugLen  int
+	MaxTitleLen int
+	TaskSuffix  string
+}
+
+//counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
+
+// TaskPublisher publishes create-task commands for a given PR + details pair.
+// Returns true on successful publish, false on trust check failure or send failure.
+type TaskPublisher interface {
+	PublishCreate(ctx context.Context, pr PullRequest, taskIDStr string, details PRDetails) bool
+}
+
+// NewTaskPublisher returns a TaskPublisher that performs trust evaluation
+// then publishes a CreateTaskCommand via the given CreateCommandSender.
+func NewTaskPublisher(
+	createSender task.CreateCommandSender,
+	trustDecision trust.Trust,
+	metrics Metrics,
+	cfg TaskConfig,
+) TaskPublisher {
+	return &taskPublisher{
+		createSender:  createSender,
+		trustDecision: trustDecision,
+		metrics:       metrics,
+		cfg:           cfg,
+	}
+}
+
+type taskPublisher struct {
+	createSender  task.CreateCommandSender
+	trustDecision trust.Trust
+	metrics       Metrics
+	cfg           TaskConfig
+}
+
+// PublishCreate implements TaskPublisher.
+func (p *taskPublisher) PublishCreate(
+	ctx context.Context,
+	pr PullRequest,
+	taskIDStr string,
+	details PRDetails,
+) bool {
+	author := pr.AuthorLogin
+
+	trustResult, err := p.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: author})
+	if err != nil {
+		glog.Errorf("trust check failed pr=%s err=%v", pr.HTMLURL, err)
+		p.metrics.IncPRPublished("error")
+		return false
+	}
+
+	cmd := BuildCreateCommand(
+		pr,
+		details,
+		taskIDStr,
+		p.cfg.Stage,
+		p.cfg.MaxSlugLen,
+		p.cfg.MaxTitleLen,
+		p.cfg.TaskSuffix,
+		trustResult,
+	)
+
+	if err := p.createSender.SendCommand(ctx, cmd); err != nil {
+		glog.Errorf("publish create-task failed pr=%s err=%v", pr.HTMLURL, err)
+		p.metrics.IncPRPublished("error")
+		return false
+	}
+	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d sha=%s taskID=%s trusted=%t",
+		pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr, trustResult.Success())
+	p.metrics.IncPRPublished("create")
+	return true
+}
+
 // NewWatcher returns a Watcher that polls GitHub and publishes commands.
 func NewWatcher(
 	ghClient GitHubClient,
-	createSender task.CreateCommandSender,
+	publisher TaskPublisher,
+	metrics Metrics,
 	cursorPath string,
 	startTime libtime.DateTime,
 	scope string,
 	taskCreationFilter filter.TaskCreationFilter,
-	stage string,
-	metrics Metrics,
-	trustDecision trust.Trust,
-	maxSlugLen int,
-	maxTitleLen int,
-	taskSuffix string,
 ) Watcher {
 	return &watcher{
 		ghClient:           ghClient,
-		createSender:       createSender,
+		publisher:          publisher,
+		metrics:            metrics,
 		cursorPath:         cursorPath,
 		startTime:          startTime,
 		scope:              scope,
 		taskCreationFilter: taskCreationFilter,
-		stage:              stage,
-		metrics:            metrics,
-		trustDecision:      trustDecision,
-		maxSlugLen:         maxSlugLen,
-		maxTitleLen:        maxTitleLen,
-		taskSuffix:         taskSuffix,
 	}
 }
 
 type watcher struct {
 	ghClient           GitHubClient
-	createSender       task.CreateCommandSender
+	publisher          TaskPublisher
+	metrics            Metrics
 	cursorPath         string
 	startTime          libtime.DateTime
 	scope              string
 	taskCreationFilter filter.TaskCreationFilter
-	stage              string
-	metrics            Metrics
-	trustDecision      trust.Trust
-	maxSlugLen         int
-	maxTitleLen        int
-	taskSuffix         string
 }
 
 func (w *watcher) Poll(ctx context.Context) error {
@@ -230,7 +292,7 @@ func (w *watcher) processPRs(
 		}
 
 		// New (PR, SHA) pair — publish a fresh CreateTaskCommand.
-		if w.publishCreate(ctx, pr, taskIDStr, details) {
+		if w.publisher.PublishCreate(ctx, pr, taskIDStr, details) {
 			// Update cursorState in-place so duplicate PR entries in the same poll batch
 			// are deduplicated without a second create publish.
 			cursorState.HeadSHAs[taskIDStr] = details.HeadSHA
@@ -245,65 +307,8 @@ func (w *watcher) processPRs(
 	return maxUpdatedAt
 }
 
-func (w *watcher) publishCreate(
-	ctx context.Context,
-	pr PullRequest,
-	taskIDStr string,
-	details PRDetails,
-) bool {
-	author := pr.AuthorLogin
-
-	trustResult, err := w.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: author})
-	if err != nil {
-		glog.Errorf("trust check failed pr=%s err=%v", pr.HTMLURL, err)
-		w.metrics.IncPRPublished("error")
-		return false
-	}
-
-	var cmd task.CreateCommand
-	if trustResult.Success() {
-		cmd = task.CreateCommand{
-			Title: computePRTitle(
-				"github",
-				pr.Owner,
-				pr.Repo,
-				pr.Number,
-				details.HeadSHA,
-				pr.Title,
-				w.maxSlugLen,
-				w.maxTitleLen,
-				w.taskSuffix,
-			),
-			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildFrontmatter(pr, taskIDStr, w.stage, details),
-			Body:           buildTaskBody(pr),
-		}
-	} else {
-		if author == "" {
-			author = "(unknown)"
-		}
-		glog.V(2).Infof("untrusted author=%q trust=%s pr=%s", author, trustResult.Description(), pr.HTMLURL)
-		cmd = task.CreateCommand{
-			Title:          computePRTitle("github", pr.Owner, pr.Repo, pr.Number, details.HeadSHA, pr.Title, w.maxSlugLen, w.maxTitleLen, w.taskSuffix),
-			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, w.stage, details),
-			Body:           buildUntrustedBody(author, trustResult.Description()),
-		}
-	}
-
-	if err := w.createSender.SendCommand(ctx, cmd); err != nil {
-		glog.Errorf("publish create-task failed pr=%s err=%v", pr.HTMLURL, err)
-		w.metrics.IncPRPublished("error")
-		return false
-	}
-	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d sha=%s taskID=%s trusted=%t",
-		pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr, trustResult.Success())
-	w.metrics.IncPRPublished("create")
-	return true
-}
-
 // BuildCreateCommand builds a CreateTaskCommand for a PR given its details and trust result.
-// It is used by both the poll path (via publishCreate) and the single-PR trigger handler.
+// It is used by both the poll path (via PublishCreate) and the single-PR trigger handler.
 func BuildCreateCommand(
 	pr PullRequest,
 	details PRDetails,

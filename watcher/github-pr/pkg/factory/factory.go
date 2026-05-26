@@ -69,18 +69,24 @@ func CreateWatcher(
 	taskSuffix string,
 ) pkg.Watcher {
 	ghClient := pkg.NewGitHubClient(httpClient)
+	publisher := pkg.NewTaskPublisher(
+		createSender,
+		trustDecision,
+		metrics,
+		pkg.TaskConfig{
+			Stage:       stage,
+			MaxSlugLen:  maxSlugLen,
+			MaxTitleLen: maxTitleLen,
+			TaskSuffix:  taskSuffix,
+		},
+	)
 	return pkg.NewWatcher(
 		ghClient,
-		createSender,
+		publisher,
+		metrics,
 		cursorPath,
 		startTime,
 		scope,
 		taskCreationFilter,
-		stage,
-		metrics,
-		trustDecision,
-		maxSlugLen,
-		maxTitleLen,
-		taskSuffix,
 	)
 }

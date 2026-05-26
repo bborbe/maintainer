@@ -32,9 +32,21 @@ func newTestWatcher(
 	fakeMetrics *mocks.Metrics,
 	trustDecision trust.Trust,
 ) pkg.Watcher {
+	publisher := pkg.NewTaskPublisher(
+		createSender,
+		trustDecision,
+		fakeMetrics,
+		pkg.TaskConfig{
+			Stage:       "dev",
+			MaxSlugLen:  pkg.DefaultMaxSlugLen,
+			MaxTitleLen: pkg.DefaultMaxTitleLen,
+			TaskSuffix:  "",
+		},
+	)
 	return pkg.NewWatcher(
 		ghClient,
-		createSender,
+		publisher,
+		fakeMetrics,
 		cursorPath,
 		startTime,
 		"bborbe",
@@ -42,12 +54,6 @@ func newTestWatcher(
 			filter.NewDraftFilter(),
 			filter.NewBotAuthorFilter([]string{"dependabot[bot]"}),
 		},
-		"dev",
-		fakeMetrics,
-		trustDecision,
-		pkg.DefaultMaxSlugLen,
-		pkg.DefaultMaxTitleLen,
-		"",
 	)
 }
 
@@ -1067,6 +1073,63 @@ var _ = Describe("pkg.Watcher", func() {
 				Expect(cmd.Body).To(ContainSubstring("unknown"))
 				Expect(cmd.Title).To(Equal("PR Review github - bborbe-repo - 10 - sha1 - some-pr"))
 			})
+		})
+	})
+
+	Describe("TaskPublisher contract", func() {
+		It("calls publisher.PublishCreate with derived taskID for new (PR,SHA) pairs", func() {
+			pr := pkg.PullRequest{
+				Number:      42,
+				Owner:       "bborbe",
+				Repo:        "code-reviewer",
+				Title:       "feat: new feature",
+				HTMLURL:     "https://github.com/bborbe/maintainer/pull/42",
+				AuthorLogin: "alice",
+				IsDraft:     false,
+				UpdatedAt:   libtime.DateTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)),
+			}
+			ghClient.SearchPRsReturns(pkg.SearchResult{
+				PullRequests:  []pkg.PullRequest{pr},
+				HasNextPage:   false,
+				RateRemaining: 100,
+			}, nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "abc123",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
+			createSender.SendCommandReturns(nil)
+
+			fakePublisher := new(mocks.TaskPublisher)
+			fakePublisher.PublishCreateReturns(true)
+
+			w := pkg.NewWatcher(
+				ghClient,
+				fakePublisher,
+				fakeMetrics,
+				cursorPath,
+				startTime,
+				"bborbe",
+				filter.TaskCreationFilters{
+					filter.NewDraftFilter(),
+					filter.NewBotAuthorFilter([]string{"dependabot[bot]"}),
+				},
+			)
+			err := w.Poll(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakePublisher.PublishCreateCallCount()).To(Equal(1))
+
+			ctxArg, prArg, taskIDStrArg, detailsArg := fakePublisher.PublishCreateArgsForCall(0)
+			Expect(ctxArg).To(Equal(ctx))
+			Expect(prArg.Number).To(Equal(pr.Number))
+			Expect(prArg.Owner).To(Equal(pr.Owner))
+			Expect(prArg.Repo).To(Equal(pr.Repo))
+			Expect(taskIDStrArg).To(Equal(
+				pkg.DeriveTaskID(pr.Owner, pr.Repo, pr.Number, "abc123").String()))
+			Expect(detailsArg.HeadSHA).To(Equal("abc123"))
 		})
 	})
 })
