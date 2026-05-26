@@ -291,17 +291,22 @@ func (a *application) createDeliverer(
 	if len(a.KafkaBrokers) == 0 {
 		return nil, nil, errors.Errorf(ctx, "KAFKA_BROKERS must be set when TASK_ID is set")
 	}
+	syncProducer, err := libkafka.NewSyncProducerWithName(ctx, a.KafkaBrokers, "agent-pr-reviewer")
+	if err != nil {
+		return nil, nil, errors.Wrap(ctx, err, "create kafka sync producer")
+	}
+	cleanup := func() {
+		if err := syncProducer.Close(); err != nil {
+			glog.Warningf("close sync producer failed: %v", err)
+		}
+	}
 	currentDateTime := libtime.NewCurrentDateTime()
-	deliverer, cleanup, err := factory.CreateDeliverer(
-		ctx,
+	deliverer := factory.CreateDeliverer(
+		syncProducer,
 		a.TaskID,
-		a.KafkaBrokers,
 		a.Branch,
 		a.TaskContent,
 		currentDateTime,
 	)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create deliverer")
-	}
 	return deliverer, cleanup, nil
 }

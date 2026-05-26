@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.36
+
+- refactor(pr-reviewer): move Kafka SyncProducer lifecycle from factory to main.go; CreateDeliverer now accepts a connected SyncProducer for pure factory wiring
+
 ## v0.26.35
 
 - test(watcher/github-pr): add unit tests for BuildCreateCommand covering trusted/untrusted author branches, empty author login, title sanitization, and maxTitleLen truncation

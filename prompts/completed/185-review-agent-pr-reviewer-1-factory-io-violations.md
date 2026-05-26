@@ -1,10 +1,12 @@
 ---
-status: executing
+status: completed
+summary: Refactored CreateSyncProducer/CreateDeliverer in factory.go — moved Kafka lifecycle to main.go, CreateDeliverer now pure wiring with no error/cleanup closure
 container: maintainer-exec-185-review-agent-pr-reviewer-1-factory-io-violations
 dark-factory-version: v0.173.0
 created: "2026-05-24T00:00:00Z"
 queued: "2026-05-26T05:58:50Z"
 started: "2026-05-26T05:58:51Z"
+completed: "2026-05-26T06:02:24Z"
 ---
 
 <summary>

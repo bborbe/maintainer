@@ -9,7 +9,6 @@
 package factory
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -18,11 +17,9 @@ import (
 	delivery "github.com/bborbe/agent/lib/delivery"
 	"github.com/bborbe/agent/lib/healthcheck"
 	"github.com/bborbe/cqrs/base"
-	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
-	"github.com/golang/glog"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
@@ -89,18 +86,6 @@ func CreateClaudeRunner(
 		WorkingDirectory: agentDir,
 		Env:              env,
 	})
-}
-
-// CreateSyncProducer creates a Kafka sync producer.
-func CreateSyncProducer(
-	ctx context.Context,
-	brokers libkafka.Brokers,
-) (libkafka.SyncProducer, error) {
-	producer, err := libkafka.NewSyncProducerWithName(ctx, brokers, serviceName)
-	if err != nil {
-		return nil, errors.Wrap(ctx, err, "create sync producer failed")
-	}
-	return producer, nil
 }
 
 // CreateKafkaResultDeliverer creates a ResultDeliverer that publishes task
@@ -264,31 +249,20 @@ func CreateAgentProvider(
 }
 
 // CreateDeliverer builds the Kafka result deliverer used by the Kafka
-// entry point. Requires non-empty taskID and brokers — callers must
-// guard these preconditions before calling.
+// entry point. The caller owns the SyncProducer lifecycle and must close it
+// after the deliverer is no longer needed.
 func CreateDeliverer(
-	ctx context.Context,
+	syncProducer libkafka.SyncProducer,
 	taskID agentlib.TaskIdentifier,
-	brokers libkafka.Brokers,
 	branch base.Branch,
 	originalContent string,
 	currentDateTime libtime.CurrentDateTimeGetter,
-) (agentlib.ResultDeliverer, func(), error) {
-	syncProducer, err := CreateSyncProducer(ctx, brokers)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create sync producer failed")
-	}
-	deliverer := CreateKafkaResultDeliverer(
+) agentlib.ResultDeliverer {
+	return CreateKafkaResultDeliverer(
 		syncProducer,
 		branch,
 		taskID,
 		originalContent,
 		currentDateTime,
 	)
-	cleanup := func() {
-		if err := syncProducer.Close(); err != nil {
-			glog.Warningf("close sync producer failed: %v", err)
-		}
-	}
-	return deliverer, cleanup, nil
 }

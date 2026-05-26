@@ -11,7 +11,6 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/agent/lib/delivery"
-	libkafka "github.com/bborbe/kafka"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
@@ -96,20 +95,19 @@ var _ = Describe("Factory", func() {
 	})
 
 	Describe("CreateDeliverer", func() {
-		It("returns an error when brokers are unreachable", func() {
+		It("returns a non-nil deliverer", func() {
+			syncProducer := &libkafkamocks.KafkaSyncProducer{}
 			currentDateTime := libtime.CurrentDateTimeGetterFunc(func() libtime.DateTime {
 				return libtime.DateTime{}
 			})
-			ctx := context.Background()
-			_, _, err := factory.CreateDeliverer(
-				ctx,
+			deliverer := factory.CreateDeliverer(
+				syncProducer,
 				agentlib.TaskIdentifier("task-123"),
-				libkafka.Brokers{"localhost:1"},
 				"dev",
 				"content",
 				currentDateTime,
 			)
-			Expect(err).To(HaveOccurred())
+			Expect(deliverer).NotTo(BeNil())
 		})
 	})
 
