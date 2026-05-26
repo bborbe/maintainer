@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Wrapped errors following ParseRepoAllowlist calls in main.go and cmd/run-once/main.go using errors.Wrap for defensive error attribution
+container: maintainer-exec-186-review-watcher-github-build-error-wrap
+dark-factory-version: v0.173.0
 created: "2026-05-24T12:00:00Z"
 queued: "2026-05-26T06:00:56Z"
+started: "2026-05-26T06:02:28Z"
+completed: "2026-05-26T06:03:35Z"
 ---
 
 <summary>

@@ -80,7 +80,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse repo allowlist")
 	}
 	// Validate ALL entries at startup — aggregate error names every malformed entry.
 	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
@@ -187,13 +187,17 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(context.Background(), func(ctx context.Context) error {
-			if !a.tryAcquireTrigger() {
-				return errors.Errorf(ctx, "trigger already running, wait for current poll to complete")
-			}
-			defer a.triggerRunning.Store(0)
-			return poll(ctx)
-		}))
+		router.Path("/trigger").
+			Handler(libhttp.NewBackgroundRunHandler(context.Background(), func(ctx context.Context) error {
+				if !a.tryAcquireTrigger() {
+					return errors.Errorf(
+						ctx,
+						"trigger already running, wait for current poll to complete",
+					)
+				}
+				defer a.triggerRunning.Store(0)
+				return poll(ctx)
+			}))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}

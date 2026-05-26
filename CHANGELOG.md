@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.26.37
+
+- fix(watcher/github-build): wrap errors following ParseRepoAllowlist calls in main.go and cmd/run-once/main.go
+
 ## v0.26.36
 
 - refactor(pr-reviewer): move Kafka SyncProducer lifecycle from factory to main.go; CreateDeliverer now accepts a connected SyncProducer for pure factory wiring

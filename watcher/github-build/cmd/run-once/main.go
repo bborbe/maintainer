@@ -78,7 +78,7 @@ type WatcherFactory func(
 func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse repo allowlist")
 	}
 	// Validate ALL entries at startup — aggregate error names every malformed entry.
 	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
