@@ -1,6 +1,7 @@
 ---
-status: draft
+status: approved
 created: "2026-05-24T12:00:00Z"
+queued: "2026-05-26T06:00:56Z"
 ---
 
 <summary>
@@ -17,12 +18,13 @@ Add `errors.Wrap` around the `return err` statements following `filter.ParseRepo
 Read `CLAUDE.md` for project conventions.
 
 Files to read before making changes:
-- `watcher/github-build/main.go` lines 113-116
-- `watcher/github-build/cmd/run-once/main.go` lines 50-56
+- `watcher/github-build/main.go` lines 81-84 (`ParseRepoAllowlist` call + bare `return err`)
+- `watcher/github-build/cmd/run-once/main.go` lines 79-82 (same pattern)
+- `watcher/github-build/pkg/filter/repo_allowlist_filter.go` line 18 — `ParseRepoAllowlist(raw string) ([]string, error)` signature is **no longer ctx-taking** (changed by an earlier prompt). Both call sites pass only `a.RepoAllowlist`, not `ctx`.
 </context>
 
 <requirements>
-1. In `main.go` line ~115, change:
+1. In `watcher/github-build/main.go` (~line 83), change:
    ```go
    if err != nil {
        return err
@@ -35,7 +37,9 @@ Files to read before making changes:
    }
    ```
 
-2. In `cmd/run-once/main.go` line ~54, make the same change.
+2. In `watcher/github-build/cmd/run-once/main.go` (~line 81), make the same change.
+
+   Note: both call sites already have `ctx` in scope (it's the first parameter of the enclosing `Run` method), so the `errors.Wrap(ctx, ...)` form works without further changes.
 
 3. Run `cd watcher/github-build && go build ./...` to confirm the build succeeds.
 
