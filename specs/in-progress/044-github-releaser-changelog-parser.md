@@ -1,6 +1,7 @@
 ---
-status: approved
+status: verifying
 approved: "2026-05-27T20:46:31Z"
+verifying: "2026-05-27T21:27:13Z"
 branch: dark-factory/github-releaser-changelog-parser
 ---
 

@@ -13,6 +13,7 @@ replace (
 require (
 	github.com/bborbe/agent/lib v0.63.11
 	github.com/bborbe/cqrs v0.5.1
+	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/kafka v1.22.15
 	github.com/bborbe/sentry v1.9.17
 	github.com/bborbe/service v1.10.0
@@ -29,7 +30,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bborbe/argument/v2 v2.12.22 // indirect
 	github.com/bborbe/collection v1.20.12 // indirect
-	github.com/bborbe/errors v1.5.13 // indirect
 	github.com/bborbe/http v1.26.12 // indirect
 	github.com/bborbe/k8s v1.14.1 // indirect
 	github.com/bborbe/kv v1.21.1 // indirect
