@@ -20,7 +20,6 @@ import (
 	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // CreateGitHubAppClient creates an HTTP client authenticated as a GitHub App installation.
@@ -63,7 +62,6 @@ func CreateWatcher(
 	taskCreationFilter filter.TaskCreationFilter,
 	stage string,
 	metrics pkg.Metrics,
-	trustDecision trust.Trust,
 	maxSlugLen int,
 	maxTitleLen int,
 	taskSuffix string,
@@ -71,7 +69,6 @@ func CreateWatcher(
 	ghClient := pkg.NewGitHubClient(httpClient)
 	publisher := pkg.NewTaskPublisher(
 		createSender,
-		trustDecision,
 		metrics,
 		pkg.TaskConfig{
 			Stage:       stage,

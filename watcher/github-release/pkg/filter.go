@@ -21,20 +21,3 @@ func ParseBotAllowlist(raw string) []string {
 	}
 	return result
 }
-
-// ParseTrustedAuthors splits a comma-separated trusted-authors string into a
-// slice of trimmed, non-empty entries. Mirrors ParseBotAllowlist in behavior.
-func ParseTrustedAuthors(raw string) []string {
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			result = append(result, p)
-		}
-	}
-	return result
-}

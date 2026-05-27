@@ -13,7 +13,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/handler"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // CreateSinglePRTriggerHandler wires a handler that fires a single-PR review by URL.
@@ -21,7 +20,6 @@ func CreateSinglePRTriggerHandler(
 	httpClient *http.Client,
 	createSender task.CreateCommandSender,
 	taskCreationFilter filter.TaskCreationFilter,
-	trustDecision trust.Trust,
 	stage string,
 	maxSlugLen int,
 	maxTitleLen int,
@@ -37,15 +35,11 @@ func CreateSinglePRTriggerHandler(
 	if taskCreationFilter == nil {
 		panic("taskCreationFilter is required")
 	}
-	if trustDecision == nil {
-		panic("trustDecision is required")
-	}
 	ghClient := pkg.NewGitHubClient(httpClient)
 	h := handler.NewSinglePRTriggerHandler(
 		ghClient,
 		createSender,
 		taskCreationFilter,
-		trustDecision,
 		stage,
 		maxSlugLen,
 		maxTitleLen,

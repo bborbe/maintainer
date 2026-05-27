@@ -17,7 +17,6 @@ import (
 	"github.com/bborbe/maintainer/lib/prurl"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // SinglePRTriggerHandler handles POST /trigger?url=<pr_url>
@@ -26,12 +25,11 @@ import (
 type SinglePRTriggerHandler = libhttp.WithError
 
 // NewSinglePRTriggerHandler returns a handler that fires a single PR review by URL.
-// The filter and trustDecision are passed in (reused from the poll path) — not created here.
+// The filter is passed in (reused from the poll path) — not created here.
 func NewSinglePRTriggerHandler(
 	ghClient pkg.GitHubClient,
 	createSender task.CreateCommandSender,
 	taskCreationFilter filter.TaskCreationFilter,
-	trustDecision trust.Trust,
 	stage string,
 	maxSlugLen int,
 	maxTitleLen int,
@@ -42,7 +40,6 @@ func NewSinglePRTriggerHandler(
 		ghClient:           ghClient,
 		createSender:       createSender,
 		taskCreationFilter: taskCreationFilter,
-		trustDecision:      trustDecision,
 		stage:              stage,
 		maxSlugLen:         maxSlugLen,
 		maxTitleLen:        maxTitleLen,
@@ -55,7 +52,6 @@ type singlePRTriggerHandler struct {
 	ghClient           pkg.GitHubClient
 	createSender       task.CreateCommandSender
 	taskCreationFilter filter.TaskCreationFilter
-	trustDecision      trust.Trust
 	stage              string
 	maxSlugLen         int
 	maxTitleLen        int
@@ -91,15 +87,6 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 		)
 	}
 
-	trustResult, err := h.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: details.AuthorLogin})
-	if err != nil {
-		h.metrics.IncPRPublished("trust_error")
-		return libhttp.WrapWithStatusCode(
-			errors.Wrap(ctx, err, "check trust"),
-			http.StatusBadGateway,
-		)
-	}
-
 	pr := h.buildPullRequest(prInfo, details, rawURL)
 	taskIDStr := pkg.DeriveTaskID(prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA).
 		String()
@@ -112,7 +99,6 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 		h.maxSlugLen,
 		h.maxTitleLen,
 		h.taskSuffix,
-		trustResult,
 	)
 
 	if err := h.createSender.SendCommand(ctx, cmd); err != nil {

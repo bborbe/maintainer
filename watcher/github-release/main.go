@@ -32,7 +32,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 var repoScopePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
@@ -127,7 +126,6 @@ type application struct {
 	PollInterval     string           `required:"false" arg:"poll-interval"     env:"POLL_INTERVAL"     usage:"Poll interval (Go duration)"                                                                                                                                                                               default:"5m"`
 	RepoScope        string           `required:"false" arg:"repo-scope"        env:"REPO_SCOPE"        usage:"GitHub user/org scope"                                                                                                                                                                                     default:"bborbe"`
 	BotAllowlist     string           `required:"false" arg:"bot-allowlist"     env:"BOT_ALLOWLIST"     usage:"Comma-separated bot author allowlist"                                                                                                                                                                      default:"dependabot[bot],renovate[bot]"`
-	TrustedAuthors   string           `required:"false" arg:"trusted-authors"   env:"TRUSTED_AUTHORS"   usage:"Comma-separated trusted GitHub author logins (required; empty list refuses startup)"`
 	MaxPRAge         string           `required:"false" arg:"max-pr-age"        env:"MAX_PR_AGE"        usage:"Skip PRs older than this (Go duration; empty disables)"                                                                                                                                                    default:"2160h"`
 	BackfillDuration string           `required:"false" arg:"backfill-duration" env:"BACKFILL_DURATION" usage:"On cold start, backdate the initial cursor by this duration (Go duration; empty disables)"                                                                                                                 default:"720h"`
 	RepoAllowlist    string           `required:"false" arg:"repo-allowlist"    env:"REPO_ALLOWLIST"    usage:"Comma-separated host-qualified repo allowlist (host/owner/repo format); empty means allow-all"`
@@ -249,15 +247,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		filter.NewRepoAllowlistFilter(repoAllowlist),
 	}
 
-	trustedAuthors := pkg.ParseTrustedAuthors(a.TrustedAuthors)
-	if len(trustedAuthors) == 0 {
-		return errors.Errorf(
-			ctx,
-			"no trusted authors configured: set TRUSTED_AUTHORS to a comma-separated list of GitHub logins",
-		)
-	}
-	glog.V(2).Infof("trusted-authors count=%d", len(trustedAuthors))
-
 	branch := base.Branch(a.Stage)
 
 	syncProducer, err := libkafka.NewSyncProducerWithName(
@@ -275,8 +264,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}()
 	createSender := factory.CreateKafkaSender(syncProducer, branch)
 
-	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
-
 	httpClient, err := a.resolveAuth(ctx)
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")
@@ -291,7 +278,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		taskCreationFilter,
 		a.Stage,
 		pkg.NewMetrics(),
-		trustDecision,
 		a.MaxSlugLen,
 		a.MaxTitleLen,
 		a.TaskSuffix,
@@ -301,7 +287,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		httpClient,
 		createSender,
 		taskCreationFilter,
-		trustDecision,
 		a.Stage,
 		a.MaxSlugLen,
 		a.MaxTitleLen,

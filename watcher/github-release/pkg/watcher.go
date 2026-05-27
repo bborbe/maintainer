@@ -15,7 +15,6 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 //counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
@@ -36,32 +35,29 @@ type TaskConfig struct {
 //counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
 
 // TaskPublisher publishes create-task commands for a given PR + details pair.
-// Returns true on successful publish, false on trust check failure or send failure.
+// Returns true on successful publish, false on send failure.
 type TaskPublisher interface {
 	PublishCreate(ctx context.Context, pr PullRequest, taskIDStr string, details PRDetails) bool
 }
 
-// NewTaskPublisher returns a TaskPublisher that performs trust evaluation
-// then publishes a CreateTaskCommand via the given CreateCommandSender.
+// NewTaskPublisher returns a TaskPublisher that publishes a CreateTaskCommand
+// via the given CreateCommandSender.
 func NewTaskPublisher(
 	createSender task.CreateCommandSender,
-	trustDecision trust.Trust,
 	metrics Metrics,
 	cfg TaskConfig,
 ) TaskPublisher {
 	return &taskPublisher{
-		createSender:  createSender,
-		trustDecision: trustDecision,
-		metrics:       metrics,
-		cfg:           cfg,
+		createSender: createSender,
+		metrics:      metrics,
+		cfg:          cfg,
 	}
 }
 
 type taskPublisher struct {
-	createSender  task.CreateCommandSender
-	trustDecision trust.Trust
-	metrics       Metrics
-	cfg           TaskConfig
+	createSender task.CreateCommandSender
+	metrics      Metrics
+	cfg          TaskConfig
 }
 
 // PublishCreate implements TaskPublisher.
@@ -71,15 +67,6 @@ func (p *taskPublisher) PublishCreate(
 	taskIDStr string,
 	details PRDetails,
 ) bool {
-	author := pr.AuthorLogin
-
-	trustResult, err := p.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: author})
-	if err != nil {
-		glog.Errorf("trust check failed pr=%s err=%v", pr.HTMLURL, err)
-		p.metrics.IncPRPublished("error")
-		return false
-	}
-
 	cmd := BuildCreateCommand(
 		pr,
 		details,
@@ -88,7 +75,6 @@ func (p *taskPublisher) PublishCreate(
 		p.cfg.MaxSlugLen,
 		p.cfg.MaxTitleLen,
 		p.cfg.TaskSuffix,
-		trustResult,
 	)
 
 	if err := p.createSender.SendCommand(ctx, cmd); err != nil {
@@ -96,8 +82,8 @@ func (p *taskPublisher) PublishCreate(
 		p.metrics.IncPRPublished("error")
 		return false
 	}
-	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d sha=%s taskID=%s trusted=%t",
-		pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr, trustResult.Success())
+	glog.V(2).Infof("published CreateTaskCommand pr=%s/%s#%d sha=%s taskID=%s",
+		pr.Owner, pr.Repo, pr.Number, details.HeadSHA, taskIDStr)
 	p.metrics.IncPRPublished("create")
 	return true
 }
@@ -307,7 +293,7 @@ func (w *watcher) processPRs(
 	return maxUpdatedAt
 }
 
-// BuildCreateCommand builds a CreateTaskCommand for a PR given its details and trust result.
+// BuildCreateCommand builds a CreateTaskCommand for a PR given its details.
 // It is used by both the poll path (via PublishCreate) and the single-PR trigger handler.
 func BuildCreateCommand(
 	pr PullRequest,
@@ -317,30 +303,7 @@ func BuildCreateCommand(
 	maxSlugLen int,
 	maxTitleLen int,
 	taskSuffix string,
-	trustResult trust.Result,
 ) task.CreateCommand {
-	if trustResult.Success() {
-		return task.CreateCommand{
-			Title: computePRTitle(
-				"github",
-				pr.Owner,
-				pr.Repo,
-				pr.Number,
-				details.HeadSHA,
-				pr.Title,
-				maxSlugLen,
-				maxTitleLen,
-				taskSuffix,
-			),
-			TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-			Frontmatter:    buildFrontmatter(pr, taskIDStr, stage, details),
-			Body:           buildTaskBody(pr),
-		}
-	}
-	author := pr.AuthorLogin
-	if author == "" {
-		author = "(unknown)"
-	}
 	return task.CreateCommand{
 		Title: computePRTitle(
 			"github",
@@ -354,8 +317,8 @@ func BuildCreateCommand(
 			taskSuffix,
 		),
 		TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
-		Frontmatter:    buildHumanReviewFrontmatter(pr, taskIDStr, stage, details),
-		Body:           buildUntrustedBody(author, trustResult.Description()),
+		Frontmatter:    buildFrontmatter(pr, taskIDStr, stage, details),
+		Body:           buildTaskBody(pr),
 	}
 }
 
@@ -414,29 +377,3 @@ func buildFrontmatter(
 	}
 }
 
-func buildHumanReviewFrontmatter(
-	pr PullRequest,
-	taskIDStr, stage string,
-	details PRDetails,
-) agentlib.TaskFrontmatter {
-	return agentlib.TaskFrontmatter{
-		"task_type":       "pr-review",
-		"assignee":        "",
-		"phase":           "human_review",
-		"status":          "todo",
-		"stage":           stage,
-		"task_identifier": taskIDStr,
-		"title":           pr.Title,
-		"clone_url":       details.CloneURL,
-		"ref":             details.HeadSHA,
-		"base_ref":        details.BaseRef,
-	}
-}
-
-func buildUntrustedBody(author, reasons string) string {
-	return fmt.Sprintf(
-		"## Untrusted author\n\nThis PR is by GitHub user **%s** which did not pass the trust check:\n\n- %s\n\nTo auto-process this PR, edit the frontmatter above:\n- `phase: in_progress`\n- `status: in_progress`\n\nTo dismiss, set `status: aborted`.\n",
-		author,
-		reasons,
-	)
-}
