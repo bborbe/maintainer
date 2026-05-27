@@ -133,7 +133,18 @@ func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {
 }
 
 // resolveAuth chooses GitHub App auth (preferred) over PAT.
-// TODO: implement (mirror watcher/github-pr/main.go resolveAuth).
+// Stub — real implementation lands in prompt 193 (watcher-poll-and-main), which
+// mirrors watcher/github-pr/main.go resolveAuth verbatim.
+//
+// Until then, returns a bare http.Client when no credentials configured (so
+// staticcheck does not flag the caller's err-check as always-true via SA4023)
+// and a wrapped error when partial credentials are provided.
 func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
-	return nil, errors.New(ctx, "main: resolveAuth not implemented")
+	if a.AppID != 0 && a.InstallationID != 0 && a.PEMKey != "" {
+		return nil, errors.New(ctx, "main: GitHub App auth not yet implemented")
+	}
+	if a.GHToken != "" {
+		return nil, errors.New(ctx, "main: PAT auth not yet implemented")
+	}
+	return &http.Client{}, nil
 }
