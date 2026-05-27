@@ -1,0 +1,148 @@
+// Copyright (c) 2026 Benjamin Borbe All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package changelog_test
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/changelog"
+)
+
+var _ = Describe("ValidateUnreleased", func() {
+	DescribeTable("ValidateUnreleased",
+		func(content []byte, valid bool, reason string, line int) {
+			v, r, l := changelog.ValidateUnreleased(content)
+			Expect(v).To(Equal(valid))
+			Expect(r).To(Equal(reason))
+			Expect(l).To(Equal(line))
+		},
+		Entry("P1 valid - Unreleased first",
+			[]byte("# Changelog\n\n## Unreleased\n\n- feat: add foo\n\n## v1.0.0\n\n- initial\n"),
+			true, "", 0),
+		Entry(
+			"P1 fail - Unreleased not first",
+			[]byte(
+				"# Changelog\n\n\n\n\n\n\n\n\n\n## 1.2.6\n\n- some fix\n\n## Unreleased\n\n- feat: add foo\n",
+			),
+			false,
+			"Unreleased is not the first ## section; found '1.2.6' at line 11. Move ## Unreleased above all release headings.",
+			11,
+		),
+		Entry("no Unreleased section",
+			[]byte("# Changelog\n\n## v1.0.0\n\n- initial\n"),
+			false, "Unreleased section not found.", 0),
+		Entry(
+			"P2 fail - empty Unreleased",
+			[]byte(
+				"# Changelog\n\n\n\n\n\n\n\n\n\n## Unreleased\n\nNo bullets here.\n\n## v1.0.0\n\n- initial\n",
+			),
+			false,
+			"Unreleased section has no bullet entries.",
+			11,
+		),
+		Entry("trailing whitespace heading tolerated",
+			[]byte("# Changelog\n\n## Unreleased   \n\n- feat: add foo\n\n## v1.0.0\n"),
+			true, "", 0),
+		Entry("nil content returns not found",
+			nil,
+			false, "Unreleased section not found.", 0),
+		Entry("empty content returns not found",
+			[]byte{},
+			false, "Unreleased section not found.", 0),
+		Entry(
+			"star bullet not counted",
+			[]byte(
+				"# Changelog\n\n\n\n\n\n\n\n\n\n## Unreleased\n\n* feat: add foo\n\n## v1.0.0\n",
+			),
+			false,
+			"Unreleased section has no bullet entries.",
+			11,
+		),
+		Entry(
+			"plus bullet not counted",
+			[]byte(
+				"# Changelog\n\n\n\n\n\n\n\n\n\n## Unreleased\n\n+ feat: add foo\n\n## v1.0.0\n",
+			),
+			false,
+			"Unreleased section has no bullet entries.",
+			11,
+		),
+	)
+})
+
+var _ = Describe("ExtractUnreleasedBullets", func() {
+	DescribeTable("ExtractUnreleasedBullets",
+		func(content []byte, expected []string) {
+			result := changelog.ExtractUnreleasedBullets(content)
+			Expect(result).To(Equal(expected))
+		},
+		Entry(
+			"extracts bullets in order",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- feat: add foo\n- fix: add bar\n- refactor: add baz\n\n## v1.0.0\n",
+			),
+			[]string{"feat: add foo", "fix: add bar", "refactor: add baz"},
+		),
+		Entry("empty Unreleased returns non-nil empty slice",
+			[]byte("# Changelog\n\n## Unreleased\n\nNo bullets here.\n\n## v1.0.0\n"),
+			[]string{}),
+		Entry("absent Unreleased returns nil",
+			[]byte("# Changelog\n\n## v1.0.0\n\n- initial\n"),
+			nil),
+		Entry(
+			"only first Unreleased block is parsed",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- first bullet\n\n## v1.0.0\n\n## Unreleased\n\n- second bullet\n",
+			),
+			[]string{"first bullet"},
+		),
+		Entry("nil content returns nil",
+			nil,
+			nil),
+		Entry("empty content returns nil",
+			[]byte{},
+			nil),
+		Entry("bullet with leading whitespace after dash space",
+			[]byte("# Changelog\n\n## Unreleased\n\n-  leading space after dash\n\n## v1.0.0\n"),
+			[]string{" leading space after dash"}),
+	)
+})
+
+var _ = Describe("InferHeaderPrefixStyle", func() {
+	DescribeTable("InferHeaderPrefixStyle",
+		func(content []byte, expected string) {
+			result := changelog.InferHeaderPrefixStyle(content)
+			Expect(result).To(Equal(expected))
+		},
+		Entry("v-prefix historic",
+			[]byte("# Changelog\n\n## Unreleased\n\n## v1.2.3\n"),
+			"v"),
+		Entry("no-prefix historic",
+			[]byte("# Changelog\n\n## Unreleased\n\n## 1.2.3\n"),
+			""),
+		Entry("no historic release defaults to v",
+			[]byte("# Changelog\n\n## Unreleased\n"),
+			"v"),
+		Entry("nil content defaults to v",
+			nil,
+			"v"),
+		Entry("empty content defaults to v",
+			[]byte{},
+			"v"),
+		Entry("only Unreleased heading defaults to v",
+			[]byte("# Changelog\n\n## Unreleased\n\n- feat: add foo\n"),
+			"v"),
+		Entry("v-prefix with longer version",
+			[]byte("# Changelog\n\n## Unreleased\n\n## v10.20.30\n"),
+			"v"),
+		Entry("no-prefix with longer version",
+			[]byte("# Changelog\n\n## Unreleased\n\n## 10.20.30\n"),
+			""),
+		Entry("malformed heading keeps scanning",
+			[]byte("# Changelog\n\n## Unreleased\n\n## v1.2.3\n\n## InvalidHeading\n"),
+			"v"),
+	)
+})
