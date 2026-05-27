@@ -6,10 +6,11 @@ package pkg
 
 import (
 	"context"
+	"fmt"
 
 	agentlib "github.com/bborbe/agent/lib"
 	task "github.com/bborbe/agent/lib/command/task"
-	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 )
 
 //counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
@@ -40,47 +41,68 @@ type taskPublisher struct {
 	cfg     TaskConfig
 }
 
-// PublishCreate implements TaskPublisher. TODO: implement send path + metrics.
 func (p *taskPublisher) PublishCreate(ctx context.Context, release Release) bool {
-	_ = BuildCreateCommand(release, p.cfg)
-	_ = ctx
-	return false
+	cmd := BuildCreateCommand(release, p.cfg)
+
+	if err := p.sender.SendCommand(ctx, cmd); err != nil {
+		glog.Errorf(
+			"publish create-task failed repo=%s sha=%s taskID=%s err=%v",
+			release.Repo.Key(),
+			release.HeadSHA,
+			string(cmd.TaskIdentifier),
+			err,
+		)
+		p.metrics.IncPublished("error")
+		return false
+	}
+	glog.V(2).Infof(
+		"published CreateTaskCommand repo=%s sha=%s taskID=%s stage=%s",
+		release.Repo.Key(),
+		release.HeadSHA,
+		string(cmd.TaskIdentifier),
+		p.cfg.Stage,
+	)
+	p.metrics.IncPublished("create")
+	return true
 }
 
 // BuildCreateCommand assembles the CreateTaskCommand for a Release.
-//
-// Frontmatter per [[Agent Task File Contract]]:
-//
-//	task_type: github-release
-//	assignee: github-releaser-agent
-//	phase: planning
-//	status: in_progress
-//	stage: <cfg.Stage>
-//	task_identifier: <UUID5(owner, repo, head_sha)>
-//	title: Release <owner>-<repo> <sha[:7]>
-//	repo: owner/name
-//	clone_url: git@github.com:owner/name.git
-//	ref: <full HEAD SHA>
-//	current_version: <vX.Y.Z or v0.0.0>
-//
-// Body = operator-readable header only (title + version + HEAD + changelog URL +
-// repo link). Agent does NOT parse body — clones at `ref` and reads CHANGELOG itself.
-//
-// Reference: watcher/github-pr/pkg/watcher.go BuildCreateCommand (PR-shaped analogue;
-// release version has no untrusted-author branch, no base_ref).
-//
-// TODO: implement (build agentlib.TaskFrontmatter + body string).
-func BuildCreateCommand(release Release, _ TaskConfig) task.CreateCommand {
-	taskID := DeriveTaskID(release.Repo.Owner, release.Repo.Name, release.HeadSHA).String()
+func BuildCreateCommand(release Release, cfg TaskConfig) task.CreateCommand {
+	taskIDStr := DeriveTaskID(release.Repo.Owner, release.Repo.Name, release.HeadSHA).String()
 	return task.CreateCommand{
 		Title:          ComputeTaskTitle(release),
-		TaskIdentifier: agentlib.TaskIdentifier(taskID),
-		// TODO: Frontmatter, Body.
+		TaskIdentifier: agentlib.TaskIdentifier(taskIDStr),
+		Frontmatter:    buildFrontmatter(release, taskIDStr, cfg),
+		Body:           buildTaskBody(release),
 	}
 }
 
-// errUnimplemented helps callers distinguish "not built yet" from real errors.
-var errUnimplemented = errors.New(context.Background(), "task publisher: not implemented")
+func buildFrontmatter(release Release, taskIDStr string, cfg TaskConfig) agentlib.TaskFrontmatter {
+	return agentlib.TaskFrontmatter{
+		"task_type":       "github-release",
+		"assignee":        "github-releaser-agent",
+		"phase":           "planning",
+		"status":          "in_progress",
+		"stage":           cfg.Stage,
+		"task_identifier": taskIDStr,
+		"title":           ComputeTaskTitle(release),
+		"repo":            fmt.Sprintf("%s/%s", release.Repo.Owner, release.Repo.Name),
+		"clone_url":       fmt.Sprintf("git@github.com:%s/%s.git", release.Repo.Owner, release.Repo.Name),
+		"ref":             release.HeadSHA,
+		"current_version": release.CurrentVersion,
+	}
+}
 
-// ErrUnimplemented is the sentinel returned by stubs.
-func ErrUnimplemented() error { return errUnimplemented }
+func buildTaskBody(release Release) string {
+	owner := release.Repo.Owner
+	name := release.Repo.Name
+	return fmt.Sprintf(
+		"# Release: %s/%s\n\n**Current version:** %s\n**HEAD:** %s\n**Changelog:** https://github.com/%s/%s/blob/master/CHANGELOG.md\n**Repo:** [%s/%s](https://github.com/%s/%s)\n",
+		owner, name,
+		release.CurrentVersion,
+		release.ShortSHA(),
+		owner, name,
+		owner, name,
+		owner, name,
+	)
+}

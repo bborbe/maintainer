@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [044-github-release-watcher-implementation]
+summary: Implemented BuildCreateCommand and PublishCreate in TaskPublisher with frozen Phase 1 frontmatter contract and operator-readable body; added Ginkgo tests covering the bborbe/docker-utils d630ef3 acceptance criterion
+container: maintainer-github-release-exec-192-spec-044-taskpublisher
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
 queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T21:51:05Z"
+completed: "2026-05-27T21:56:13Z"
 ---
 
 <summary>
