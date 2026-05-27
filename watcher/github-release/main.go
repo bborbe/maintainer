@@ -37,20 +37,20 @@ func main() {
 }
 
 type application struct {
-	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"     display:"length"`
+	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	Listen         string           `required:"false" arg:"listen"           env:"LISTEN"            usage:"HTTP listen address (healthz/readiness/metrics)" default:":9090"`
-	Stage          string           `required:"true"  arg:"stage"            env:"STAGE"             usage:"Deployment stage (dev|prod)"`
-	Owner          string           `required:"true"  arg:"owner"            env:"OWNER"             usage:"GitHub owner / org to scan (e.g. bborbe)"`
-	RepoAllowlist  string           `required:"false" arg:"repo-allowlist"   env:"REPO_ALLOWLIST"    usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty = allow-all within owner"`
-	PollInterval   string           `required:"false" arg:"poll-interval"    env:"POLL_INTERVAL"     usage:"Poll interval (Go duration)" default:"10m"`
-	CursorPath     string           `required:"false" arg:"cursor-path"      env:"CURSOR_PATH"       usage:"Cursor persistence path (mount a PVC)" default:"/data/cursor.json"`
-	KafkaBrokers   libkafka.Brokers `required:"true"  arg:"kafka-brokers"    env:"KAFKA_BROKERS"     usage:"Comma-separated Kafka broker list"`
-	AppID          int64            `required:"false" arg:"app-id"           env:"APP_ID"            usage:"GitHub App ID (preferred auth path)"`
-	InstallationID int64            `required:"false" arg:"installation-id"  env:"INSTALLATION_ID"   usage:"GitHub App Installation ID"`
-	PEMKey         string           `required:"false" arg:"pem-key"          env:"PEM_KEY"           usage:"GitHub App PEM key (populated from k8s Secret)" display:"length"`
-	GHToken        string           `required:"false" arg:"gh-token"         env:"GH_TOKEN"          usage:"Legacy PAT fallback (prefer APP_ID + INSTALLATION_ID + PEM_KEY)" display:"length"`
+	Listen         string           `required:"false" arg:"listen"          env:"LISTEN"          usage:"HTTP listen address (healthz/readiness/metrics)"                                                 default:":9090"`
+	Stage          string           `required:"true"  arg:"stage"           env:"STAGE"           usage:"Deployment stage (dev|prod)"`
+	Owner          string           `required:"true"  arg:"owner"           env:"OWNER"           usage:"GitHub owner / org to scan (e.g. bborbe)"`
+	RepoAllowlist  string           `required:"false" arg:"repo-allowlist"  env:"REPO_ALLOWLIST"  usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty = allow-all within owner"`
+	PollInterval   string           `required:"false" arg:"poll-interval"   env:"POLL_INTERVAL"   usage:"Poll interval (Go duration)"                                                                     default:"10m"`
+	CursorPath     string           `required:"false" arg:"cursor-path"     env:"CURSOR_PATH"     usage:"Cursor persistence path (mount a PVC)"                                                           default:"/data/cursor.json"`
+	KafkaBrokers   libkafka.Brokers `required:"true"  arg:"kafka-brokers"   env:"KAFKA_BROKERS"   usage:"Comma-separated Kafka broker list"`
+	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (preferred auth path)"`
+	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
+	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
+	GHToken        string           `required:"false" arg:"gh-token"        env:"GH_TOKEN"        usage:"Legacy PAT fallback (prefer APP_ID + INSTALLATION_ID + PEM_KEY)"                                                             display:"length"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {

@@ -4,7 +4,11 @@
 
 package pkg
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+)
 
 // taskIDNamespace is the UUID5 namespace for github-release tasks.
 // Stable across releases — changing it would break controller dedup.
@@ -18,8 +22,7 @@ var taskIDNamespace = uuid.MustParse("4f9e2c1a-7b30-4d8f-9a2e-1c5b8d4f3a90")
 //
 // Reference: watcher/github-pr/pkg/taskid.go uses (owner, repo, pr_number, head_sha);
 // watcher/github-build/pkg/taskid.go uses (owner, repo, episode_sha).
-//
-// TODO: implement (uuid.NewSHA1 over taskIDNamespace + canonical "owner/repo@sha" bytes).
-func DeriveTaskID(_, _, _ string) uuid.UUID {
-	return uuid.Nil
+func DeriveTaskID(owner, repo, headSHA string) uuid.UUID {
+	key := fmt.Sprintf("%s/%s@%s", owner, repo, headSHA)
+	return uuid.NewSHA1(taskIDNamespace, []byte(key))
 }

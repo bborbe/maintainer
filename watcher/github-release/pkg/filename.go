@@ -28,5 +28,10 @@ import "fmt"
 // with maxSlugLen, maxTitleLen, taskSuffix knobs). Release titles are short and
 // deterministic — those knobs are not needed here.
 func ComputeTaskTitle(release Release) string {
-	return fmt.Sprintf("Release %s/%s at %s", release.Repo.Owner, release.Repo.Name, release.ShortSHA())
+	return fmt.Sprintf(
+		"Release %s/%s at %s",
+		release.Repo.Owner,
+		release.Repo.Name,
+		release.ShortSHA(),
+	)
 }

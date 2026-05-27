@@ -1,7 +1,8 @@
 ---
-spec: ["044-github-release-watcher-implementation"]
-status: draft
+status: approved
+spec: [044-github-release-watcher-implementation]
 created: "2026-05-27T20:38:37Z"
+queued: "2026-05-27T20:57:47Z"
 ---
 
 <summary>

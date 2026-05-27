@@ -1,7 +1,13 @@
 ---
-spec: ["044-github-release-watcher-implementation"]
-status: draft
+status: completed
+spec: [044-github-release-watcher-implementation]
+summary: Implemented ParseChangelog and DeriveTaskID as pure-Go functions with full Ginkgo v2 test coverage
+container: maintainer-github-release-exec-188-spec-044-changelog-and-taskid
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
+queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T20:57:49Z"
+completed: "2026-05-27T21:02:32Z"
 ---
 
 <summary>
