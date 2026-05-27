@@ -1,6 +1,7 @@
 ---
-status: draft
-created: "2026-05-27T00:00:00Z"
+status: approved
+approved: "2026-05-27T20:32:51Z"
+branch: dark-factory/github-release-watcher-implementation
 ---
 
 # github-release-watcher-implementation
@@ -88,7 +89,7 @@ Keep the Phase 1 slash-command pair as the only release mechanism. Cost:
 - [ ] `cd watcher/github-release && make precommit` exits 0
 - [ ] `grep -rn "TODO" watcher/github-release --include='*.go'` returns 0 lines (all stubs implemented)
 - [ ] Test files exist for each pure-Go module: `ls watcher/github-release/pkg/changelog_test.go watcher/github-release/pkg/taskid_test.go watcher/github-release/pkg/cursor_test.go watcher/github-release/pkg/filter/empty_unreleased_filter_test.go watcher/github-release/pkg/filter/auto_release_filter_test.go watcher/github-release/pkg/filter/sha_unchanged_filter_test.go` exits 0. Coverage threshold deliberately omitted — the 6 named-test ACs below (filter behaviors, taskid determinism, changelog inverted-ordering, cursor round-trip, BuildCreateCommand table row, Poll mock-driven cycle) exercise every pure-Go branch; mechanical coverage % adds Goodhart pressure without strengthening behavior.
-- [ ] `cd watcher/github-release && make generate && git diff --exit-code mocks pkg/mocks` exits 0 (mock regen is deterministic, no unexpected diff)
+- [ ] `cd watcher/github-release && make generate && git diff --exit-code pkg/mocks` exits 0 (mock regen is deterministic, no unexpected diff). All counterfeiter `-o` directives in the skeleton resolve to `pkg/mocks/*.go` — the root-level `mocks/` directory is a placeholder from the github-pr clone and is not a regen target.
 - [ ] Ginkgo `It` named `BuildCreateCommand produces frontmatter task_type github-release for bborbe/docker-utils d630ef3` passes — verifies a known table row matches the Phase 1 frozen output
 - [ ] Ginkgo `It`s named `EmptyUnreleasedFilter skips when UnreleasedBullets is 0`, `AutoReleaseFilter skips when AutoRelease is true`, `SHAUnchangedFilter skips when LastSeenSHA equals HeadSHA`, `SHAUnchangedFilter emits when LastSeenSHA differs from HeadSHA` all pass
 - [ ] Ginkgo `It` named `DeriveTaskID is deterministic for identical inputs` passes — same `(owner, repo, head_sha)` produces identical UUID across 10k invocations
