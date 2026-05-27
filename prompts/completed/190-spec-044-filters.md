@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [044-github-release-watcher-implementation]
+summary: Added Ginkgo v2 unit tests for the four filters in watcher/github-release/pkg/filter/ with 100% coverage
+container: maintainer-github-release-exec-190-spec-044-filters
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
 queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T21:39:03Z"
+completed: "2026-05-27T21:42:25Z"
 ---
 
 <summary>

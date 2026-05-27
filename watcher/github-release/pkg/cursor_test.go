@@ -99,8 +99,12 @@ var _ = Describe("pkg.Cursor", func() {
 			path := filepath.Join(tmpDir, "roundtrip.json")
 			original := &pkg.Cursor{
 				Repos: map[string]*pkg.RepoState{
-					"github.com/bborbe/docker-utils": {LastSeenMasterSHA: "d630ef3526cfc57fbdccd9ba53c5c3a02945e407"},
-					"github.com/bborbe/disk-status":  {LastSeenMasterSHA: "102b3b1abcdef0000000000000000000000000a0"},
+					"github.com/bborbe/docker-utils": {
+						LastSeenMasterSHA: "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
+					},
+					"github.com/bborbe/disk-status": {
+						LastSeenMasterSHA: "102b3b1abcdef0000000000000000000000000a0",
+					},
 				},
 			}
 			Expect(pkg.SaveCursor(ctx, path, original)).To(Succeed())
@@ -108,8 +112,12 @@ var _ = Describe("pkg.Cursor", func() {
 			loaded, err := pkg.LoadCursor(ctx, path)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(loaded.Repos).To(HaveLen(2))
-			Expect(loaded.Repos["github.com/bborbe/docker-utils"].LastSeenMasterSHA).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
-			Expect(loaded.Repos["github.com/bborbe/disk-status"].LastSeenMasterSHA).To(Equal("102b3b1abcdef0000000000000000000000000a0"))
+			Expect(
+				loaded.Repos["github.com/bborbe/docker-utils"].LastSeenMasterSHA,
+			).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
+			Expect(
+				loaded.Repos["github.com/bborbe/disk-status"].LastSeenMasterSHA,
+			).To(Equal("102b3b1abcdef0000000000000000000000000a0"))
 		})
 	})
 })
