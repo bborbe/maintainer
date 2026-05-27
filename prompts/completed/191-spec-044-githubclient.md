@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [044-github-release-watcher-implementation]
+summary: Implemented four GitHub API methods (ListRepos, GetMasterSHA, GetChangelogContent, GetAutoReleaseConfig) using google/go-github/v84 with full httptest coverage
+container: maintainer-github-release-exec-191-spec-044-githubclient
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
 queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T21:42:26Z"
+completed: "2026-05-27T21:51:03Z"
 ---
 
 <summary>

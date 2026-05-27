@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(watcher/github-release): implement GitHub client with ListRepos, GetMasterSHA, GetChangelogContent, GetAutoReleaseConfig using google/go-github/v84; add httptest-based unit tests with coverage ≥80% for all four interface methods
 - feat(watcher/github-release): implement LoadCursor and SaveCursor with atomic temp-file + rename pattern; add Ginkgo unit tests covering round-trip, cold-start, corrupt JSON, and atomic-write semantics
 
 ## v0.26.38
