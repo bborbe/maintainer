@@ -14,7 +14,6 @@ import (
 	"github.com/bborbe/cqrs/cdb"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
-	libtime "github.com/bborbe/time"
 	"golang.org/x/oauth2"
 
 	"github.com/bborbe/maintainer/lib/githubapp"
@@ -23,6 +22,8 @@ import (
 )
 
 // CreateGitHubAppClient creates an HTTP client authenticated as a GitHub App installation.
+//
+// Carried verbatim from watcher/github-pr — same auth shape.
 func CreateGitHubAppClient(
 	ctx context.Context,
 	appID int64,
@@ -53,37 +54,31 @@ func CreateKafkaSender(
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
+//
+// taskCreationFilter is constructed by main.go (scope filter, empty-unreleased,
+// auto-release, sha-unchanged — cursor-aware) and passed in. Cursor itself is
+// loaded inside Watcher.Poll on each cycle.
 func CreateWatcher(
 	httpClient *http.Client,
 	createSender task.CreateCommandSender,
 	cursorPath string,
-	startTime libtime.DateTime,
-	scope string,
+	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
 	stage string,
 	metrics pkg.Metrics,
-	maxSlugLen int,
-	maxTitleLen int,
-	taskSuffix string,
 ) pkg.Watcher {
 	ghClient := pkg.NewGitHubClient(httpClient)
 	publisher := pkg.NewTaskPublisher(
 		createSender,
 		metrics,
-		pkg.TaskConfig{
-			Stage:       stage,
-			MaxSlugLen:  maxSlugLen,
-			MaxTitleLen: maxTitleLen,
-			TaskSuffix:  taskSuffix,
-		},
+		pkg.TaskConfig{Stage: stage},
 	)
 	return pkg.NewWatcher(
 		ghClient,
 		publisher,
 		metrics,
 		cursorPath,
-		startTime,
-		scope,
+		owner,
 		taskCreationFilter,
 	)
 }

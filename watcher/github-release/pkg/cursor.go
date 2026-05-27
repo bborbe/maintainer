@@ -6,58 +6,48 @@ package pkg
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"time"
 
 	"github.com/bborbe/errors"
-	libtime "github.com/bborbe/time"
-	"github.com/golang/glog"
 )
 
-// DefaultCursorPath is the default path for cursor state persistence.
+// DefaultCursorPath is the default cursor persistence location.
+// k8s mounts /data as a PVC; main.go binds CURSOR_PATH=DefaultCursorPath.
 const DefaultCursorPath = "/data/cursor.json"
 
-// Cursor holds the watcher's persisted poll state, including the last-seen update time and a map of task-identifier to head SHA for force-push detection.
+// Cursor is the per-repo head-SHA dedup state.
+//
+// Shape rationale (vs watcher/github-pr's time-based cursor):
+//   - Release watcher only emits a task when master HEAD advances on a repo
+//     with non-empty ## Unreleased. The relevant "last seen" is per-repo master SHA.
+//   - No PR-update-time scan (no upstream "since" filter for repo head moves).
+//   - Per-repo map mirrors watcher/github-build's shape.
+//
+// Concurrency: not safe for concurrent use. The Watcher loads at poll start
+// and saves at poll end (single goroutine).
 type Cursor struct {
-	LastUpdatedAt libtime.DateTime  `json:"last_updated_at"`
-	HeadSHAs      map[string]string `json:"head_shas"`
+	Repos map[string]*RepoState `json:"repos"` // key: "owner/repo"
+}
+
+// RepoState is the cursor entry per repo.
+type RepoState struct {
+	LastSeenMasterSHA string `json:"last_seen_master_sha"`
 }
 
 // LoadCursor reads cursor state from path.
-// Returns cold-start state with startTime if the file is missing or corrupt.
-func LoadCursor(ctx context.Context, path string, startTime libtime.DateTime) (Cursor, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path is config-controlled
-	if err != nil {
-		if os.IsNotExist(err) {
-			glog.V(2).
-				Infof("cursor file not found, using cold-start time=%s", startTime.Format(time.RFC3339))
-			return Cursor{LastUpdatedAt: startTime, HeadSHAs: make(map[string]string)}, nil
-		}
-		return Cursor{}, errors.Wrap(ctx, err, "read cursor file")
-	}
-	var state Cursor
-	if err := json.Unmarshal(data, &state); err != nil {
-		glog.Warningf("cursor file corrupt, using cold-start path=%s err=%v", path, err)
-		return Cursor{LastUpdatedAt: startTime, HeadSHAs: make(map[string]string)}, nil
-	}
-	if state.HeadSHAs == nil {
-		state.HeadSHAs = make(map[string]string)
-	}
-	return state, nil
+// Missing file → fresh empty cursor (cold start is valid).
+// Corrupt file → error (caller should refuse to proceed; mirrors github-build policy).
+//
+// Reference: watcher/github-pr/pkg/cursor.go LoadCursor (time-based variant),
+// watcher/github-build/pkg/cursor.go LoadCursor (per-repo state-machine variant).
+//
+// TODO: implement (atomic read; JSON unmarshal; cold-start on missing).
+func LoadCursor(ctx context.Context, _ string) (*Cursor, error) {
+	return nil, errors.New(ctx, "cursor: LoadCursor not implemented")
 }
 
-// SaveCursor persists cursor state to path atomically via a temp file + rename.
-func SaveCursor(ctx context.Context, path string, state Cursor) error {
-	data, err := json.Marshal(state)
-	if err != nil {
-		return errors.Wrap(ctx, err, "marshal cursor state")
-	}
-	if err := os.WriteFile(path+".tmp", data, 0600); err != nil { // #nosec G306 -- intentional 0600
-		return errors.Wrap(ctx, err, "write cursor file")
-	}
-	if err := os.Rename(path+".tmp", path); err != nil {
-		return errors.Wrap(ctx, err, "rename cursor file")
-	}
-	return nil
+// SaveCursor persists cursor state to path atomically via temp file + rename.
+//
+// TODO: implement (json.Marshal; os.WriteFile(path+".tmp", 0600); os.Rename).
+func SaveCursor(ctx context.Context, _ string, _ *Cursor) error {
+	return errors.New(ctx, "cursor: SaveCursor not implemented")
 }

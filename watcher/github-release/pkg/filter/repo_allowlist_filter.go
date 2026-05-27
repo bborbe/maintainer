@@ -12,10 +12,10 @@ import (
 )
 
 // ParseRepoAllowlist parses a comma-separated allowlist string into a slice
-// of host-qualified repo keys. Whitespace is trimmed; empty entries are skipped.
-// Returns (nil, nil) for empty input (allow-all).
-// Entry well-formedness is NOT validated here — repoallowlist.IsAllowed handles
-// malformed entries gracefully at match time (logs and skips).
+// of host-qualified repo keys (e.g. "github.com/bborbe/disk-status").
+// Whitespace trimmed; empty entries skipped. (nil, nil) on empty input (allow-all).
+//
+// Carried verbatim from watcher/github-pr — domain-agnostic.
 func ParseRepoAllowlist(_ context.Context, raw string) ([]string, error) {
 	if raw == "" {
 		return nil, nil
@@ -30,7 +30,7 @@ func ParseRepoAllowlist(_ context.Context, raw string) ([]string, error) {
 	return result, nil
 }
 
-// NewRepoAllowlistFilter returns a TaskCreationFilter that skips PRs whose
+// NewRepoAllowlistFilter returns a TaskCreationFilter that skips Releases whose
 // RepoKey is not in the allowlist. An empty allowlist never skips (allow-all).
 func NewRepoAllowlistFilter(allowlist []string) TaskCreationFilter {
 	return &repoAllowlistFilter{allowlist: allowlist}
@@ -40,6 +40,6 @@ type repoAllowlistFilter struct {
 	allowlist []string
 }
 
-func (f *repoAllowlistFilter) Skip(pr PR) bool {
-	return !repoallowlist.IsAllowed(f.allowlist, pr.RepoKey)
+func (f *repoAllowlistFilter) Skip(release Release) bool {
+	return !repoallowlist.IsAllowed(f.allowlist, release.RepoKey)
 }

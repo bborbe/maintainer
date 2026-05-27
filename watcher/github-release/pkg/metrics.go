@@ -8,49 +8,79 @@ import "github.com/prometheus/client_golang/prometheus"
 
 //counterfeiter:generate -o mocks/metrics.go --fake-name Metrics . Metrics
 
-// Metrics exposes counters for observable watcher behaviour.
+// Metrics is the four observable counters required by [[Watcher Writing Guide]] §
+// Required observability.
 type Metrics interface {
-	// IncPollCycle increments the poll cycle counter with the given result label.
-	// result: "success", "rate_limited", "github_error"
+	// IncPollCycle — result: "success" | "rate_limited" | "github_error"
 	IncPollCycle(result string)
-	// IncPRPublished increments the PR-published counter with the given command label.
-	// command: "create", "update_frontmatter", "skipped", "error"
-	IncPRPublished(command string)
+
+	// IncPublished — status: "create" | "skipped" | "error"
+	IncPublished(status string)
+
+	// IncReposScanned — increment by N repos scanned in the cycle (cardinality: none).
+	IncReposScanned(n int)
+
+	// IncFilterSkipped — reason: "empty_unreleased" | "auto_release" | "sha_unchanged" | "scope"
+	IncFilterSkipped(reason string)
 }
 
+const metricNamespace = "github_release_watcher"
+
 var (
-	pollCyclesTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "github_pr_watcher_poll_cycles_total",
-		Help: "Total number of GitHub poll cycles by result.",
+	pollCycleTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metricNamespace + "_poll_cycle_total",
+		Help: "Total poll cycles by result.",
 	}, []string{"result"})
 
-	prPublishedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "github_pr_watcher_prs_total",
-		Help: "Total number of PRs processed by command type.",
-	}, []string{"command"})
+	publishedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metricNamespace + "_published_total",
+		Help: "Total task-publish attempts by status.",
+	}, []string{"status"})
+
+	reposScannedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: metricNamespace + "_repos_scanned_total",
+		Help: "Total number of repos scanned across all poll cycles.",
+	})
+
+	filterSkippedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metricNamespace + "_filter_skipped_total",
+		Help: "Total releases filtered out by reason.",
+	}, []string{"reason"})
 )
 
 func init() {
-	prometheus.MustRegister(pollCyclesTotal, prPublishedTotal)
-	for _, result := range []string{"success", "rate_limited", "github_error"} {
-		pollCyclesTotal.WithLabelValues(result).Add(0)
+	prometheus.MustRegister(pollCycleTotal, publishedTotal, reposScannedTotal, filterSkippedTotal)
+	// Pre-init all label combos to .Add(0) so Prometheus exposes them before first event.
+	for _, r := range []string{"success", "rate_limited", "github_error"} {
+		pollCycleTotal.WithLabelValues(r).Add(0)
 	}
-	for _, cmd := range []string{"create", "update_frontmatter", "skipped", "error", "trust_error", "kafka_error"} {
-		prPublishedTotal.WithLabelValues(cmd).Add(0)
+	for _, s := range []string{"create", "skipped", "error"} {
+		publishedTotal.WithLabelValues(s).Add(0)
+	}
+	for _, r := range []string{"empty_unreleased", "auto_release", "sha_unchanged", "scope"} {
+		filterSkippedTotal.WithLabelValues(r).Add(0)
 	}
 }
 
 type prometheusMetrics struct{}
 
-// NewMetrics returns a Metrics implementation backed by Prometheus counters.
+// NewMetrics returns the Prometheus-backed Metrics implementation.
 func NewMetrics() Metrics {
 	return &prometheusMetrics{}
 }
 
 func (m *prometheusMetrics) IncPollCycle(result string) {
-	pollCyclesTotal.WithLabelValues(result).Inc()
+	pollCycleTotal.WithLabelValues(result).Inc()
 }
 
-func (m *prometheusMetrics) IncPRPublished(command string) {
-	prPublishedTotal.WithLabelValues(command).Inc()
+func (m *prometheusMetrics) IncPublished(status string) {
+	publishedTotal.WithLabelValues(status).Inc()
+}
+
+func (m *prometheusMetrics) IncReposScanned(n int) {
+	reposScannedTotal.Add(float64(n))
+}
+
+func (m *prometheusMetrics) IncFilterSkipped(reason string) {
+	filterSkippedTotal.WithLabelValues(reason).Inc()
 }

@@ -4,20 +4,22 @@
 
 package pkg
 
-import (
-	"fmt"
+import "github.com/google/uuid"
 
-	"github.com/google/uuid"
-)
+// taskIDNamespace is the UUID5 namespace for github-release tasks.
+// Stable across releases — changing it would break controller dedup.
+var taskIDNamespace = uuid.MustParse("4f9e2c1a-7b30-4d8f-9a2e-1c5b8d4f3a90")
 
-// prWatcherNamespace is the fixed v5 UUID namespace for all watcher-derived task identifiers.
-// This value is a constant — changing it invalidates all existing task identifiers.
-var prWatcherNamespace = uuid.MustParse("7d4b3e5f-8a21-4c9d-b036-2e5f7a8c1d0e")
-
-// DeriveTaskID returns a deterministic task identifier for a (PR, SHA) pair.
-// Input: "<owner>/<repo>#<number>@<sha>", e.g. "bborbe/maintainer#42@abc123...".
-// The full SHA is used (not truncated) to keep the dedup keyspace collision-free.
-func DeriveTaskID(owner, repo string, number int, sha string) uuid.UUID {
-	key := fmt.Sprintf("%s/%s#%d@%s", owner, repo, number, sha)
-	return uuid.NewSHA1(prWatcherNamespace, []byte(key))
+// DeriveTaskID returns a UUID5 derived deterministically from (owner, repo, headSHA).
+//
+// Uniqueness set rationale (per [[Watcher Writing Guide]] § Deterministic task_identifier):
+//   - Same master HEAD on a repo → same task_id → controller dedup makes re-emit a no-op
+//   - New commit advances master → new SHA → new task_id → fresh task
+//
+// Reference: watcher/github-pr/pkg/taskid.go uses (owner, repo, pr_number, head_sha);
+// watcher/github-build/pkg/taskid.go uses (owner, repo, episode_sha).
+//
+// TODO: implement (uuid.NewSHA1 over taskIDNamespace + canonical "owner/repo@sha" bytes).
+func DeriveTaskID(_, _, _ string) uuid.UUID {
+	return uuid.Nil
 }
