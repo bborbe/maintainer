@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/github-releaser): scaffold Pattern B Job skeleton — Milestone 1 of Phase 2 graduation of the github-releaser agent
+
 ## v0.26.38
 
 - refactor(watcher/github-pr): extract TaskPublisher interface and taskPublisher struct from watcher to clarify publish/trust ownership; bundle stage/maxSlugLen/maxTitleLen/taskSuffix into TaskConfig value type
