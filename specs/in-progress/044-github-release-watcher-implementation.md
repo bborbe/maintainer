@@ -1,6 +1,8 @@
 ---
-status: approved
+status: prompted
 approved: "2026-05-27T20:32:51Z"
+generating: "2026-05-27T22:07:25Z"
+prompted: "2026-05-27T22:07:25Z"
 branch: dark-factory/github-release-watcher-implementation
 ---
 

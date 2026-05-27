@@ -37,26 +37,32 @@ var _ = Describe("pkg.GitHubClient", func() {
 			It("paginates and filters archived/forks", func() {
 				var serverURL string
 				var requestCount int
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					requestCount++
-					switch r.URL.Path {
-					case "/users/bborbe":
-						w.Header().Set("Content-Type", "application/json")
-						fmt.Fprintf(w, `{"login":"bborbe","type":"User"}`)
-					case "/users/bborbe/repos":
-						page := r.URL.Query().Get("page")
-						w.Header().Set("Content-Type", "application/json")
-						if page == "1" {
-							w.Header().Set("Link", "<"+serverURL+"/users/bborbe/repos?page=2>; rel=\"next\"")
-							fmt.Fprintf(w, `[{"name":"docker-utils","default_branch":"master","archived":false,"fork":false,"owner":{"login":"bborbe"}},{"name":"old-stuff","default_branch":"master","archived":true,"fork":false,"owner":{"login":"bborbe"}},{"name":"a-fork","default_branch":"main","archived":false,"fork":true,"owner":{"login":"bborbe"}}]`)
-						} else {
-							fmt.Fprintf(w, `[{"name":"disk-status","default_branch":"main","archived":false,"fork":false,"owner":{"login":"bborbe"}}]`)
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						requestCount++
+						switch r.URL.Path {
+						case "/users/bborbe":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"bborbe","type":"User"}`)
+						case "/users/bborbe/repos":
+							page := r.URL.Query().Get("page")
+							w.Header().Set("Content-Type", "application/json")
+							if page == "1" {
+								w.Header().
+									Set("Link", "<"+serverURL+"/users/bborbe/repos?page=2>; rel=\"next\"")
+								fmt.Fprintf(
+									w,
+									`[{"name":"docker-utils","default_branch":"master","archived":false,"fork":false,"owner":{"login":"bborbe"}},{"name":"old-stuff","default_branch":"master","archived":true,"fork":false,"owner":{"login":"bborbe"}},{"name":"a-fork","default_branch":"main","archived":false,"fork":true,"owner":{"login":"bborbe"}}]`,
+								)
+							} else {
+								fmt.Fprintf(w, `[{"name":"disk-status","default_branch":"main","archived":false,"fork":false,"owner":{"login":"bborbe"}}]`)
+							}
+						default:
+							w.WriteHeader(http.StatusNotFound)
+							fmt.Fprintf(w, "unexpected route: %s", r.URL.Path)
 						}
-					default:
-						w.WriteHeader(http.StatusNotFound)
-						fmt.Fprintf(w, "unexpected route: %s", r.URL.Path)
-					}
-				}))
+					}),
+				)
 				defer server.Close()
 				serverURL = server.URL
 
@@ -78,13 +84,18 @@ var _ = Describe("pkg.GitHubClient", func() {
 
 		Context("rate limited", func() {
 			It("returns ErrRateLimited on 403 + X-RateLimit-Remaining: 0", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					w.Header().Set("X-RateLimit-Remaining", "0")
-					w.Header().Set("X-RateLimit-Reset", "9999999999")
-					w.WriteHeader(http.StatusForbidden)
-					fmt.Fprintf(w, `{"message":"API rate limit exceeded","documentation_url":"https://docs.github.com/rest/overview/rate-limiting-for-the-rest-api"}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.Header().Set("X-RateLimit-Reset", "9999999999")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(
+							w,
+							`{"message":"API rate limit exceeded","documentation_url":"https://docs.github.com/rest/overview/rate-limiting-for-the-rest-api"}`,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
@@ -98,19 +109,24 @@ var _ = Describe("pkg.GitHubClient", func() {
 
 		Context("org owner", func() {
 			It("calls ListByOrg", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					switch r.URL.Path {
-					case "/users/testorg":
-						w.Header().Set("Content-Type", "application/json")
-						fmt.Fprintf(w, `{"login":"testorg","type":"Organization"}`)
-					case "/orgs/testorg/repos":
-						w.Header().Set("Content-Type", "application/json")
-						fmt.Fprintf(w, `[{"name":"org-repo","default_branch":"main","archived":false,"fork":false,"owner":{"login":"testorg"}}]`)
-					default:
-						w.WriteHeader(http.StatusNotFound)
-						fmt.Fprintf(w, "unexpected route: %s", r.URL.Path)
-					}
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testorg":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testorg","type":"Organization"}`)
+						case "/orgs/testorg/repos":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(
+								w,
+								`[{"name":"org-repo","default_branch":"main","archived":false,"fork":false,"owner":{"login":"testorg"}}]`,
+							)
+						default:
+							w.WriteHeader(http.StatusNotFound)
+							fmt.Fprintf(w, "unexpected route: %s", r.URL.Path)
+						}
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
@@ -128,18 +144,26 @@ var _ = Describe("pkg.GitHubClient", func() {
 	Describe("GetMasterSHA", func() {
 		Context("happy path", func() {
 			It("returns the branch HEAD commit SHA", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.URL.Path).To(Equal("/repos/bborbe/docker-utils/branches/master"))
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{"name":"master","commit":{"sha":"d630ef3526cfc57fbdccd9ba53c5c3a02945e407"}}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(r.URL.Path).To(Equal("/repos/bborbe/docker-utils/branches/master"))
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"master","commit":{"sha":"d630ef3526cfc57fbdccd9ba53c5c3a02945e407"}}`,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				sha, err := client.GetMasterSHA(ctx, pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"})
+				sha, err := client.GetMasterSHA(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(sha).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
 			})
@@ -148,17 +172,22 @@ var _ = Describe("pkg.GitHubClient", func() {
 		Context("empty DefaultBranch", func() {
 			It("returns wrapped error and does not make HTTP request", func() {
 				var requestCount int
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					requestCount++
-					w.WriteHeader(http.StatusOK)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						requestCount++
+						w.WriteHeader(http.StatusOK)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = client.GetMasterSHA(ctx, pkg.Repo{Owner: "x", Name: "y", DefaultBranch: ""})
+				_, err = client.GetMasterSHA(
+					ctx,
+					pkg.Repo{Owner: "x", Name: "y", DefaultBranch: ""},
+				)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("empty DefaultBranch"))
 				Expect(requestCount).To(Equal(0))
@@ -169,19 +198,24 @@ var _ = Describe("pkg.GitHubClient", func() {
 	Describe("GetChangelogContent", func() {
 		Context("file not found (404)", func() {
 			It("returns (nil, nil)", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.URL.Path).To(Equal("/repos/bborbe/x/contents/CHANGELOG.md"))
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusNotFound)
-					fmt.Fprintf(w, `{"message":"Not Found"}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(r.URL.Path).To(Equal("/repos/bborbe/x/contents/CHANGELOG.md"))
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprintf(w, `{"message":"Not Found"}`)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				content, err := client.GetChangelogContent(ctx, pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"})
+				content, err := client.GetChangelogContent(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(content).To(BeNil())
 			})
@@ -192,18 +226,28 @@ var _ = Describe("pkg.GitHubClient", func() {
 				fixture := "## Unreleased\n\n- new\n"
 				encoded := base64.StdEncoding.EncodeToString([]byte(fixture))
 
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.URL.Path).To(Equal("/repos/bborbe/repo/contents/CHANGELOG.md"))
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{"name":"CHANGELOG.md","path":"CHANGELOG.md","size":%d,"encoding":"base64","content":"%s"}`, len(fixture), encoded)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(r.URL.Path).To(Equal("/repos/bborbe/repo/contents/CHANGELOG.md"))
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"CHANGELOG.md","path":"CHANGELOG.md","size":%d,"encoding":"base64","content":"%s"}`,
+							len(fixture),
+							encoded,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				content, err := client.GetChangelogContent(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				content, err := client.GetChangelogContent(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(content).NotTo(BeNil())
 				Expect(string(content)).To(Equal(fixture))
@@ -212,18 +256,26 @@ var _ = Describe("pkg.GitHubClient", func() {
 
 		Context("file larger than 1 MiB", func() {
 			It("rejects files larger than 1 MiB before decoding", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					// size > 1 MiB, content empty to avoid unnecessary bytes
-					fmt.Fprintf(w, `{"name":"CHANGELOG.md","path":"CHANGELOG.md","size":2000000,"encoding":"base64","content":""}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						// size > 1 MiB, content empty to avoid unnecessary bytes
+						fmt.Fprintf(
+							w,
+							`{"name":"CHANGELOG.md","path":"CHANGELOG.md","size":2000000,"encoding":"base64","content":""}`,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				content, err := client.GetChangelogContent(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				content, err := client.GetChangelogContent(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("too large"))
 				Expect(content).To(BeNil())
@@ -232,20 +284,25 @@ var _ = Describe("pkg.GitHubClient", func() {
 
 		Context("rate limited", func() {
 			It("returns ErrRateLimited on rate limit error", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					w.Header().Set("X-RateLimit-Remaining", "0")
-					w.Header().Set("X-RateLimit-Reset", "9999999999")
-					w.WriteHeader(http.StatusForbidden)
-					fmt.Fprintf(w, `{"message":"API rate limit exceeded"}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.Header().Set("X-RateLimit-Reset", "9999999999")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(w, `{"message":"API rate limit exceeded"}`)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				content, err := client.GetChangelogContent(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				content, err := client.GetChangelogContent(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).To(MatchError(pkg.ErrRateLimited))
 				Expect(content).To(BeNil())
 			})
@@ -255,19 +312,26 @@ var _ = Describe("pkg.GitHubClient", func() {
 	Describe("GetAutoReleaseConfig", func() {
 		Context("file not found (404)", func() {
 			It("returns (false, nil)", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.URL.Path).To(Equal("/repos/bborbe/x/contents/.dark-factory/config.yml"))
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusNotFound)
-					fmt.Fprintf(w, `{"message":"Not Found"}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(
+							r.URL.Path,
+						).To(Equal("/repos/bborbe/x/contents/.dark-factory/config.yml"))
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprintf(w, `{"message":"Not Found"}`)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(ctx, pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"})
+				enabled, err := client.GetAutoReleaseConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(enabled).To(BeFalse())
 			})
@@ -278,17 +342,27 @@ var _ = Describe("pkg.GitHubClient", func() {
 				yamlContent := "autoRelease: true\n"
 				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
 
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`, len(yamlContent), encoded)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							len(yamlContent),
+							encoded,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				enabled, err := client.GetAutoReleaseConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(enabled).To(BeTrue())
 			})
@@ -299,17 +373,27 @@ var _ = Describe("pkg.GitHubClient", func() {
 				yamlContent := "someOtherKey: value\n"
 				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
 
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`, len(yamlContent), encoded)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							len(yamlContent),
+							encoded,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				enabled, err := client.GetAutoReleaseConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(enabled).To(BeFalse())
 			})
@@ -321,39 +405,57 @@ var _ = Describe("pkg.GitHubClient", func() {
 				invalidYAML := "{invalid"
 				encoded := base64.StdEncoding.EncodeToString([]byte(invalidYAML))
 
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					fmt.Fprintf(w, `{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`, len(invalidYAML), encoded)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							len(invalidYAML),
+							encoded,
+						)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				enabled, err := client.GetAutoReleaseConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).To(HaveOccurred())
-				Expect(strings.Contains(err.Error(), "parse") || strings.Contains(err.Error(), "invalid")).To(BeTrue())
+				Expect(
+					strings.Contains(err.Error(), "parse") ||
+						strings.Contains(err.Error(), "invalid"),
+				).To(BeTrue())
 				Expect(enabled).To(BeFalse())
 			})
 		})
 
 		Context("rate limited", func() {
 			It("returns ErrRateLimited on rate limit error", func() {
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					w.Header().Set("X-RateLimit-Remaining", "0")
-					w.Header().Set("X-RateLimit-Reset", "9999999999")
-					w.WriteHeader(http.StatusForbidden)
-					fmt.Fprintf(w, `{"message":"API rate limit exceeded"}`)
-				}))
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.Header().Set("X-RateLimit-Reset", "9999999999")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(w, `{"message":"API rate limit exceeded"}`)
+					}),
+				)
 				defer server.Close()
 
 				client := pkg.NewGitHubClient(server.Client())
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(ctx, pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"})
+				enabled, err := client.GetAutoReleaseConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
 				Expect(err).To(MatchError(pkg.ErrRateLimited))
 				Expect(enabled).To(BeFalse())
 			})

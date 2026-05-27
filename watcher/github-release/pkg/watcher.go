@@ -6,9 +6,12 @@ package pkg
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 
+	"github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
 
@@ -31,6 +34,7 @@ func NewWatcher(
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
+	allowlist []string,
 ) Watcher {
 	return &watcher{
 		ghClient:           ghClient,
@@ -39,6 +43,7 @@ func NewWatcher(
 		cursorPath:         cursorPath,
 		owner:              owner,
 		taskCreationFilter: taskCreationFilter,
+		allowlist:          allowlist,
 	}
 }
 
@@ -49,28 +54,181 @@ type watcher struct {
 	cursorPath         string
 	owner              string
 	taskCreationFilter filter.TaskCreationFilter
+	allowlist          []string
 }
 
 // Poll implements Watcher. One cycle:
 //  1. Load cursor (cold-start safe)
-//  2. ListRepos(owner) — full set per cycle
-//  3. For each repo (parallel ≤10):
-//     a. GetMasterSHA — abort cycle on github_error / rate_limited
+//  2. ListRepos(owner) — abort cycle on rate_limited / github_error (no cursor save)
+//  3. For each repo (sequential):
+//     a. GetMasterSHA — abort cycle on rate_limited; prune on transient error
 //     b. GetChangelogContent → ParseChangelog → ChangelogSummary
 //     c. GetAutoReleaseConfig
 //     d. Build Release struct
 //     e. taskCreationFilter.Skip(release) — bump filter metric on hit
-//     f. publisher.PublishCreate(release)
-//     g. On successful publish: cursor.Repos[repo.Key()].LastSeenMasterSHA = release.HeadSHA
-//  4. SaveCursor
-//  5. metrics.IncPollCycle("success")
-//
-// Reference: watcher/github-pr/pkg/watcher.go Poll loop; watcher/github-build/pkg/watcher.go
-// per-repo state-machine loop.
-//
-// TODO: implement.
+//     f. publisher.PublishCreate(release) — update cursor on true return
+//  4. SaveCursor (skip on abort)
+//  5. IncPollCycle("success")
 func (w *watcher) Poll(ctx context.Context) error {
-	return errors.New(ctx, "watcher: Poll not implemented")
+	cursorState, err := LoadCursor(ctx, w.cursorPath)
+	if err != nil {
+		return errors.Wrapf(ctx, err, "load cursor path=%s", w.cursorPath)
+	}
+
+	repos, err := w.ghClient.ListRepos(ctx, w.owner)
+	if err != nil {
+		if stderrors.Is(err, ErrRateLimited) {
+			w.metrics.IncPollCycle("rate_limited")
+			glog.Warningf("poll cycle aborted: rate limited during ListRepos owner=%s", w.owner)
+			return nil
+		}
+		w.metrics.IncPollCycle("github_error")
+		glog.Errorf("poll cycle aborted: ListRepos owner=%s err=%v", w.owner, err)
+		return nil
+	}
+	w.metrics.IncReposScanned(len(repos))
+
+	// Compose cycle-specific SHAUnchangedFilter into the chain.
+	cycleFilter := filter.TaskCreationFilters{
+		w.taskCreationFilter,
+		filter.NewSHAUnchangedFilter(NewCursorReader(cursorState)),
+	}
+
+	abortReason := w.processRepos(ctx, cursorState, repos, cycleFilter)
+	if abortReason != "" {
+		w.metrics.IncPollCycle(abortReason)
+		// Do NOT save cursor on abort — next cycle resumes from same state.
+		return nil
+	}
+
+	if err := SaveCursor(ctx, w.cursorPath, cursorState); err != nil {
+		// Per spec failure-modes: cursor save error post-publish is best-effort.
+		// Tasks were already published; controller dedup absorbs re-emit next cycle.
+		glog.Warningf("save cursor failed path=%s err=%v", w.cursorPath, err)
+	}
+	w.metrics.IncPollCycle("success")
+	return nil
+}
+
+// processRepos iterates repos sequentially (spec § Non-goals: per-repo parallelism is agent territory).
+// Returns "" on success, "github_error" or "rate_limited" if the cycle should abort and skip cursor save.
+//
+// Per-repo error policy (spec failure-modes):
+//   - Cycle-aborting (return early): rate_limited at any layer; 5xx during ListRepos (handled in Poll above).
+//   - Per-repo prune (continue loop): GetMasterSHA / GetChangelogContent / GetAutoReleaseConfig transient
+//     non-rate-limit error — log via glog.V(2).Infof so operator can grep "repo dropped from cycle".
+func (w *watcher) processRepos(
+	ctx context.Context,
+	cursorState *Cursor,
+	repos []Repo,
+	cycleFilter filter.TaskCreationFilter,
+) string {
+	for _, repo := range repos {
+		select {
+		case <-ctx.Done():
+			glog.V(2).Infof("poll cancelled during processRepos at repo=%s", repo.Key())
+			return ""
+		default:
+		}
+
+		release, abortReason, dropped := w.gatherRelease(ctx, repo)
+		if abortReason != "" {
+			return abortReason
+		}
+		if dropped {
+			continue
+		}
+
+		filterInput := filter.Release{
+			RepoKey:           repo.Key(),
+			HeadSHA:           release.HeadSHA,
+			UnreleasedBullets: release.UnreleasedBullets,
+			AutoRelease:       release.AutoRelease,
+		}
+		if cycleFilter.Skip(filterInput) {
+			// Specific reason metrics: probe each cycle-aware predicate. Cheap (≤4 calls per skipped release).
+			w.recordSkipReason(filterInput, cursorState)
+			continue
+		}
+
+		if w.publisher.PublishCreate(ctx, release) {
+			if cursorState.Repos == nil {
+				cursorState.Repos = make(map[string]*RepoState)
+			}
+			cursorState.Repos[repo.Key()] = &RepoState{LastSeenMasterSHA: release.HeadSHA}
+		}
+	}
+	return ""
+}
+
+// gatherRelease fetches HeadSHA, ChangelogContent, AutoReleaseConfig for one repo.
+// Returns (release, "", false) on success.
+// Returns ({}, "rate_limited"|"github_error", false) when the whole cycle should abort.
+// Returns ({}, "", true) when this repo should be silently pruned from the cycle.
+func (w *watcher) gatherRelease(ctx context.Context, repo Repo) (Release, string, bool) {
+	headSHA, err := w.ghClient.GetMasterSHA(ctx, repo)
+	if err != nil {
+		if stderrors.Is(err, ErrRateLimited) {
+			return Release{}, "rate_limited", false
+		}
+		glog.V(2).
+			Infof("repo dropped from cycle: owner=%s repo=%s err=%v", repo.Owner, repo.Name, err)
+		return Release{}, "", true
+	}
+	content, err := w.ghClient.GetChangelogContent(ctx, repo)
+	if err != nil {
+		if stderrors.Is(err, ErrRateLimited) {
+			return Release{}, "rate_limited", false
+		}
+		glog.V(2).
+			Infof("repo dropped from cycle: owner=%s repo=%s err=%v", repo.Owner, repo.Name, err)
+		return Release{}, "", true
+	}
+	autoRelease, err := w.ghClient.GetAutoReleaseConfig(ctx, repo)
+	if err != nil {
+		if stderrors.Is(err, ErrRateLimited) {
+			return Release{}, "rate_limited", false
+		}
+		glog.V(2).
+			Infof("repo dropped from cycle: owner=%s repo=%s err=%v", repo.Owner, repo.Name, err)
+		return Release{}, "", true
+	}
+	summary := ParseChangelog(content)
+	currentVersion := summary.LatestVersion
+	if currentVersion == "" {
+		currentVersion = "v0.0.0"
+	}
+	return Release{
+		Repo:              repo,
+		HeadSHA:           headSHA,
+		CurrentVersion:    currentVersion,
+		UnreleasedBullets: summary.UnreleasedBullets,
+		AutoRelease:       autoRelease,
+	}, "", false
+}
+
+// recordSkipReason maps the specific predicate that triggered the skip to
+// its metric label. Order MUST match main.go's static-filter ordering plus
+// the cycle-composed SHAUnchangedFilter.
+func (w *watcher) recordSkipReason(in filter.Release, cursorState *Cursor) {
+	switch {
+	case !isAllowed(in.RepoKey, w):
+		w.metrics.IncFilterSkipped("scope")
+	case in.UnreleasedBullets == 0:
+		w.metrics.IncFilterSkipped("empty_unreleased")
+	case in.AutoRelease:
+		w.metrics.IncFilterSkipped("auto_release")
+	case NewCursorReader(cursorState).LastSeenSHA(in.RepoKey) == in.HeadSHA:
+		w.metrics.IncFilterSkipped("sha_unchanged")
+	default:
+		// Composite voted skip but no single predicate matched our probes — should not happen.
+		glog.Warningf("unattributed skip repoKey=%s headSHA=%s", in.RepoKey, in.HeadSHA)
+	}
+}
+
+// isAllowed reports whether repoKey passes the allowlist check.
+func isAllowed(repoKey string, w *watcher) bool {
+	return repoallowlist.IsAllowed(w.allowlist, repoKey)
 }
 
 // CursorReader adapter — wraps *Cursor to satisfy filter.CursorReader without

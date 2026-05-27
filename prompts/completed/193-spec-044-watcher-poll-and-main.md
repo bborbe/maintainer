@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [044-github-release-watcher-implementation]
+summary: Implemented Watcher.Poll cycle with per-repo gather/filter/publish, fill resolveAuth in main.go mirroring github-pr, add allowlist to watcher/factory, and add 6 Ginkgo cycle tests covering all named acceptance criteria
+container: maintainer-github-release-exec-193-spec-044-watcher-poll-and-main
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
 queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T21:56:14Z"
+completed: "2026-05-27T22:10:15Z"
 ---
 
 <summary>

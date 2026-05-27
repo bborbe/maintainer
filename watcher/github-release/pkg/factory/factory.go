@@ -66,6 +66,7 @@ func CreateWatcher(
 	taskCreationFilter filter.TaskCreationFilter,
 	stage string,
 	metrics pkg.Metrics,
+	allowlist []string,
 ) pkg.Watcher {
 	ghClient := pkg.NewGitHubClient(httpClient)
 	publisher := pkg.NewTaskPublisher(
@@ -80,5 +81,6 @@ func CreateWatcher(
 		cursorPath,
 		owner,
 		taskCreationFilter,
+		allowlist,
 	)
 }

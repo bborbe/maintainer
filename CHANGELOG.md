@@ -10,7 +10,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- feat(watcher/github-release): implement BuildCreateCommand and PublishCreate in TaskPublisher; frontmatter emits frozen Phase 1 contract (task_type: github-release, phase: planning, status: in_progress, stage, task_identifier, title, repo, clone_url, ref, current_version); body is operator-readable markdown header without bullet content
+- feat(watcher/github-release): implement Watcher.Poll cycle (load cursor → ListRepos → per-repo gather/filter/publish → save cursor); cycle-abort on rate-limit or github_error skips cursor save; per-repo transient errors prune without aborting; add six Ginkgo tests covering all named acceptance criteria
+- feat(watcher/github-release): implement resolveAuth in main.go mirroring watcher/github-pr (App auth wins over PAT, partial-config rejected); frontmatter emits frozen Phase 1 contract (task_type: github-release, phase: planning, status: in_progress, stage, task_identifier, title, repo, clone_url, ref, current_version); body is operator-readable markdown header without bullet content
 - feat(watcher/github-release): implement GitHub client with ListRepos, GetMasterSHA, GetChangelogContent, GetAutoReleaseConfig using google/go-github/v84; add httptest-based unit tests with coverage ≥80% for all four interface methods
 - feat(watcher/github-release): implement LoadCursor and SaveCursor with atomic temp-file + rename pattern; add Ginkgo unit tests covering round-trip, cold-start, corrupt JSON, and atomic-write semantics
 

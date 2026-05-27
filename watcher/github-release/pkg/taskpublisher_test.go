@@ -28,35 +28,47 @@ func (f *fakeCreateCommandSender) SendCommand(_ context.Context, cmd task.Create
 }
 
 var _ = Describe("pkg.BuildCreateCommand", func() {
-	It("BuildCreateCommand produces frontmatter task_type github-release for bborbe/docker-utils d630ef3", func() {
-		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
-			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
-			CurrentVersion:    "v1.7.7",
-			UnreleasedBullets: 5,
-			AutoRelease:       false,
-		}
-		cmd := pkg.BuildCreateCommand(release, pkg.TaskConfig{Stage: "dev"})
+	It(
+		"BuildCreateCommand produces frontmatter task_type github-release for bborbe/docker-utils d630ef3",
+		func() {
+			release := pkg.Release{
+				Repo: pkg.Repo{
+					Owner:         "bborbe",
+					Name:          "docker-utils",
+					DefaultBranch: "master",
+				},
+				HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
+				CurrentVersion:    "v1.7.7",
+				UnreleasedBullets: 5,
+				AutoRelease:       false,
+			}
+			cmd := pkg.BuildCreateCommand(release, pkg.TaskConfig{Stage: "dev"})
 
-		Expect(cmd.Frontmatter["task_type"]).To(Equal("github-release"))
-		Expect(cmd.Frontmatter["assignee"]).To(Equal("github-releaser-agent"))
-		Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
-		Expect(cmd.Frontmatter["status"]).To(Equal("in_progress"))
-		Expect(cmd.Frontmatter["stage"]).To(Equal("dev"))
-		Expect(cmd.Frontmatter["repo"]).To(Equal("bborbe/docker-utils"))
-		Expect(cmd.Frontmatter["clone_url"]).To(Equal("git@github.com:bborbe/docker-utils.git"))
-		Expect(cmd.Frontmatter["ref"]).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
-		Expect(cmd.Frontmatter["current_version"]).To(Equal("v1.7.7"))
-		Expect(cmd.Frontmatter["task_identifier"]).To(Equal(
-			pkg.DeriveTaskID("bborbe", "docker-utils", "d630ef3526cfc57fbdccd9ba53c5c3a02945e407").String(),
-		))
-		Expect(string(cmd.TaskIdentifier)).To(Equal(cmd.Frontmatter["task_identifier"]))
-		Expect(cmd.Title).To(Equal("Release bborbe/docker-utils at d630ef3"))
-	})
+			Expect(cmd.Frontmatter["task_type"]).To(Equal("github-release"))
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("github-releaser-agent"))
+			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("in_progress"))
+			Expect(cmd.Frontmatter["stage"]).To(Equal("dev"))
+			Expect(cmd.Frontmatter["repo"]).To(Equal("bborbe/docker-utils"))
+			Expect(cmd.Frontmatter["clone_url"]).To(Equal("git@github.com:bborbe/docker-utils.git"))
+			Expect(cmd.Frontmatter["ref"]).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
+			Expect(cmd.Frontmatter["current_version"]).To(Equal("v1.7.7"))
+			Expect(cmd.Frontmatter["task_identifier"]).To(Equal(
+				pkg.DeriveTaskID("bborbe", "docker-utils", "d630ef3526cfc57fbdccd9ba53c5c3a02945e407").
+					String(),
+			))
+			Expect(string(cmd.TaskIdentifier)).To(Equal(cmd.Frontmatter["task_identifier"]))
+			Expect(cmd.Title).To(Equal("Release bborbe/docker-utils at d630ef3"))
+		},
+	)
 
 	It("BuildCreateCommand body is operator-readable header without bullet content", func() {
 		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			Repo: pkg.Repo{
+				Owner:         "bborbe",
+				Name:          "docker-utils",
+				DefaultBranch: "master",
+			},
 			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
 			CurrentVersion:    "v1.7.7",
 			UnreleasedBullets: 5,
@@ -67,13 +79,19 @@ var _ = Describe("pkg.BuildCreateCommand", func() {
 		Expect(cmd.Body).To(HavePrefix("# Release: bborbe/docker-utils\n\n"))
 		Expect(cmd.Body).To(ContainSubstring("**Current version:** v1.7.7"))
 		Expect(cmd.Body).To(ContainSubstring("**HEAD:** d630ef3"))
-		Expect(cmd.Body).To(ContainSubstring("https://github.com/bborbe/docker-utils/blob/master/CHANGELOG.md"))
+		Expect(
+			cmd.Body,
+		).To(ContainSubstring("https://github.com/bborbe/docker-utils/blob/master/CHANGELOG.md"))
 		Expect(strings.Contains(cmd.Body, "\n- ")).To(BeFalse())
 	})
 
 	It("BuildCreateCommand stamps the stage from TaskConfig", func() {
 		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			Repo: pkg.Repo{
+				Owner:         "bborbe",
+				Name:          "docker-utils",
+				DefaultBranch: "master",
+			},
 			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
 			CurrentVersion:    "v1.7.7",
 			UnreleasedBullets: 5,
@@ -86,7 +104,11 @@ var _ = Describe("pkg.BuildCreateCommand", func() {
 
 	It("BuildCreateCommand same inputs produce identical commands", func() {
 		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			Repo: pkg.Repo{
+				Owner:         "bborbe",
+				Name:          "docker-utils",
+				DefaultBranch: "master",
+			},
 			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
 			CurrentVersion:    "v1.7.7",
 			UnreleasedBullets: 5,
@@ -109,7 +131,11 @@ var _ = Describe("pkg.TaskPublisher", func() {
 		publisher := pkg.NewTaskPublisher(fakeSender, fakeMetrics, pkg.TaskConfig{Stage: "dev"})
 
 		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			Repo: pkg.Repo{
+				Owner:         "bborbe",
+				Name:          "docker-utils",
+				DefaultBranch: "master",
+			},
 			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
 			CurrentVersion:    "v1.7.7",
 			UnreleasedBullets: 5,
@@ -133,7 +159,11 @@ var _ = Describe("pkg.TaskPublisher", func() {
 		publisher := pkg.NewTaskPublisher(fakeSender, fakeMetrics, pkg.TaskConfig{Stage: "dev"})
 
 		release := pkg.Release{
-			Repo:              pkg.Repo{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			Repo: pkg.Repo{
+				Owner:         "bborbe",
+				Name:          "docker-utils",
+				DefaultBranch: "master",
+			},
 			HeadSHA:           "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
 			CurrentVersion:    "v1.7.7",
 			UnreleasedBullets: 5,

@@ -63,7 +63,11 @@ func (c *githubClient) ListRepos(ctx context.Context, owner string) ([]Repo, err
 	return c.listOwnerReposPaginated(ctx, owner, isOrg)
 }
 
-func (c *githubClient) listOwnerReposPaginated(ctx context.Context, owner string, isOrg bool) ([]Repo, error) {
+func (c *githubClient) listOwnerReposPaginated(
+	ctx context.Context,
+	owner string,
+	isOrg bool,
+) ([]Repo, error) {
 	repos := make([]Repo, 0, 32)
 	page := 1
 	for {
@@ -85,7 +89,12 @@ func (c *githubClient) listOwnerReposPaginated(ctx context.Context, owner string
 	return repos, nil
 }
 
-func (c *githubClient) fetchRepoPage(ctx context.Context, owner string, isOrg bool, page int) ([]*gogithub.Repository, *gogithub.Response, error) {
+func (c *githubClient) fetchRepoPage(
+	ctx context.Context,
+	owner string,
+	isOrg bool,
+	page int,
+) ([]*gogithub.Repository, *gogithub.Response, error) {
 	if isOrg {
 		opts := &gogithub.RepositoryListByOrgOptions{
 			ListOptions: gogithub.ListOptions{PerPage: 100, Page: page},
@@ -117,7 +126,12 @@ func filterRepos(repos []*gogithub.Repository) []Repo {
 	return result
 }
 
-func (c *githubClient) wrapRateLimitErr(ctx context.Context, err error, msg string, args ...interface{}) error {
+func (c *githubClient) wrapRateLimitErr(
+	ctx context.Context,
+	err error,
+	msg string,
+	args ...interface{},
+) error {
 	var rl *gogithub.RateLimitError
 	var arl *gogithub.AbuseRateLimitError
 	if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
@@ -128,18 +142,42 @@ func (c *githubClient) wrapRateLimitErr(ctx context.Context, err error, msg stri
 
 func (c *githubClient) GetMasterSHA(ctx context.Context, repo Repo) (string, error) {
 	if repo.DefaultBranch == "" {
-		return "", errors.Errorf(ctx, "repo %s/%s has empty DefaultBranch — cannot fetch HEAD SHA", repo.Owner, repo.Name)
+		return "", errors.Errorf(
+			ctx,
+			"repo %s/%s has empty DefaultBranch — cannot fetch HEAD SHA",
+			repo.Owner,
+			repo.Name,
+		)
 	}
-	branch, _, err := c.client.Repositories.GetBranch(ctx, repo.Owner, repo.Name, repo.DefaultBranch, 0)
+	branch, _, err := c.client.Repositories.GetBranch(
+		ctx,
+		repo.Owner,
+		repo.Name,
+		repo.DefaultBranch,
+		0,
+	)
 	if err != nil {
-		return "", c.wrapRateLimitErr(ctx, err, "get branch %s/%s@%s", repo.Owner, repo.Name, repo.DefaultBranch)
+		return "", c.wrapRateLimitErr(
+			ctx,
+			err,
+			"get branch %s/%s@%s",
+			repo.Owner,
+			repo.Name,
+			repo.DefaultBranch,
+		)
 	}
 	return branch.GetCommit().GetSHA(), nil
 }
 
 func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]byte, error) {
 	opts := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
-	fileContent, _, _, err := c.client.Repositories.GetContents(ctx, repo.Owner, repo.Name, "CHANGELOG.md", opts)
+	fileContent, _, _, err := c.client.Repositories.GetContents(
+		ctx,
+		repo.Owner,
+		repo.Name,
+		"CHANGELOG.md",
+		opts,
+	)
 	if err != nil {
 		var ghErr *gogithub.ErrorResponse
 		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
@@ -150,13 +188,26 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
 			return nil, ErrRateLimited
 		}
-		return nil, errors.Wrapf(ctx, err, "get CHANGELOG.md %s/%s@%s", repo.Owner, repo.Name, repo.DefaultBranch)
+		return nil, errors.Wrapf(
+			ctx,
+			err,
+			"get CHANGELOG.md %s/%s@%s",
+			repo.Owner,
+			repo.Name,
+			repo.DefaultBranch,
+		)
 	}
 	if fileContent == nil {
 		return nil, nil
 	}
 	if fileContent.GetSize() > 1024*1024 {
-		return nil, errors.Errorf(ctx, "CHANGELOG.md %s/%s too large: %d bytes (max 1 MiB)", repo.Owner, repo.Name, fileContent.GetSize())
+		return nil, errors.Errorf(
+			ctx,
+			"CHANGELOG.md %s/%s too large: %d bytes (max 1 MiB)",
+			repo.Owner,
+			repo.Name,
+			fileContent.GetSize(),
+		)
 	}
 	decoded, err := fileContent.GetContent()
 	if err != nil {
@@ -167,7 +218,13 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 
 func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (bool, error) {
 	opts := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
-	fileContent, _, _, err := c.client.Repositories.GetContents(ctx, repo.Owner, repo.Name, ".dark-factory/config.yml", opts)
+	fileContent, _, _, err := c.client.Repositories.GetContents(
+		ctx,
+		repo.Owner,
+		repo.Name,
+		".dark-factory/config.yml",
+		opts,
+	)
 	if err != nil {
 		var ghErr *gogithub.ErrorResponse
 		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
@@ -178,18 +235,37 @@ func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (boo
 		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
 			return false, ErrRateLimited
 		}
-		return false, errors.Wrapf(ctx, err, "get .dark-factory/config.yml %s/%s@%s", repo.Owner, repo.Name, repo.DefaultBranch)
+		return false, errors.Wrapf(
+			ctx,
+			err,
+			"get .dark-factory/config.yml %s/%s@%s",
+			repo.Owner,
+			repo.Name,
+			repo.DefaultBranch,
+		)
 	}
 	if fileContent == nil {
 		return false, nil
 	}
 	decoded, err := fileContent.GetContent()
 	if err != nil {
-		return false, errors.Wrapf(ctx, err, "decode .dark-factory/config.yml %s/%s", repo.Owner, repo.Name)
+		return false, errors.Wrapf(
+			ctx,
+			err,
+			"decode .dark-factory/config.yml %s/%s",
+			repo.Owner,
+			repo.Name,
+		)
 	}
 	var cfg darkFactoryConfig
 	if err := yaml.Unmarshal([]byte(decoded), &cfg); err != nil {
-		return false, errors.Wrapf(ctx, err, "parse .dark-factory/config.yml %s/%s", repo.Owner, repo.Name)
+		return false, errors.Wrapf(
+			ctx,
+			err,
+			"parse .dark-factory/config.yml %s/%s",
+			repo.Owner,
+			repo.Name,
+		)
 	}
 	return cfg.AutoRelease, nil
 }
