@@ -1,6 +1,7 @@
 ---
-status: approved
+status: verifying
 approved: "2026-05-27T21:17:49Z"
+verifying: "2026-05-27T21:29:40Z"
 branch: dark-factory/github-releaser-semver-bump
 ---
 

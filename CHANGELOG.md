@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/github-releaser): add pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser for the planning step (spec 046)
 - feat(agent/github-releaser): add pkg/semver with BumpVersion(current, bump) for Phase 1 → Phase 2 version arithmetic (spec 045)
 - feat(agent/github-releaser): add pkg/changelog parser library — pure-Go ValidateUnreleased/ExtractUnreleasedBullets/InferHeaderPrefixStyle for planning step (spec 044)
 - feat(agent/github-releaser): scaffold Pattern B Job skeleton — Milestone 1 of Phase 2 graduation of the github-releaser agent
