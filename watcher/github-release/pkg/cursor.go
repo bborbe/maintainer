@@ -6,8 +6,11 @@ package pkg
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 )
 
 // DefaultCursorPath is the default cursor persistence location.
@@ -39,15 +42,36 @@ type RepoState struct {
 //
 // Reference: watcher/github-pr/pkg/cursor.go LoadCursor (time-based variant),
 // watcher/github-build/pkg/cursor.go LoadCursor (per-repo state-machine variant).
-//
-// TODO: implement (atomic read; JSON unmarshal; cold-start on missing).
-func LoadCursor(ctx context.Context, _ string) (*Cursor, error) {
-	return nil, errors.New(ctx, "cursor: LoadCursor not implemented")
+func LoadCursor(ctx context.Context, path string) (*Cursor, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is config-controlled
+	if err != nil {
+		if os.IsNotExist(err) {
+			glog.V(2).Infof("cursor file not found, cold-start path=%s", path)
+			return &Cursor{Repos: make(map[string]*RepoState)}, nil
+		}
+		return nil, errors.Wrapf(ctx, err, "read cursor file path=%s", path)
+	}
+	var c Cursor
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, errors.Wrapf(ctx, err, "unmarshal cursor file path=%s", path)
+	}
+	if c.Repos == nil {
+		c.Repos = make(map[string]*RepoState)
+	}
+	return &c, nil
 }
 
 // SaveCursor persists cursor state to path atomically via temp file + rename.
-//
-// TODO: implement (json.Marshal; os.WriteFile(path+".tmp", 0600); os.Rename).
-func SaveCursor(ctx context.Context, _ string, _ *Cursor) error {
-	return errors.New(ctx, "cursor: SaveCursor not implemented")
+func SaveCursor(ctx context.Context, path string, c *Cursor) error {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return errors.Wrapf(ctx, err, "marshal cursor state path=%s", path)
+	}
+	if err := os.WriteFile(path+".tmp", data, 0600); err != nil { // #nosec G306 -- intentional 0600
+		return errors.Wrapf(ctx, err, "write cursor tmp path=%s", path)
+	}
+	if err := os.Rename(path+".tmp", path); err != nil {
+		return errors.Wrapf(ctx, err, "rename cursor tmp path=%s", path)
+	}
+	return nil
 }

@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [044-github-release-watcher-implementation]
+summary: Implemented LoadCursor and SaveCursor in watcher/github-release/pkg/cursor.go with atomic temp-file+rename semantics, and added Ginkgo tests covering cold-start, corrupt JSON error, repos:null guard, atomic write, and the full round-trip acceptance criterion
+container: maintainer-github-release-exec-189-spec-044-cursor
+dark-factory-version: v0.173.0
 created: "2026-05-27T20:38:37Z"
 queued: "2026-05-27T20:57:47Z"
+started: "2026-05-27T21:02:33Z"
+completed: "2026-05-27T21:05:49Z"
 ---
 
 <summary>

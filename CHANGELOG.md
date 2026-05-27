@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(watcher/github-release): implement LoadCursor and SaveCursor with atomic temp-file + rename pattern; add Ginkgo unit tests covering round-trip, cold-start, corrupt JSON, and atomic-write semantics
+
 ## v0.26.38
 
 - refactor(watcher/github-pr): extract TaskPublisher interface and taskPublisher struct from watcher to clarify publish/trust ownership; bundle stage/maxSlugLen/maxTitleLen/taskSuffix into TaskConfig value type
