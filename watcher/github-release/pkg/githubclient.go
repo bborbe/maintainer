@@ -162,7 +162,7 @@ func (c *githubClient) GetPRDetails(
 		return PRDetails{}, errors.Wrapf(
 			ctx,
 			err,
-			"get pull request %s/%s#%d",
+			"get release %s/%s#%d",
 			owner,
 			repo,
 			number,

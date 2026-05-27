@@ -7,7 +7,7 @@ package mocks
 import (
 	"sync"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
 
 type TaskCreationFilter struct {

@@ -33,7 +33,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/handler"
 )
 
 type FakeSinglePRTriggerHandler struct {

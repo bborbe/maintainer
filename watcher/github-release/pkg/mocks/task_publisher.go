@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 )
 
 type TaskPublisher struct {

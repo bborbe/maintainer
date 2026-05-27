@@ -24,7 +24,7 @@ const DefaultMaxSlugLen = 80
 // Format (with suffix): "PR Review {provider} - {owner}-{repo} - {number} - {sha[:8]} - {slug} - {suffix}"
 // The returned string MUST NOT include the .md extension; the controller appends it.
 // maxSlug caps the slug segment alone; maxTitle is a safety cap on the full title.
-// Both are passed by the caller (read from env at startup) — see watcher/github-pr/main.go.
+// Both are passed by the caller (read from env at startup) — see watcher/github-release/main.go.
 // taskSuffix, when non-empty, is appended as " - <suffix>" after the slug (before maxTitle cap).
 // When truncation is needed and a suffix is present, the slug shrinks to preserve the suffix —
 // losing the suffix would defeat its purpose as a per-stage disambiguator.

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command maintainer-watcher-github-pr polls GitHub for open pull requests in
+// Command maintainer-watcher-github-release polls GitHub for open releases in
 // configured repos and publishes a CreateTaskCommand to Kafka per new
 // PR so the existing pr-reviewer agent picks it up automatically.
 package main
@@ -29,10 +29,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 var repoScopePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
@@ -263,7 +263,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		a.KafkaBrokers,
-		"maintainer-watcher-github-pr",
+		"maintainer-watcher-github-release",
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create sync producer")
@@ -311,7 +311,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
 	glog.V(2).
-		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
+		Infof("maintainer-watcher-github-release starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
 
 	pollOnce := a.pollOnce(w)
 

@@ -14,8 +14,8 @@ import (
 	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 //counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher

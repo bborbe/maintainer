@@ -7,7 +7,7 @@ package mocks
 import (
 	"sync"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 )
 
 type Metrics struct {

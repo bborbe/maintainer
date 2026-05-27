@@ -116,7 +116,7 @@ var _ = Describe("computePRTitle", func() {
 			"repo",
 			1,
 			"abc12345def67890",
-			"this is a very long pull request title that exceeds the maximum slug length limit here",
+			"this is a very long release title that exceeds the maximum slug length limit here",
 			DefaultMaxSlugLen,
 			DefaultMaxTitleLen,
 			"",

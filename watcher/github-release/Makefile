@@ -4,4 +4,4 @@ include ../../Makefile.docker
 include ../../Makefile.env
 include ../../common.env
 
-SERVICE = maintainer-watcher-github-pr
+SERVICE = maintainer-watcher-github-release

@@ -18,10 +18,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 func newTestWatcher(

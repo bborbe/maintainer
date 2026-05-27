@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package trust provides the boolean-combinator trust-decision framework
-// for the maintainer-watcher-github-pr. Callers compose leaves with And, Or, and Not
+// for the maintainer-watcher-github-release. Callers compose leaves with And, Or, and Not
 // to express compound trust policies without modifying the watcher core.
 package trust
 
@@ -15,7 +15,7 @@ import (
 	"github.com/bborbe/errors"
 )
 
-// PR is the trust-evaluation input derived from a GitHub pull request.
+// PR is the trust-evaluation input derived from a GitHub release.
 // Only the fields needed for trust decisions are included.
 type PR struct {
 	AuthorLogin string

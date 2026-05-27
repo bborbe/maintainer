@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
 
 var _ = Describe("ParseRepoAllowlist", func() {

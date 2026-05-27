@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 type Trust struct {

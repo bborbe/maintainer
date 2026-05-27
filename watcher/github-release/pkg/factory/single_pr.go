@@ -10,10 +10,10 @@ import (
 	task "github.com/bborbe/agent/lib/command/task"
 	libhttp "github.com/bborbe/http"
 
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/handler"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // CreateSinglePRTriggerHandler wires a handler that fires a single-PR review by URL.

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package factory wires concrete dependencies for the maintainer-watcher-github-pr binary.
+// Package factory wires concrete dependencies for the maintainer-watcher-github-release binary.
 package factory
 
 import (
@@ -18,9 +18,9 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/bborbe/maintainer/lib/githubapp"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // CreateGitHubAppClient creates an HTTP client authenticated as a GitHub App installation.

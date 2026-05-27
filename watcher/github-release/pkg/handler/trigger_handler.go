@@ -15,9 +15,9 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/lib/prurl"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/trust"
 )
 
 // SinglePRTriggerHandler handles POST /trigger?url=<pr_url>

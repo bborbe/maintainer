@@ -1,4 +1,4 @@
-module github.com/bborbe/maintainer/watcher/github-pr
+module github.com/bborbe/maintainer/watcher/github-release
 
 go 1.26.3
 

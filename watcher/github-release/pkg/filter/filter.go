@@ -17,7 +17,7 @@ package filter
 
 import libtime "github.com/bborbe/time"
 
-// PR is the filter-evaluation input derived from a GitHub pull request.
+// PR is the filter-evaluation input derived from a GitHub release.
 // Only the fields needed for task-creation filter decisions are included.
 type PR struct {
 	AuthorLogin string
