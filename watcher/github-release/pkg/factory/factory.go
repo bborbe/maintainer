@@ -9,13 +9,15 @@ import (
 	"context"
 	"net/http"
 
-	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
+	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
+	"github.com/golang/glog"
 	"golang.org/x/oauth2"
 
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
@@ -59,22 +61,31 @@ func CreateKafkaSender(
 // auto-release, sha-unchanged — cursor-aware) and passed in. Cursor itself is
 // loaded inside Watcher.Poll on each cycle.
 func CreateWatcher(
+	ctx context.Context,
 	httpClient *http.Client,
-	createSender task.CreateCommandSender,
+	brokers libkafka.Brokers,
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
 	stage string,
 	metrics pkg.Metrics,
 	allowlist []string,
-) pkg.Watcher {
+) (pkg.Watcher, func(), error) {
 	ghClient := pkg.NewGitHubClient(httpClient)
+	branch := base.Branch(stage)
+	syncProducer, err := libkafka.NewSyncProducerWithName(
+		ctx, brokers, "maintainer-watcher-github-release",
+	)
+	if err != nil {
+		return nil, nil, errors.Wrapf(ctx, err, "create sync producer")
+	}
+	createSender := CreateKafkaSender(syncProducer, branch)
 	publisher := pkg.NewTaskPublisher(
 		createSender,
 		metrics,
 		pkg.TaskConfig{Stage: stage},
 	)
-	return pkg.NewWatcher(
+	w := pkg.NewWatcher(
 		ghClient,
 		publisher,
 		metrics,
@@ -83,4 +94,9 @@ func CreateWatcher(
 		taskCreationFilter,
 		allowlist,
 	)
+	return w, func() {
+		glog.Infof("cleanup watcher: closing httpClient and kafka producer")
+		httpClient.CloseIdleConnections()
+		syncProducer.Close()
+	}, nil
 }

@@ -1,6 +1,12 @@
 ---
-status: draft
+status: completed
+summary: Added cmd/run-once smoke-test binary to github-release watcher with Poll-once semantics, mirroring github-build structure
+container: maintainer-github-release-exec-194-add-run-once-binary
+dark-factory-version: v0.173.0
 created: "2026-05-28T00:00:00Z"
+queued: "2026-05-28T05:41:42Z"
+started: "2026-05-28T05:41:43Z"
+completed: "2026-05-28T06:00:37Z"
 ---
 
 <summary>
