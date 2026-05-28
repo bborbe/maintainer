@@ -1,6 +1,8 @@
 ---
-status: approved
+status: prompted
 approved: "2026-05-28T18:44:37Z"
+generating: "2026-05-28T20:57:16Z"
+prompted: "2026-05-28T20:57:16Z"
 branch: dark-factory/bug-github-releaser-escalation-wrong-status
 ---
 
@@ -175,3 +177,18 @@ grep -c 'fix.*escalation' CHANGELOG.md   # ≥1
 ```
 
 No scenario justified — the reproduction itself IS the integration evidence at the right layer. Per [[spec-writing]] § Test-layer responsibilities, the four-condition test fails on every count.
+
+## Verification Result
+
+**Verified:** 2026-05-28T20:59:52Z (HEAD 5312ed7)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.173.0)
+**Scenario:** Rung-1 smoke: re-ran the Reproduction section's `go run ./cmd/run-task` against real `bborbe/docker-utils` master via `gh auth token`; inspected mutated `/tmp/repro.md` frontmatter. Rungs 2/3 N/A (CRD deployment out of scope per spec 047 Non-goals).
+**Evidence:**
+- `grep -c 'AgentStatusNeedsInput' pkg/steps_planning.go` = 2 (AC2 ≥1)
+- `grep -c 'AgentStatusDone' pkg/steps_planning.go` = 1 (AC3a ≥1); `grep -B 20 'AgentStatusDone' ... | grep -c 'previous_assignee'` = 0 (AC3b)
+- `pkg/steps_planning_test.go` asserts `Equal(agentlib.AgentStatusNeedsInput)` at lines 89/133/203/230/369 (AC4)
+- `grep -c 'status: in_progress' pkg/steps_planning_test.go` = 12; `grep -c 'phase: planning' pkg/steps_planning_test.go` = 11 (AC5)
+- `/tmp/repro.md` after fresh `cmd/run-task` run: `phase: planning` =1, `status: in_progress` =1, `previous_assignee: github-releaser-agent` =1 (AC6)
+- `grep -c 'fix.*escalation' CHANGELOG.md` = 1 (AC7)
+- `cd agent/github-releaser && make precommit` → `ready to commit` exit 0 (AC1)
+**Verdict:** PASS
