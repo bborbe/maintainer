@@ -9,27 +9,29 @@ import "fmt"
 // ComputeTaskTitle returns the human-readable task title used by the
 // CreateTaskCommand frontmatter `title`.
 //
-// Format (mirrors the Phase 1 prototype frontmatter output verbatim so the
-// FROZEN contract per [[Agent Task File Contract]] carries):
+// Format:
 //
-//	Release <owner>/<repo> at <sha[:7]>
+//	Release <owner>-<repo> <sha[:7]>
 //
 // Examples:
-//   - "Release bborbe/disk-status at 102b3b1"
-//   - "Release bborbe/docker-utils at d630ef3"
+//   - "Release bborbe-disk-status 102b3b1"
+//   - "Release bborbe-docker-utils d630ef3"
 //
-// Ground truth: Phase 1 vault file `24 Tasks/Release bborbe-docker-utils d630ef3.md`
-// (frontmatter `title:` field, line 8) reads `Release bborbe/docker-utils at d630ef3`.
-// The controller's title→filename slug step replaces `/` with `-` and strips ` at `
-// so the on-disk filename becomes `Release bborbe-docker-utils d630ef3.md` — that's
-// the controller's transform, NOT the title-field value the watcher emits.
+// The dash (NOT slash) form is mandatory: agent/lib's CreateCommand validator
+// rejects titles containing '/' before they reach the controller. The Phase 1
+// vault file `24 Tasks/Release bborbe-docker-utils d630ef3.md` shows
+// `title: Release bborbe/docker-utils at d630ef3` in frontmatter — but that
+// file was written directly by the Phase 1 slash command, which bypassed the
+// production validator. Slash-command vault writes are NOT evidence of the
+// production-schema contract. Rung-1 verification (`cmd/run-once`) surfaced
+// this in 2026-05-28.
 //
 // Reference: watcher/github-pr/pkg/filename.go ComputeTitle (PR-shaped variant
 // with maxSlugLen, maxTitleLen, taskSuffix knobs). Release titles are short and
 // deterministic — those knobs are not needed here.
 func ComputeTaskTitle(release Release) string {
 	return fmt.Sprintf(
-		"Release %s/%s at %s",
+		"Release %s-%s %s",
 		release.Repo.Owner,
 		release.Repo.Name,
 		release.ShortSHA(),
