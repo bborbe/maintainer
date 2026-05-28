@@ -5,6 +5,7 @@ go 1.26.3
 replace github.com/bborbe/maintainer/lib => ../../lib
 
 require (
+	github.com/IBM/sarama v1.48.1
 	github.com/bborbe/agent/lib v0.62.17
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
@@ -27,7 +28,6 @@ require (
 )
 
 require (
-	github.com/IBM/sarama v1.48.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/bborbe/argument/v2 v2.12.22 // indirect
 	github.com/bborbe/boltkv v1.14.0 // indirect

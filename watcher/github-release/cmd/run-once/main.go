@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libsentry "github.com/bborbe/sentry"
@@ -33,6 +34,9 @@ func main() {
 func NewApplication() *Application {
 	return &Application{
 		CreateWatcher: factory.CreateWatcher,
+		CreateProducer: func(ctx context.Context, brokers libkafka.Brokers, name string) (libkafka.SyncProducer, error) {
+			return libkafka.NewSyncProducerWithName(ctx, brokers, name)
+		},
 	}
 }
 
@@ -43,28 +47,39 @@ type Application struct {
 	Stage          string           `required:"true"  arg:"stage"           env:"STAGE"           usage:"Deployment stage (dev|prod)"`
 	Owner          string           `required:"true"  arg:"owner"           env:"OWNER"           usage:"GitHub owner / org to scan (e.g. bborbe)"`
 	RepoAllowlist  string           `required:"false" arg:"repo-allowlist"  env:"REPO_ALLOWLIST"  usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty = allow-all within owner"`
-	CursorPath     string           `required:"false" arg:"cursor-path"     env:"CURSOR_PATH"     usage:"Cursor persistence path"                                                                              default:"/data/cursor.json"`
+	CursorPath     string           `required:"false" arg:"cursor-path"     env:"CURSOR_PATH"     usage:"Cursor persistence path"                                                                         default:"/data/cursor.json"`
 	KafkaBrokers   libkafka.Brokers `required:"true"  arg:"kafka-brokers"   env:"KAFKA_BROKERS"   usage:"Comma-separated Kafka broker list"`
 	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (preferred auth path)"`
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
 	GHToken        string           `required:"false" arg:"gh-token"        env:"GH_TOKEN"        usage:"Legacy PAT fallback (prefer APP_ID + INSTALLATION_ID + PEM_KEY)"                                                             display:"length"`
 
-	CreateWatcher WatcherFactory
+	CreateWatcher  WatcherFactory
+	CreateProducer ProducerFactory
 }
 
-// WatcherFactory creates a Watcher.
+// WatcherFactory creates a Watcher. Matches factory.CreateWatcher's signature
+// exactly so tests can substitute a mock-returning closure.
 type WatcherFactory func(
-	ctx context.Context,
 	httpClient *http.Client,
-	brokers libkafka.Brokers,
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
-	stage string,
 	metrics pkg.Metrics,
 	allowlist []string,
-) (pkg.Watcher, func(), error)
+	stage string,
+) pkg.Watcher
+
+// ProducerFactory creates a Kafka sync producer. Matches
+// libkafka.NewSyncProducerWithName so tests can stub with a fake producer
+// (e.g. sarama mock) without opening a real network connection.
+type ProducerFactory func(
+	ctx context.Context,
+	brokers libkafka.Brokers,
+	name string,
+) (libkafka.SyncProducer, error)
 
 func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	allowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
@@ -88,6 +103,19 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")
 	}
+	defer httpClient.CloseIdleConnections()
+
+	syncProducer, err := a.CreateProducer(
+		ctx, a.KafkaBrokers, "maintainer-watcher-github-release-run-once",
+	)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create sync producer")
+	}
+	defer func() {
+		if cerr := syncProducer.Close(); cerr != nil {
+			glog.Warningf("close kafka sync producer: %v", cerr)
+		}
+	}()
 
 	metrics := pkg.NewMetrics()
 
@@ -97,21 +125,17 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		filter.NewAutoReleaseFilter(),
 	}
 
-	w, cleanup, err := a.CreateWatcher(
-		ctx,
+	w := a.CreateWatcher(
 		httpClient,
-		a.KafkaBrokers,
+		syncProducer,
+		base.Branch(a.Stage),
 		a.CursorPath,
 		a.Owner,
 		staticFilters,
-		a.Stage,
 		metrics,
 		allowlist,
+		a.Stage,
 	)
-	if err != nil {
-		return errors.Wrap(ctx, err, "create watcher")
-	}
-	defer cleanup()
 
 	if err := w.Poll(ctx); err != nil {
 		return errors.Wrap(ctx, err, "poll failed")

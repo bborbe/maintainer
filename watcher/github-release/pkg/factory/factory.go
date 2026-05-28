@@ -9,15 +9,13 @@ import (
 	"context"
 	"net/http"
 
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
-	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
-	"github.com/golang/glog"
 	"golang.org/x/oauth2"
 
-	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
@@ -57,35 +55,36 @@ func CreateKafkaSender(
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 //
+// Pure composition — no I/O. The Kafka sync producer is constructed and owned
+// by main.go (so the caller controls connection lifecycle + cleanup); the
+// HTTP client is constructed by resolveAuth before this is called.
+//
 // taskCreationFilter is constructed by main.go (scope filter, empty-unreleased,
-// auto-release, sha-unchanged — cursor-aware) and passed in. Cursor itself is
-// loaded inside Watcher.Poll on each cycle.
+// auto-release; sha-unchanged is composed in by the watcher each poll because
+// it needs a fresh CursorReader per cycle). Cursor itself is loaded inside
+// Watcher.Poll on each cycle.
+//
+// Reference: watcher/github-pr/pkg/factory/factory.go follows the same
+// no-I/O-in-factory pattern.
 func CreateWatcher(
-	ctx context.Context,
 	httpClient *http.Client,
-	brokers libkafka.Brokers,
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
-	stage string,
 	metrics pkg.Metrics,
 	allowlist []string,
-) (pkg.Watcher, func(), error) {
+	stage string,
+) pkg.Watcher {
 	ghClient := pkg.NewGitHubClient(httpClient)
-	branch := base.Branch(stage)
-	syncProducer, err := libkafka.NewSyncProducerWithName(
-		ctx, brokers, "maintainer-watcher-github-release",
-	)
-	if err != nil {
-		return nil, nil, errors.Wrapf(ctx, err, "create sync producer")
-	}
 	createSender := CreateKafkaSender(syncProducer, branch)
 	publisher := pkg.NewTaskPublisher(
 		createSender,
 		metrics,
 		pkg.TaskConfig{Stage: stage},
 	)
-	w := pkg.NewWatcher(
+	return pkg.NewWatcher(
 		ghClient,
 		publisher,
 		metrics,
@@ -94,9 +93,4 @@ func CreateWatcher(
 		taskCreationFilter,
 		allowlist,
 	)
-	return w, func() {
-		glog.Infof("cleanup watcher: closing httpClient and kafka producer")
-		httpClient.CloseIdleConnections()
-		syncProducer.Close()
-	}, nil
 }

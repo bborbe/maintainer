@@ -18,6 +18,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
@@ -75,6 +76,19 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")
 	}
+	defer httpClient.CloseIdleConnections()
+
+	syncProducer, err := libkafka.NewSyncProducerWithName(
+		ctx, a.KafkaBrokers, "maintainer-watcher-github-release",
+	)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create sync producer")
+	}
+	defer func() {
+		if cerr := syncProducer.Close(); cerr != nil {
+			glog.Warningf("close kafka sync producer: %v", cerr)
+		}
+	}()
 
 	metrics := pkg.NewMetrics()
 
@@ -86,21 +100,17 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		filter.NewAutoReleaseFilter(),
 	}
 
-	w, cleanup, err := factory.CreateWatcher(
-		ctx,
+	w := factory.CreateWatcher(
 		httpClient,
-		a.KafkaBrokers,
+		syncProducer,
+		base.Branch(a.Stage),
 		a.CursorPath,
 		a.Owner,
 		staticFilters,
-		a.Stage,
 		metrics,
 		allowlist,
+		a.Stage,
 	)
-	if err != nil {
-		return errors.Wrap(ctx, err, "create watcher")
-	}
-	defer cleanup()
 
 	glog.V(2).Infof(
 		"maintainer-watcher-github-release starting stage=%s owner=%s interval=%s listen=%s",
