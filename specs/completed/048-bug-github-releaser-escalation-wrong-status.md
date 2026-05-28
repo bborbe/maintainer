@@ -1,8 +1,9 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-28T18:44:37Z"
 generating: "2026-05-28T20:57:16Z"
 prompted: "2026-05-28T20:57:16Z"
+completed: "2026-05-28T21:06:59Z"
 branch: dark-factory/bug-github-releaser-escalation-wrong-status
 ---
 
