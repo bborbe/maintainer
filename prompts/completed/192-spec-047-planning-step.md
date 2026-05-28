@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: ["047"]
+summary: Implemented PlanningStep for github-releaser agent with full test coverage
+container: maintainer-github-releaser-exec-192-spec-047-planning-step
+dark-factory-version: v0.173.0
 created: "2026-05-28T00:00:00Z"
 queued: "2026-05-28T05:18:37Z"
+started: "2026-05-28T05:22:59Z"
+completed: "2026-05-28T05:29:08Z"
 ---
 
 <summary>
