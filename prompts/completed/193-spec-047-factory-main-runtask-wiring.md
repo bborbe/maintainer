@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: ["047"]
+summary: Wired github-releaser planning phase end-to-end — created pkg/factory/factory.go with six Create* functions, rewrote main.go to use AgentProvider dispatch, created cmd/run-task entry point, added test fixtures, and updated root CHANGELOG Unreleased bullet
+container: maintainer-github-releaser-exec-193-spec-047-factory-main-runtask-wiring
+dark-factory-version: v0.173.0
 created: "2026-05-28T00:00:00Z"
 queued: "2026-05-28T05:18:37Z"
+started: "2026-05-28T05:29:09Z"
+completed: "2026-05-28T05:33:59Z"
 ---
 
 <summary>

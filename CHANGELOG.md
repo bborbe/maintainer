@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/github-releaser): wire planning phase end-to-end — adds pkg/factory wiring, main.go dispatch via AgentProvider, and cmd/run-task local CLI entry point (spec 047)
 - feat(agent/github-releaser): add pkg/githubchangelog Fetcher interface + httpFetcher implementation backed by GitHub REST contents API; add pkg/plan_output typed PlanOutput struct with Outcome/PreconditionFailed constants for planning step JSON contract (spec 047)
 - feat(agent/github-releaser): add pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser for the planning step (spec 046)
 - feat(agent/github-releaser): add pkg/semver with BumpVersion(current, bump) for Phase 1 → Phase 2 version arithmetic (spec 045)
