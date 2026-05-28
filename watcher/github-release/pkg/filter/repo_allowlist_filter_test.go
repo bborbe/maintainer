@@ -43,4 +43,12 @@ var _ = Describe("filter.ParseRepoAllowlist", func() {
 			"github.com/bborbe/a, github.com/bborbe/b , , github.com/bborbe/c",
 		)).To(Equal([]string{"github.com/bborbe/a", "github.com/bborbe/b", "github.com/bborbe/c"}))
 	})
+
+	It("ParseRepoAllowlist returns nil for all-whitespace input", func() {
+		Expect(filter.ParseRepoAllowlist("  ,   ,  ")).To(BeNil())
+	})
+
+	It("ParseRepoAllowlist returns nil for whitespace-only single entry", func() {
+		Expect(filter.ParseRepoAllowlist("   ")).To(BeNil())
+	})
 })
