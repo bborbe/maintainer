@@ -2,14 +2,13 @@ module github.com/bborbe/maintainer/watcher/github-release
 
 go 1.26.3
 
-replace (
-	github.com/bborbe/maintainer/lib => ../../lib
-)
+replace github.com/bborbe/maintainer/lib => ../../lib
 
 require (
 	github.com/bborbe/agent/lib v0.62.17
 	github.com/bborbe/cqrs v0.5.1
 	github.com/bborbe/errors v1.5.13
+	github.com/bborbe/http v1.26.12
 	github.com/bborbe/kafka v1.22.15
 	github.com/bborbe/log v1.6.13
 	github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000
@@ -19,6 +18,7 @@ require (
 	github.com/golang/glog v1.2.5
 	github.com/google/go-github/v84 v84.0.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/mux v1.8.1
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
 	github.com/prometheus/client_golang v1.23.2
@@ -32,7 +32,6 @@ require (
 	github.com/bborbe/argument/v2 v2.12.22 // indirect
 	github.com/bborbe/boltkv v1.14.0 // indirect
 	github.com/bborbe/collection v1.20.12 // indirect
-	github.com/bborbe/http v1.26.12 // indirect
 	github.com/bborbe/k8s v1.14.1 // indirect
 	github.com/bborbe/kv v1.21.1 // indirect
 	github.com/bborbe/math v1.3.10 // indirect
@@ -73,7 +72,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
-	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect

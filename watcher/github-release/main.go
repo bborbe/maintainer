@@ -19,11 +19,14 @@ import (
 	"time"
 
 	"github.com/bborbe/errors"
+	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/run"
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
@@ -104,7 +107,25 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage, a.Owner, pollInterval, a.Listen,
 	)
 
-	return run.CancelOnFirstFinish(ctx, a.pollLoop(w, pollInterval))
+	return run.CancelOnFirstFinish(ctx,
+		a.pollLoop(w, pollInterval),
+		a.runHTTPServer(),
+	)
+}
+
+// runHTTPServer serves the mandatory triple (/healthz, /readiness, /metrics)
+// per coding-guidelines/go-k8s-binary-conventions.md. Without these, k8s
+// probes can never pass and Prometheus never scrapes — silent operational
+// failure.
+func (a *application) runHTTPServer() run.Func {
+	return func(ctx context.Context) error {
+		router := mux.NewRouter()
+		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
+		router.Path("/readiness").Handler(libhttp.NewPrintHandler("OK"))
+		router.Path("/metrics").Handler(promhttp.Handler())
+		glog.V(2).Infof("http server listening on %s", a.Listen)
+		return libhttp.NewServer(a.Listen, router).Run(ctx)
+	}
 }
 
 func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {

@@ -18,6 +18,10 @@ spec:
   template:
     metadata:
       annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9090"
+        prometheus.io/scheme: http
+        prometheus.io/scrape: "true"
         random: '{{ "RANDOM" | env }}'
       labels:
         app: maintainer-watcher-github-release
@@ -71,11 +75,25 @@ spec:
             capabilities:
               drop:
                 - ALL
-          # No livenessProbe / readinessProbe / ports — the binary does not
-          # expose an HTTP server (spec 044 § Non-goals defers it; sister
-          # github-release-watcher-deploy spec will add /healthz, /readiness,
-          # and /metrics). The process exits non-zero on fatal error which
-          # k8s catches via the default restart policy.
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          ports:
+            - containerPort: 9090
+              name: http
           resources:
             requests:
               cpu: 20m
