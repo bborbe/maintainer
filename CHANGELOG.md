@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- fix(agent/github-releaser): planning escalation now returns `AgentStatusNeedsInput` (not `AgentStatusDone`) at the three escalation sites (missing frontmatter, P1 unreleased-not-first, P2 unreleased-empty) so the framework deliverer leaves `status: in_progress` + `phase: planning` unchanged instead of auto-advancing to terminal `completed` / `done`; existing escalation unit tests re-pointed; new offline integration test via FileResultDeliverer guards the regression (spec 048)
 - feat(agent/github-releaser): wire planning phase end-to-end — adds pkg/factory wiring, main.go dispatch via AgentProvider, and cmd/run-task local CLI entry point (spec 047)
 - feat(agent/github-releaser): add pkg/githubchangelog Fetcher interface + httpFetcher implementation backed by GitHub REST contents API; add pkg/plan_output typed PlanOutput struct with Outcome/PreconditionFailed constants for planning step JSON contract (spec 047)
 - feat(agent/github-releaser): add pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser for the planning step (spec 046)

@@ -1,6 +1,7 @@
 ---
-status: approved
+status: verifying
 approved: "2026-05-27T22:09:05Z"
+verifying: "2026-05-28T05:33:59Z"
 branch: dark-factory/github-releaser-planning-phase-integration
 ---
 

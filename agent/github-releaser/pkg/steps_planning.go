@@ -62,8 +62,8 @@ func (s *planningStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool,
 	return true, nil
 }
 
-// Run executes the planning pipeline. Five outcomes:
-//  1. Missing frontmatter        → escalate (Done, ## Plan needs_input,  clear assignee)
+// Run executes the planning pipeline. Six outcomes:
+//  1. Missing frontmatter        → escalate (NeedsInput, ## Plan needs_input, clear assignee)
 //  2. CHANGELOG fetch fails      → Failed (controller retries)
 //  3. P1/P2 validation fails     → escalate
 //  4. Claude verdict unparseable → Failed (controller retries)
@@ -189,14 +189,17 @@ type escalation struct {
 }
 
 // escalate writes a ## Plan(needs_input) section, clears `assignee`,
-// sets `previous_assignee: github-releaser-agent`, and returns Done.
-// status + phase are LEFT UNCHANGED — per spec 047 § Constraints and
-// [[Agent Task File Contract]] escalation rule.
+// sets `previous_assignee: github-releaser-agent`, and returns
+// NeedsInput. status + phase are LEFT UNCHANGED — per spec 047
+// § Constraints and [[Agent Task File Contract]] escalation rule.
 //
-// Returning Done (NOT Failed/NeedsInput) is deliberate: the step succeeded
-// at producing a verdict (the verdict is "needs operator input"). The
-// controller does not retry a Done result; the human operator re-delegates
-// by re-setting assignee.
+// Returning AgentStatusNeedsInput (NOT Done) is critical: the framework
+// deliverer switch (FileResultDeliverer / KafkaResultDeliverer) maps
+// NeedsInput to "status: in_progress, assignee cleared, phase preserved"
+// — exactly the escalation contract. Returning Done with empty NextPhase
+// instead auto-advances to "phase: done, status: completed" (bug 048).
+// The controller does not retry NeedsInput; the human operator
+// re-delegates by re-setting assignee.
 func (s *planningStep) escalate(
 	ctx context.Context,
 	md *agentlib.Markdown,
@@ -220,7 +223,7 @@ func (s *planningStep) escalate(
 	md.Frontmatter["previous_assignee"] = AgentLogin
 
 	return &agentlib.Result{
-		Status:  agentlib.AgentStatusDone,
+		Status:  agentlib.AgentStatusNeedsInput,
 		Message: e.reason,
 	}, nil
 }

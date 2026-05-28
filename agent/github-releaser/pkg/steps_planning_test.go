@@ -7,14 +7,19 @@ package pkg_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	delivery "github.com/bborbe/agent/lib/delivery"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	agentmocks "github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
 	githubchangelogmocks "github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog/mocks"
 )
 
@@ -81,7 +86,7 @@ var _ = Describe("steps_planning", func() {
 
 					result, err := step.Run(context.Background(), md)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 					// NextPhase empty — caller stays in planning per spec 047 Desired Behavior 6.
 					Expect(result.NextPhase).To(BeEmpty())
 
@@ -125,7 +130,7 @@ var _ = Describe("steps_planning", func() {
 					md, _ := agentlib.ParseMarkdown(context.Background(), taskMD)
 					result, err := step.Run(context.Background(), md)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 					Expect(fakeFetcher.FetchCallCount()).To(Equal(0))
 
 					plan, _ := agentlib.ExtractSection[pkg.PlanOutput](
@@ -195,7 +200,7 @@ var _ = Describe("steps_planning", func() {
 					md, _ := agentlib.ParseMarkdown(context.Background(), taskMD)
 					result, err := step.Run(context.Background(), md)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 					plan, _ := agentlib.ExtractSection[pkg.PlanOutput](
 						context.Background(),
 						md,
@@ -222,7 +227,7 @@ var _ = Describe("steps_planning", func() {
 					md, _ := agentlib.ParseMarkdown(context.Background(), taskMD)
 					result, err := step.Run(context.Background(), md)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 					plan, _ := agentlib.ExtractSection[pkg.PlanOutput](
 						context.Background(),
 						md,
@@ -278,3 +283,139 @@ var _ = Describe("steps_planning", func() {
 		})
 	})
 })
+
+var _ = Describe("steps_planning integration (spec 048 regression guard)", func() {
+	// This test wires the full agent via factory.CreateAgent and runs it
+	// against the real FileResultDeliverer to exercise the framework-side
+	// status→frontmatter switch. The bug fixed in spec 048 lived in that
+	// switch: AgentStatusDone on escalation auto-advances to
+	// phase: done, status: completed; AgentStatusNeedsInput preserves
+	// phase and writes status: in_progress.
+	//
+	// The step-level Fetcher is mocked so the test runs OFFLINE — no real
+	// GitHub network calls. The Claude runner is also mocked but is never
+	// invoked on a P1 escalation path (escalation short-circuits before
+	// classification).
+	//
+	// Fixture: a CHANGELOG where ## Unreleased is NOT the first ## heading
+	// — triggers P1 escalation. Per spec 047 § Desired Behavior 4, this
+	// path returns the NeedsInput verdict in ## Plan + clears assignee +
+	// sets previous_assignee, while leaving status/phase alone.
+	Context("P1 escalation via FileResultDeliverer", func() {
+		var tmpDir string
+		var taskFile string
+
+		BeforeEach(func() {
+			var err error
+			tmpDir, err = os.MkdirTemp("", "spec-048-*")
+			Expect(err).NotTo(HaveOccurred())
+			taskFile = filepath.Join(tmpDir, "task.md")
+		})
+
+		AfterEach(func() {
+			_ = os.RemoveAll(tmpDir)
+		})
+
+		It("framework deliverer leaves status: in_progress and phase: planning unchanged on escalation", func() {
+			// Fixture: ## Unreleased is the SECOND ## heading → P1 fail.
+			initialTask := `---
+status: in_progress
+phase: planning
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/maintainer
+clone_url: https://github.com/bborbe/maintainer.git
+ref: master
+current_version: v1.2.6
+task_identifier: gh-release-bborbe-maintainer-master-spec048
+---
+
+# release task
+`
+			Expect(os.WriteFile(taskFile, []byte(initialTask), 0o600)).To(Succeed())
+
+			// Inject the mock Fetcher via package-level seam: we cannot use
+			// factory.CreateAgent directly because it wires the real
+			// HTTPFetcher. Build the planning step manually with the mock
+			// fetcher, wrap it in a one-phase Agent identical in shape to
+			// what factory.CreateAgent produces. This is intentional — the
+			// factory's job is just composition; the integration we care
+			// about is the agent.Run + FileResultDeliverer chain, which
+			// this exercises identically.
+			badChangelog := []byte("# Changelog\n\nIntro.\n\n## v1.2.6\n\n- old release\n\n## Unreleased\n\n- new bullet\n")
+			fakeFetcher := &githubchangelogmocks.Fetcher{}
+			fakeFetcher.FetchReturns(badChangelog, nil)
+			fakeRunner := &agentmocks.ClaudeRunnerMock{} // never called on P1
+
+			step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+			agent := agentlib.NewAgent(agentlib.NewPhase(domain.TaskPhasePlanning, step))
+
+			// Use the real FileResultDeliverer + passthrough generator —
+			// same wiring as cmd/run-task. This is the deliverer whose
+			// Status switch contains the bug being fixed.
+			deliverer := delivery.NewFileResultDeliverer(
+				delivery.NewPassthroughContentGenerator(),
+				taskFile,
+			)
+
+			result, err := agent.Run(
+				context.Background(),
+				domain.TaskPhasePlanning,
+				initialTask,
+				deliverer,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+
+			// Read back the file the deliverer wrote.
+			mutated, err := os.ReadFile(taskFile)
+			Expect(err).NotTo(HaveOccurred())
+			mutatedStr := string(mutated)
+
+			// Regression assertions — the bug-fix invariant lives here.
+			// Each of these failed against the OLD code (AgentStatusDone
+			// on escalation) because the framework switch wrote
+			// phase: done + status: completed.
+			Expect(mutatedStr).To(ContainSubstring("status: in_progress"))
+			Expect(mutatedStr).To(ContainSubstring("phase: planning"))
+
+			// Defense in depth: explicitly negate the bug state.
+			Expect(mutatedStr).NotTo(ContainSubstring("status: completed"))
+			Expect(mutatedStr).NotTo(ContainSubstring("phase: done"))
+
+			// Sanity: assignee cleared, previous_assignee set
+			// (these were already correct in the buggy version — included
+			// here so a future refactor doesn't accidentally regress the
+			// escalation rule's other half).
+			// Note: YAML serializes empty string as "assignee: " (no quotes).
+			// We use a regexp to match the line exactly (start of line, assignee:,
+			// optional space, then newline — not "assignee: github-releaser-agent").
+			assigneeLineRegex := `(?m)^assignee:\s*$\n`
+			Expect(mutatedStr).To(MatchRegexp(assigneeLineRegex))
+			Expect(mutatedStr).To(ContainSubstring("previous_assignee: github-releaser-agent"))
+
+			// Claude must NOT have been invoked — P1 escalation
+			// short-circuits before classification.
+			Expect(fakeRunner.RunCallCount()).To(Equal(0))
+
+			// Avoid "imported and not used" if claudelib is otherwise
+			// unreferenced by this block.
+			var _ claudelib.ClaudeRunner = fakeRunner
+		})
+	})
+})
+
+// Compile-time assertion that factory.CreateAgent is the symbol we mean
+// to keep coupled to this integration test, even though the test builds
+// its own Agent to inject the mock fetcher. If this signature changes,
+// update the integration test to match.
+var _ = func() *agentlib.Agent {
+	return factory.CreateAgent(
+		claudelib.ClaudeConfigDir("/tmp"),
+		claudelib.AgentDir("/tmp"),
+		claudelib.ClaudeModel("sonnet"),
+		"",
+		map[string]string{},
+	)
+}
