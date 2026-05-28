@@ -58,7 +58,7 @@ var _ = Describe("pkg.BuildCreateCommand", func() {
 					String(),
 			))
 			Expect(string(cmd.TaskIdentifier)).To(Equal(cmd.Frontmatter["task_identifier"]))
-			Expect(cmd.Title).To(Equal("Release bborbe/docker-utils at d630ef3"))
+			Expect(cmd.Title).To(Equal("Release bborbe-docker-utils d630ef3"))
 		},
 	)
 
