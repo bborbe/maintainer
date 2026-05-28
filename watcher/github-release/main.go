@@ -16,7 +16,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/bborbe/errors"
@@ -130,21 +129,21 @@ func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {
 }
 
 // resolveAuth chooses GitHub App auth (preferred) over PAT.
-// Mirrors watcher/github-pr/main.go resolveAuth verbatim.
+// Mirrors watcher/github-pr/main.go resolveAuth shape; reads from the parsed
+// argument struct (populated by argument.Parse) instead of os.Getenv directly
+// so the framework's defaults / validation / display-mode-length-redaction all
+// apply uniformly.
 func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
-	appID := getEnvInt("APP_ID")
-	installationID := getEnvInt("INSTALLATION_ID")
-	pemKey := []byte(os.Getenv("PEM_KEY"))
-	token := os.Getenv("GH_TOKEN")
+	pemKey := []byte(a.PEMKey)
 
-	appPartial := (appID != 0) || (installationID != 0) || (len(pemKey) != 0)
-	appComplete := (appID != 0) && (installationID != 0) && (len(pemKey) != 0)
+	appPartial := (a.AppID != 0) || (a.InstallationID != 0) || (len(pemKey) != 0)
+	appComplete := (a.AppID != 0) && (a.InstallationID != 0) && (len(pemKey) != 0)
 	if appPartial && !appComplete {
 		var missing []string
-		if appID == 0 {
+		if a.AppID == 0 {
 			missing = append(missing, "APP_ID")
 		}
-		if installationID == 0 {
+		if a.InstallationID == 0 {
 			missing = append(missing, "INSTALLATION_ID")
 		}
 		if len(pemKey) == 0 {
@@ -158,32 +157,24 @@ func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
 	}
 
 	if appComplete {
-		if token != "" {
+		if a.GHToken != "" {
 			glog.Warningf(
 				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
 			)
 		}
 		glog.Infof(
 			"watcher auth mode=github-app app_id=%d installation_id=%d",
-			appID,
-			installationID,
+			a.AppID,
+			a.InstallationID,
 		)
-		return factory.CreateGitHubAppClient(ctx, appID, installationID, pemKey)
+		return factory.CreateGitHubAppClient(ctx, a.AppID, a.InstallationID, pemKey)
 	}
-	if token != "" {
+	if a.GHToken != "" {
 		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
-		return factory.CreateGitHubPATClient(ctx, token), nil
+		return factory.CreateGitHubPATClient(ctx, a.GHToken), nil
 	}
 	return nil, errors.Errorf(
 		ctx,
 		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
 	)
-}
-
-func getEnvInt(name string) int64 {
-	v, err := strconv.ParseInt(os.Getenv(name), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return v
 }
