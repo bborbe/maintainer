@@ -1,47 +1,77 @@
-# maintainer-watcher-github-pr
+# maintainer-watcher-github-release
 
-Polls the GitHub Search API for open pull requests and publishes a `CreateTaskCommand` to Kafka
-for each new or force-pushed PR so the `agent/pr-reviewer` picks it up automatically.
+Polls the GitHub API for repositories with a non-empty `## Unreleased` block in `CHANGELOG.md` and publishes a `CreateTaskCommand` to Kafka per affected repo so the `agent/github-releaser` (future Phase 2 sibling spec) picks each up and cuts the release autonomously.
+
+The watcher is the **producer** half of the pipeline. It never modifies the target repo — no commit, no tag, no push. The agent owns release execution.
 
 ## Links
 
 Dev:
-https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
-https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/check
-https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger?url=https://github.com/owner/repo/pull/123
+
+- https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
+- https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
 
 Prod:
-https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/setloglevel/3
-https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/check
-https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-pr/trigger?url=https://github.com/owner/repo/pull/123
+
+- https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
+- https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
 
 ## How It Works
 
-The watcher runs a `user:<scope>` GitHub Search query on a configurable interval. On each poll
-it compares the PR's current head SHA against the value stored in the cursor; if the SHA has
-changed (force-push) the PR is re-submitted as a new task. The cursor is persisted to
-`/data/cursor.json` between polls so a restart does not re-trigger every known PR.
+On each poll cycle:
 
-Two independent decision chains run per PR — see [`docs/watcher-decision-chains.md`](../../docs/watcher-decision-chains.md):
+1. **List repos** under `OWNER` (non-archived, non-fork).
+2. For each repo in scope (filtered against `REPO_ALLOWLIST`):
+   - Fetch master HEAD SHA.
+   - Fetch `CHANGELOG.md`; parse `## Unreleased` bullet count + first-section flag + latest version header.
+   - Fetch `.dark-factory/config.yml` to check `autoRelease: true` (skip if so — existing autorelease path handles it).
+3. **Apply filter chain** (skip if ANY votes skip):
+   - `RepoAllowlistFilter` — host-qualified scope filter
+   - `EmptyUnreleasedFilter` — skip repos whose `## Unreleased` has zero bullets
+   - `AutoReleaseFilter` — skip repos with dark-factory autoRelease enabled
+   - `SHAUnchangedFilter` — skip if cursor already records this master HEAD (cursor-aware, composed per-cycle)
+4. **Publish** `CreateTaskCommand` per non-skipped repo.
+5. **Save cursor** at `/data/cursor.json` (per-repo `LastSeenMasterSHA`, atomic temp+rename).
 
-- **`TaskCreationFilter`** — should we create a task at all? (drafts, bots, WIP titles, age, allowlist)
-- **`TrustGate`** — given a task is created, auto-process or route to `human_review`? (trusted authors)
+Cycle abort (no cursor save) on GitHub 5xx, rate limit, or `ListRepos` failure — next cycle resumes from the same cursor.
+
+## Task Contract
+
+Per [[Agent Task File Contract]] — every emitted `CreateTaskCommand` carries this frontmatter shape:
+
+```yaml
+task_type: github-release
+assignee: github-releaser-agent
+phase: planning
+status: in_progress
+stage: dev|prod
+task_identifier: <UUID5(owner, repo, head_sha)>
+title: Release <owner>-<repo> <sha[:7]>
+repo: owner/name
+clone_url: git@github.com:owner/name.git
+ref: <full HEAD SHA>
+current_version: vX.Y.Z   # or v0.0.0 if no prior release
+```
+
+The `title` field uses a **dash** between owner+repo (not slash) — the controller's CreateCommand validator rejects `/` in titles.
+
+Body is an operator-readable header only (title + version + HEAD + changelog URL + repo link). The downstream agent clones the repo at `ref` and reads CHANGELOG itself — never parses the body.
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GH_TOKEN` | yes | — | GitHub personal access token (read scope sufficient) |
+| `OWNER` | yes | — | GitHub owner / org to scan (e.g. `bborbe`) |
 | `KAFKA_BROKERS` | yes | — | Comma-separated Kafka broker list |
 | `STAGE` | yes | — | Deployment stage (`dev` or `prod`) |
-| `TRUSTED_AUTHORS` | yes | — | Comma-separated trusted GitHub logins; empty list refuses startup |
-| `LISTEN` | no | `:9090` | HTTP listen address (`/healthz`, `/readiness`, `/metrics`, `/check`, `/trigger`) |
-| `POLL_INTERVAL` | no | `5m` | Poll interval (Go duration string) |
-| `REPO_SCOPE` | no | `bborbe` | GitHub user or org to search for PRs |
-| `REPO_ALLOWLIST` | no | — | Comma-separated host-qualified repo allowlist (`host/owner/repo`); empty means allow-all |
-| `BOT_ALLOWLIST` | no | `dependabot[bot],renovate[bot]` | Comma-separated bot author logins to skip |
-| `MAX_PR_AGE` | no | `2160h` (90d) | Skip PRs older than this; empty disables |
-| `BACKFILL_DURATION` | no | `720h` (30d) | On cold start, backdate the initial cursor by this; empty disables |
+| `APP_ID` | no | — | GitHub App ID (set all three of `APP_ID` + `INSTALLATION_ID` + `PEM_KEY` for App auth) |
+| `INSTALLATION_ID` | no | — | GitHub App Installation ID |
+| `PEM_KEY` | no | — | GitHub App private key (PEM content from k8s Secret envFrom — see `teamvault-conventions.md`) |
+| `GH_TOKEN` | no | — | Legacy PAT fallback when App credentials are absent |
+| `LISTEN` | no | `:9090` | HTTP listen address (`/healthz`, `/readiness`, `/metrics`) |
+| `POLL_INTERVAL` | no | `10m` | Poll interval (Go duration string) |
+| `REPO_ALLOWLIST` | no | — | Comma-separated host-qualified repo allowlist (`host/owner/repo`); empty = allow-all within `OWNER` |
+| `CURSOR_PATH` | no | `/data/cursor.json` | Cursor persistence path (PVC mount) |
 | `SENTRY_DSN` | no | — | Sentry DSN for error tracking |
 | `SENTRY_PROXY` | no | — | HTTP proxy URL for Sentry transport |
 
@@ -52,40 +82,62 @@ Two independent decision chains run per PR — see [`docs/watcher-decision-chain
 | `/healthz` | GET | Liveness probe (always returns 200 OK) |
 | `/readiness` | GET | Readiness probe (always returns 200 OK) |
 | `/metrics` | GET | Prometheus metrics |
-| `/check` | POST | Run a poll cycle in the background; returns 200 immediately |
-| `/trigger` | POST | Fire a single-PR review by URL (`?url=<pr_url>`); reuses the filter chain and trust evaluation |
 
-### Single-PR Trigger Known Limit
+No `/check` or `/trigger` endpoint — release work is one-task-per-repo-per-master-SHA; operator-triggered single-repo runs go through `cmd/run-once` instead (see below).
 
-If a vault task already exists for the same `(PR, SHA)`, the controller's `create-if-not-exists` is idempotent and no fresh agent Job spawns. To force a re-run in that case, reset the vault task's frontmatter (`phase`, `status`, `trigger_count`) manually OR push a new commit so the SHA changes.
+## Metrics
+
+| Metric | Cardinality | Purpose |
+|---|---|---|
+| `github_release_watcher_poll_cycle_total{result}` | `result=success\|github_error\|rate_limited` | Poll health |
+| `github_release_watcher_published_total{status}` | `status=create\|skipped\|error` | Per-cycle task emission |
+| `github_release_watcher_repos_scanned_total` | none | Sanity check on scope filter |
+| `github_release_watcher_filter_skipped_total{reason}` | `reason=empty_unreleased\|auto_release\|sha_unchanged\|scope` | Filter chain visibility |
 
 ## Development
 
 ```bash
-cd watcher/github-pr
+cd watcher/github-release
 make test          # run unit tests
 make generate      # regenerate counterfeiter mocks
 make precommit     # format + lint + test + security checks
 ```
 
+## Rung-1 Smoke Test (`cmd/run-once`)
+
+Single Poll cycle against real dev Kafka, then exits. Use to verify the watcher↔controller↔vault chain without deploying.
+
+```bash
+cd watcher/github-release/cmd/run-once
+make run-once REPO_ALLOWLIST=github.com/bborbe/<repo>
+```
+
+Authenticates via `gh auth token` (PAT mode); cursor at `/tmp/cursor.json`; defaults to the same dev Kafka brokers as the deployed StatefulSet. See `docs/verifying-specs.md` for the full rung-1/2/3 evidence procedure.
+
 ## Cursor Mechanism
 
-The cursor at `/data/cursor.json` records the timestamp of the most-recently-seen PR update plus
-a map of `task_id → head_sha`. On cold start (missing file) the cursor is initialised to the
-process start time minus `BACKFILL_DURATION`, so only PRs updated within that window are
-submitted. Force-push detection compares the stored head SHA for a known PR against the value
-returned by the current poll; a mismatch publishes a new `CreateTaskCommand` with the new SHA.
+The cursor at `/data/cursor.json` is a per-repo map:
 
-A corrupt cursor refuses startup — see `pkg/cursor.go`.
+```json
+{
+  "repos": {
+    "bborbe/disk-status": {"last_seen_master_sha": "6893c206..."},
+    "bborbe/lib-foo":     {"last_seen_master_sha": "deadbeef..."}
+  }
+}
+```
 
-## Relationship to pr-reviewer
+`SHAUnchangedFilter` consults this on each poll — only emits a task when a repo's HEAD has advanced since the last successful publish. Re-publish at the same SHA is suppressed at the filter layer; deterministic UUID5 (`owner`, `repo`, `head_sha`) at the controller layer provides a second defence (controller dedup makes re-emit a no-op).
 
-This service feeds tasks into the `agent/pr-reviewer` Pattern B Job via Kafka: for every new or
-force-pushed PR it publishes a `CreateTaskCommand` that the agent task controller picks up and
-spawns into a per-task K8s Job. The agent runs `/coding:pr-review` and posts the verdict back to
-the PR.
+Atomic write: temp file + rename. Corrupt cursor refuses startup — see `pkg/cursor.go`.
 
-See [`docs/architecture.md`](../../docs/architecture.md) for the full pipeline.
+## Relationship to github-releaser-agent
+
+The watcher publishes `CreateTaskCommand` events on `agent-task-v1-request`. The controller materialises each into a vault task file at `<vault>/24 Tasks/Release <owner>-<repo> <sha[:7]>.md` with `assignee: github-releaser-agent`. Tasks at `phase: planning, status: in_progress` get picked up by the agent's Pattern B Job, which classifies the bump (patch/minor/major), rewrites the CHANGELOG, commits, tags, pushes — handling branch protection via PR + auto-merge fallback.
+
+Until `agent/github-releaser` ships (future sibling spec), the slash-command pair `/github-release-repo` (Phase 1 prototype) consumes the same task contract and performs the release manually.
+
+See [[GitHub Release Agent]] (vault goal) for the multi-phase plan and [[Watcher Writing Guide]] for the producer-side contract this watcher satisfies.
 
 ## License
 
