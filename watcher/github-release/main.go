@@ -108,7 +108,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage, a.Owner, pollInterval, a.Listen,
 	)
 
-	// TODO: HTTP server for healthz / metrics; parallel with poll loop via run.CancelOnFirstFinish.
 	return run.CancelOnFirstFinish(ctx, a.pollLoop(w, pollInterval))
 }
 

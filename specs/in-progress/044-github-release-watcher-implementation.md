@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-05-27T20:32:51Z"
 generating: "2026-05-27T22:07:25Z"
 prompted: "2026-05-27T22:07:25Z"
+verifying: "2026-05-27T22:10:15Z"
 branch: dark-factory/github-release-watcher-implementation
 ---
 
@@ -98,7 +99,7 @@ Keep the Phase 1 slash-command pair as the only release mechanism. Cost:
 - [ ] Ginkgo `It` named `ParseChangelog handles Unreleased at bottom with mixed v-prefix` passes — exercises the `disk-status`-style inverted ordering Phase 1 surfaced (see [[GitHub Release Agent Phase 1 Learnings]] finding #4)
 - [ ] Ginkgo `It` named `SaveCursor + LoadCursor round-trip preserves Repos map` passes
 - [ ] Ginkgo `It` named `Poll publishes one task per non-skipped repo and saves cursor` passes against a counterfeiter-mocked `GitHubClient` (2 repos: one publishes, one filtered)
-- [ ] No `context.Background()` in `watcher/github-release/**/*.go` outside `*_test.go` — `grep -rn "context.Background()" watcher/github-release --include='*.go' | grep -v _test.go` returns 0 lines
+- [ ] No `context.Background()` in `watcher/github-release/**/*.go` outside `*_test.go`, EXCEPT the single allowed call in `main.go` `func main()` passing the root context into `service.Main(...)` — the identical exception lives in `watcher/github-pr/main.go` and `watcher/github-build/main.go` (canonical service-entry-point pattern). Check: `grep -rn "context.Background()" watcher/github-release --include='*.go' | grep -v _test.go` returns exactly one line in `main.go` matching `service.Main(context.Background()`.
 - [ ] No `fmt.Errorf` in production paths — `grep -rn "fmt.Errorf" watcher/github-release --include='*.go' | grep -v _test.go` returns 0 lines (use `errors.Wrapf`)
 - [ ] Prometheus counter `github_release_watcher_published_total{status="create"}` exists with `.Add(0)` initialization at package init — `grep -A2 'publishedTotal.WithLabelValues' pkg/metrics.go` shows pre-initialization
 
