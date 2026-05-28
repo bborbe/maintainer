@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: maintainer-watcher-github-pr
+  name: maintainer-watcher-github-release
   namespace: '{{ "NAMESPACE" | env }}'
   annotations:
     keel.sh/policy: force
@@ -13,18 +13,14 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: maintainer-watcher-github-pr
-  serviceName: maintainer-watcher-github-pr
+      app: maintainer-watcher-github-release
+  serviceName: maintainer-watcher-github-release
   template:
     metadata:
       annotations:
-        prometheus.io/path: /metrics
-        prometheus.io/port: "9090"
-        prometheus.io/scheme: http
-        prometheus.io/scrape: "true"
         random: '{{ "RANDOM" | env }}'
       labels:
-        app: maintainer-watcher-github-pr
+        app: maintainer-watcher-github-release
     spec:
       affinity:
         nodeAffinity:
@@ -42,30 +38,30 @@ spec:
           args:
             - -v={{"LOGLEVEL" | env}}
           env:
-            - name: LISTEN
-              value: ':9090'
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
               value: '{{ "STAGE" | env }}'
             - name: SENTRY_PROXY
               value: '{{"SENTRY_PROXY_URL" | env}}'
-            - name: TRUSTED_AUTHORS
-              value: '{{"TRUSTED_AUTHORS" | env}}'
+            - name: OWNER
+              value: '{{"WATCHER_GITHUB_RELEASE_OWNER" | env}}'
             - name: REPO_ALLOWLIST
-              value: '{{"REPO_ALLOWLIST" | env}}'
-            - name: TASK_SUFFIX
-              value: '{{ "TASK_SUFFIX" | env }}'
+              value: '{{"WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST" | env}}'
+            - name: POLL_INTERVAL
+              value: '{{"WATCHER_GITHUB_RELEASE_POLL_INTERVAL" | env}}'
+            - name: CURSOR_PATH
+              value: /data/cursor.json
             - name: APP_ID
-              value: '{{ "WATCHER_GITHUB_PR_APP_ID" | env }}'
+              value: '{{ "WATCHER_GITHUB_RELEASE_APP_ID" | env }}'
             - name: INSTALLATION_ID
-              value: '{{ "WATCHER_GITHUB_PR_INSTALLATION_ID" | env }}'
+              value: '{{ "WATCHER_GITHUB_RELEASE_INSTALLATION_ID" | env }}'
             - name: PEM_KEY
               valueFrom:
                 secretKeyRef:
-                  name: maintainer-watcher-github-pr
+                  name: maintainer-watcher-github-release
                   key: PEM_KEY
-          image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-pr:{{"BRANCH" | env}}'
+          image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-release:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
@@ -75,25 +71,11 @@ spec:
             capabilities:
               drop:
                 - ALL
-          livenessProbe:
-            failureThreshold: 5
-            httpGet:
-              path: /healthz
-              port: 9090
-              scheme: HTTP
-            initialDelaySeconds: 10
-            successThreshold: 1
-            timeoutSeconds: 5
-          readinessProbe:
-            httpGet:
-              path: /readiness
-              port: 9090
-              scheme: HTTP
-            initialDelaySeconds: 5
-            timeoutSeconds: 5
-          ports:
-            - containerPort: 9090
-              name: http
+          # No livenessProbe / readinessProbe / ports — the binary does not
+          # expose an HTTP server (spec 044 § Non-goals defers it; sister
+          # github-release-watcher-deploy spec will add /healthz, /readiness,
+          # and /metrics). The process exits non-zero on fatal error which
+          # k8s catches via the default restart policy.
           resources:
             requests:
               cpu: 20m
