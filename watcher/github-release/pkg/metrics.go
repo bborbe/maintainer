@@ -62,12 +62,12 @@ func init() {
 	}
 }
 
-type prometheusMetrics struct{}
-
 // NewMetrics returns the Prometheus-backed Metrics implementation.
 func NewMetrics() Metrics {
 	return &prometheusMetrics{}
 }
+
+type prometheusMetrics struct{}
 
 func (m *prometheusMetrics) IncPollCycle(result string) {
 	pollCycleTotal.WithLabelValues(result).Inc()

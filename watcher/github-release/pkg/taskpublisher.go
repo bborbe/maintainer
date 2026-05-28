@@ -13,17 +13,17 @@ import (
 	"github.com/golang/glog"
 )
 
+// TaskConfig groups per-task envelope settings (stage routing).
+type TaskConfig struct {
+	Stage string // "dev" or "prod" — frontmatter `stage`
+}
+
 //counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
 
 // TaskPublisher builds the CreateTaskCommand per [[Agent Task File Contract]] and
 // sends it via the supplied CreateCommandSender. Returns true on successful send.
 type TaskPublisher interface {
 	PublishCreate(ctx context.Context, release Release) bool
-}
-
-// TaskConfig groups per-task envelope settings (stage routing).
-type TaskConfig struct {
-	Stage string // "dev" or "prod" — frontmatter `stage`
 }
 
 // NewTaskPublisher returns a TaskPublisher that wraps the given sender + metrics.

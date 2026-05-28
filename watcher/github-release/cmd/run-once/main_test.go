@@ -30,9 +30,13 @@ import (
 // fakeProducerFactory returns a sarama mock SyncProducer that records calls in
 // memory — no network connection. Tests inject this so producer creation in
 // Run() succeeds without hitting a real broker.
-func fakeProducerFactory(t GinkgoTInterface) func(context.Context, libkafka.Brokers, string) (libkafka.SyncProducer, error) {
+func fakeProducerFactory(
+	t GinkgoTInterface,
+) func(context.Context, libkafka.Brokers, string) (libkafka.SyncProducer, error) {
 	return func(_ context.Context, _ libkafka.Brokers, _ string) (libkafka.SyncProducer, error) {
-		return libkafka.NewSyncProducerFromSaramaSyncProducer(saramamocks.NewSyncProducer(t, sarama.NewConfig())), nil
+		return libkafka.NewSyncProducerFromSaramaSyncProducer(
+			saramamocks.NewSyncProducer(t, sarama.NewConfig()),
+		), nil
 	}
 }
 
@@ -47,11 +51,11 @@ var _ = Describe("Run", func() {
 		ctx = context.Background()
 		mockWatcher = &mocks.Watcher{}
 		app = &runonce.Application{
-			Stage:         "dev",
-			Owner:         "test-owner",
-			RepoAllowlist: "github.com/owner/repo",
-			CursorPath:    "/tmp/cursor.json",
-			KafkaBrokers:  libkafka.Brokers{"localhost:9092"},
+			Stage:          "dev",
+			Owner:          "test-owner",
+			RepoAllowlist:  "github.com/owner/repo",
+			CursorPath:     "/tmp/cursor.json",
+			KafkaBrokers:   libkafka.Brokers{"localhost:9092"},
 			CreateProducer: fakeProducerFactory(GinkgoT()),
 		}
 		os.Setenv("GH_TOKEN", "fake-token")

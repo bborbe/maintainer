@@ -4,6 +4,8 @@
 
 package filter
 
+//counterfeiter:generate -o ../mocks/cursor_reader.go --fake-name CursorReader . CursorReader
+
 // CursorReader is the minimal cursor read surface needed by SHAUnchangedFilter.
 // Defined as a local interface (Hollywood principle) so the filter doesn't
 // import pkg.Cursor — keeps filter package import-cycle-safe.

@@ -2,7 +2,9 @@ module github.com/bborbe/maintainer/watcher/github-release
 
 go 1.26.3
 
-replace github.com/bborbe/maintainer/lib => ../../lib
+replace (
+	github.com/bborbe/maintainer/lib => ../../lib
+)
 
 require (
 	github.com/IBM/sarama v1.48.1
