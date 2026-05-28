@@ -4,8 +4,8 @@
 
 package filter
 
-// NewAutoReleaseFilter skips Releases whose repo has dark-factory autoRelease
-// enabled (`.dark-factory/config.yml: autoRelease: true`).
+// NewAutoReleaseFilter returns "auto_release" for Releases whose repo has
+// dark-factory autoRelease enabled (`.dark-factory/config.yml: autoRelease: true`).
 //
 // Rationale: existing dark-factory autoRelease daemon handles those repos via
 // post-merge rename + tag. github-releaser-agent is for repos that opted OUT of
@@ -14,7 +14,10 @@ package filter
 //
 // The Release.AutoRelease bool is sourced once by GitHubClient.GetAutoReleaseConfig.
 func NewAutoReleaseFilter() TaskCreationFilter {
-	return TaskCreationFilterFunc(func(release Release) bool {
-		return release.AutoRelease
+	return TaskCreationFilterFunc(func(release Release) string {
+		if release.AutoRelease {
+			return "auto_release"
+		}
+		return ""
 	})
 }

@@ -14,7 +14,6 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
@@ -62,17 +62,19 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrapf(ctx, err, "parse poll interval %q", a.PollInterval)
 	}
 
-	allowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
-	if err != nil {
-		return errors.Wrap(ctx, err, "parse repo allowlist")
-	}
+	allowlist := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if len(allowlist) == 0 {
 		glog.V(2).Infof("repo-allowlist count=0 (allow-all within owner=%s)", a.Owner)
 	} else {
 		glog.V(2).Infof("repo-allowlist count=%d", len(allowlist))
 	}
 
-	httpClient, err := a.resolveAuth(ctx)
+	httpClient, err := auth.ResolveGitHubClient(ctx, auth.Credentials{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKey:         []byte(a.PEMKey),
+		Token:          a.GHToken,
+	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")
 	}
@@ -90,25 +92,17 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}()
 
-	metrics := pkg.NewMetrics()
-
-	// Cycle-invariant filters. SHAUnchangedFilter is composed in by the watcher
-	// each poll (it needs a fresh CursorReader per cycle).
-	staticFilters := filter.TaskCreationFilters{
-		filter.NewRepoAllowlistFilter(allowlist),
-		filter.NewEmptyUnreleasedFilter(),
-		filter.NewAutoReleaseFilter(),
-	}
+	metrics := pkg.NewMetrics(nil)
+	sender := factory.CreateKafkaSender(syncProducer, base.Branch(a.Stage))
+	staticFilters := factory.CreateStaticFilters(allowlist)
 
 	w := factory.CreateWatcher(
 		httpClient,
-		syncProducer,
-		base.Branch(a.Stage),
+		sender,
 		a.CursorPath,
 		a.Owner,
 		staticFilters,
 		metrics,
-		allowlist,
 		a.Stage,
 	)
 
@@ -157,55 +151,4 @@ func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {
 			}
 		}
 	}
-}
-
-// resolveAuth chooses GitHub App auth (preferred) over PAT.
-// Mirrors watcher/github-pr/main.go resolveAuth shape; reads from the parsed
-// argument struct (populated by argument.Parse) instead of os.Getenv directly
-// so the framework's defaults / validation / display-mode-length-redaction all
-// apply uniformly.
-func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
-	pemKey := []byte(a.PEMKey)
-
-	appPartial := (a.AppID != 0) || (a.InstallationID != 0) || (len(pemKey) != 0)
-	appComplete := (a.AppID != 0) && (a.InstallationID != 0) && (len(pemKey) != 0)
-	if appPartial && !appComplete {
-		var missing []string
-		if a.AppID == 0 {
-			missing = append(missing, "APP_ID")
-		}
-		if a.InstallationID == 0 {
-			missing = append(missing, "INSTALLATION_ID")
-		}
-		if len(pemKey) == 0 {
-			missing = append(missing, "PEM_KEY")
-		}
-		return nil, errors.Errorf(
-			ctx,
-			"watcher auth: partial GitHub App config — missing %v; set all three or none",
-			missing,
-		)
-	}
-
-	if appComplete {
-		if a.GHToken != "" {
-			glog.Warningf(
-				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
-		}
-		glog.Infof(
-			"watcher auth mode=github-app app_id=%d installation_id=%d",
-			a.AppID,
-			a.InstallationID,
-		)
-		return factory.CreateGitHubAppClient(ctx, a.AppID, a.InstallationID, pemKey)
-	}
-	if a.GHToken != "" {
-		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
-		return factory.CreateGitHubPATClient(ctx, a.GHToken), nil
-	}
-	return nil, errors.Errorf(
-		ctx,
-		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
-	)
 }

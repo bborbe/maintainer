@@ -54,6 +54,16 @@ type githubClient struct {
 	client *gogithub.Client
 }
 
+// isRateLimitError reports whether err is a GitHub API rate-limit signal
+// (primary or secondary/abuse). Used by every API-surface method to map
+// upstream rate-limit responses to ErrRateLimited so callers can abort the
+// cycle uniformly.
+func isRateLimitError(err error) bool {
+	var rl *gogithub.RateLimitError
+	var arl *gogithub.AbuseRateLimitError
+	return stderrors.As(err, &rl) || stderrors.As(err, &arl)
+}
+
 func (c *githubClient) ListRepos(ctx context.Context, owner string) ([]Repo, error) {
 	user, _, err := c.client.Users.Get(ctx, owner)
 	if err != nil {
@@ -80,7 +90,7 @@ func (c *githubClient) listOwnerReposPaginated(
 		if err != nil {
 			return nil, c.wrapRateLimitErr(ctx, err, "list repos for %s page=%d", owner, page)
 		}
-		repos = append(repos, filterRepos(repoPage)...)
+		repos = append(repos, mapGitHubRepos(repoPage)...)
 		if resp == nil || resp.NextPage == 0 {
 			break
 		}
@@ -107,7 +117,9 @@ func (c *githubClient) fetchRepoPage(
 	return c.client.Repositories.ListByUser(ctx, owner, opts)
 }
 
-func filterRepos(repos []*gogithub.Repository) []Repo {
+// mapGitHubRepos maps an API repo page into our domain Repo slice, dropping
+// archived and forked repos and any entry with an empty name.
+func mapGitHubRepos(repos []*gogithub.Repository) []Repo {
 	var result []Repo
 	for _, repo := range repos {
 		if repo.GetArchived() || repo.GetFork() {
@@ -132,9 +144,7 @@ func (c *githubClient) wrapRateLimitErr(
 	msg string,
 	args ...interface{},
 ) error {
-	var rl *gogithub.RateLimitError
-	var arl *gogithub.AbuseRateLimitError
-	if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+	if isRateLimitError(err) {
 		return ErrRateLimited
 	}
 	return errors.Wrapf(ctx, err, msg, args...)
@@ -154,7 +164,7 @@ func (c *githubClient) GetMasterSHA(ctx context.Context, repo Repo) (string, err
 		repo.Owner,
 		repo.Name,
 		repo.DefaultBranch,
-		0,
+		1, // follow one redirect — GitHub returns 301 for renamed default branches
 	)
 	if err != nil {
 		return "", c.wrapRateLimitErr(
@@ -183,9 +193,7 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
 			return nil, nil
 		}
-		var rl *gogithub.RateLimitError
-		var arl *gogithub.AbuseRateLimitError
-		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+		if isRateLimitError(err) {
 			return nil, ErrRateLimited
 		}
 		return nil, errors.Wrapf(
@@ -213,6 +221,16 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "decode CHANGELOG.md %s/%s", repo.Owner, repo.Name)
 	}
+	// Enforce the limit on actual decoded content — API-reported Size is upstream metadata.
+	if len(decoded) > 1024*1024 {
+		return nil, errors.Errorf(
+			ctx,
+			"CHANGELOG.md %s/%s decoded content too large: %d bytes (max 1 MiB)",
+			repo.Owner,
+			repo.Name,
+			len(decoded),
+		)
+	}
 	return []byte(decoded), nil
 }
 
@@ -230,9 +248,7 @@ func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (boo
 		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
 			return false, nil
 		}
-		var rl *gogithub.RateLimitError
-		var arl *gogithub.AbuseRateLimitError
-		if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+		if isRateLimitError(err) {
 			return false, ErrRateLimited
 		}
 		return false, errors.Wrapf(
@@ -257,8 +273,8 @@ func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (boo
 			repo.Name,
 		)
 	}
-	var cfg darkFactoryConfig
-	if err := yaml.Unmarshal([]byte(decoded), &cfg); err != nil {
+	autoRelease, err := parseAutoReleaseConfig([]byte(decoded))
+	if err != nil {
 		return false, errors.Wrapf(
 			ctx,
 			err,
@@ -266,6 +282,16 @@ func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (boo
 			repo.Owner,
 			repo.Name,
 		)
+	}
+	return autoRelease, nil
+}
+
+// parseAutoReleaseConfig unmarshals a .dark-factory/config.yml document and
+// returns the autoRelease flag. Pure data extraction — no I/O.
+func parseAutoReleaseConfig(content []byte) (bool, error) {
+	var cfg darkFactoryConfig
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
+		return false, err //nolint:wrapcheck // caller wraps with repo context
 	}
 	return cfg.AutoRelease, nil
 }

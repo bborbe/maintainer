@@ -12,7 +12,7 @@ import (
 )
 
 var _ = Describe("filter.TaskCreationFilters", func() {
-	It("TaskCreationFilters returns false when every filter votes false", func() {
+	It("TaskCreationFilters returns empty when every filter passes", func() {
 		chain := filter.TaskCreationFilters{
 			filter.NewEmptyUnreleasedFilter(),
 			filter.NewAutoReleaseFilter(),
@@ -20,10 +20,10 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 3,
 			AutoRelease:       false,
-		})).To(BeFalse())
+		})).To(BeEmpty())
 	})
 
-	It("TaskCreationFilters returns true on first filter that votes true", func() {
+	It("TaskCreationFilters returns reason of first filter that votes skip", func() {
 		chain := filter.TaskCreationFilters{
 			filter.NewEmptyUnreleasedFilter(),
 			filter.NewAutoReleaseFilter(),
@@ -31,10 +31,10 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 0,
 			AutoRelease:       false,
-		})).To(BeTrue())
+		})).To(Equal("empty_unreleased"))
 	})
 
-	It("TaskCreationFilters returns true when later filter votes true", func() {
+	It("TaskCreationFilters returns reason of later filter when earlier passes", func() {
 		chain := filter.TaskCreationFilters{
 			filter.NewEmptyUnreleasedFilter(),
 			filter.NewAutoReleaseFilter(),
@@ -42,11 +42,11 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 3,
 			AutoRelease:       true,
-		})).To(BeTrue())
+		})).To(Equal("auto_release"))
 	})
 
 	It("TaskCreationFilters with empty slice never skips", func() {
 		var chain filter.TaskCreationFilters
-		Expect(chain.Skip(filter.Release{})).To(BeFalse())
+		Expect(chain.Skip(filter.Release{})).To(BeEmpty())
 	})
 })

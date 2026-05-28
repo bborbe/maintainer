@@ -20,12 +20,12 @@ import (
 
 var _ = Describe("pkg.Watcher.Poll", func() {
 	var (
-		ctx         context.Context
-		ghClient    *mocks.GitHubClient
-		publisher   *mocks.TaskPublisher
-		metricsMock *mocks.Metrics
-		cursorPath  string
-		tmpDir      string
+		ctx        context.Context
+		ghClient   *mocks.GitHubClient
+		publisher  *mocks.TaskPublisher
+		metrics    *mocks.Metrics
+		cursorPath string
+		tmpDir     string
 	)
 
 	BeforeEach(func() {
@@ -37,7 +37,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 
 		ghClient = &mocks.GitHubClient{}
 		publisher = &mocks.TaskPublisher{}
-		metricsMock = &mocks.Metrics{}
+		metrics = &mocks.Metrics{}
 	})
 
 	AfterEach(func() {
@@ -85,11 +85,10 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			w := pkg.NewWatcher(
 				ghClient,
 				publisher,
-				metricsMock,
+				metrics,
 				cursorPath,
 				"bborbe",
 				staticFilters,
-				nil,
 			)
 
 			Expect(w.Poll(ctx)).To(Succeed())
@@ -116,12 +115,12 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			Expect(exists).To(BeFalse())
 
 			// Metrics
-			Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-			Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("success"))
-			Expect(metricsMock.IncFilterSkippedCallCount()).To(Equal(1))
-			Expect(metricsMock.IncFilterSkippedArgsForCall(0)).To(Equal("empty_unreleased"))
-			Expect(metricsMock.IncReposScannedCallCount()).To(Equal(1))
-			Expect(metricsMock.IncReposScannedArgsForCall(0)).To(Equal(2))
+			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
+			Expect(metrics.IncFilterSkippedCallCount()).To(Equal(1))
+			Expect(metrics.IncFilterSkippedArgsForCall(0)).To(Equal("empty_unreleased"))
+			Expect(metrics.IncReposScannedCallCount()).To(Equal(1))
+			Expect(metrics.IncReposScannedArgsForCall(0)).To(Equal(2))
 		})
 	})
 
@@ -139,17 +138,16 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			w := pkg.NewWatcher(
 				ghClient,
 				publisher,
-				metricsMock,
+				metrics,
 				cursorPath,
 				"bborbe",
 				staticFilters,
-				nil,
 			)
 
 			Expect(w.Poll(ctx)).To(Succeed())
 
-			Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-			Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
+			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
 			Expect(publisher.PublishCreateCallCount()).To(Equal(0))
 
 			// Cursor file was NOT written
@@ -172,17 +170,16 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			w := pkg.NewWatcher(
 				ghClient,
 				publisher,
-				metricsMock,
+				metrics,
 				cursorPath,
 				"bborbe",
 				staticFilters,
-				nil,
 			)
 
 			Expect(w.Poll(ctx)).To(Succeed())
 
-			Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-			Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("github_error"))
+			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("github_error"))
 			Expect(publisher.PublishCreateCallCount()).To(Equal(0))
 
 			_, err := os.Stat(cursorPath)
@@ -225,17 +222,16 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 					w := pkg.NewWatcher(
 						ghClient,
 						publisher,
-						metricsMock,
+						metrics,
 						cursorPath,
 						"bborbe",
 						staticFilters,
-						nil,
 					)
 
 					Expect(w.Poll(ctx)).To(Succeed())
 
-					Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-					Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("success"))
+					Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+					Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
 
 					// Only good-repo was published
 					Expect(publisher.PublishCreateCallCount()).To(Equal(1))
@@ -287,17 +283,16 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			w := pkg.NewWatcher(
 				ghClient,
 				publisher,
-				metricsMock,
+				metrics,
 				cursorPath,
 				"bborbe",
 				staticFilters,
-				nil,
 			)
 
 			Expect(w.Poll(ctx)).To(Succeed())
 
-			Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-			Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
+			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
 
 			// Neither repo published (cycle aborted mid-way)
 			Expect(publisher.PublishCreateCallCount()).To(Equal(0))
@@ -334,18 +329,17 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			w := pkg.NewWatcher(
 				ghClient,
 				publisher,
-				metricsMock,
+				metrics,
 				cursorPath,
 				"bborbe",
 				staticFilters,
-				nil,
 			)
 
 			Expect(w.Poll(ctx)).To(Succeed())
 
 			// Poll itself succeeds
-			Expect(metricsMock.IncPollCycleCallCount()).To(Equal(1))
-			Expect(metricsMock.IncPollCycleArgsForCall(0)).To(Equal("success"))
+			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
+			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
 
 			// Cursor file exists (the Poll itself ran to completion)
 			_, err := os.Stat(cursorPath)

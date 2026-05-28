@@ -8,13 +8,12 @@ import (
 	"context"
 	stderrors "errors"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/IBM/sarama"
 	saramamocks "github.com/IBM/sarama/mocks"
-	"github.com/bborbe/cqrs/base"
+	task "github.com/bborbe/agent/lib/command/task"
 	libkafka "github.com/bborbe/kafka"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -43,52 +42,50 @@ func fakeProducerFactory(
 var _ = Describe("Run", func() {
 	var (
 		ctx         context.Context
-		mockWatcher *mocks.Watcher
+		watcherMock *mocks.Watcher
 		app         *runonce.Application
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		mockWatcher = &mocks.Watcher{}
+		watcherMock = &mocks.Watcher{}
 		app = &runonce.Application{
 			Stage:          "dev",
 			Owner:          "test-owner",
 			RepoAllowlist:  "github.com/owner/repo",
 			CursorPath:     "/tmp/cursor.json",
 			KafkaBrokers:   libkafka.Brokers{"localhost:9092"},
+			GHToken:        "fake-token",
 			CreateProducer: fakeProducerFactory(GinkgoT()),
 		}
-		os.Setenv("GH_TOKEN", "fake-token")
 	})
 
-	mockWatcherFactory := func() runonce.WatcherFactory {
+	watcherMockFactory := func() runonce.WatcherFactory {
 		return func(
 			_ *http.Client,
-			_ libkafka.SyncProducer,
-			_ base.Branch,
+			_ task.CreateCommandSender,
 			_ string,
 			_ string,
 			_ filter.TaskCreationFilter,
 			_ pkg.Metrics,
-			_ []string,
 			_ string,
 		) pkg.Watcher {
-			return mockWatcher
+			return watcherMock
 		}
 	}
 
 	It("Poll succeeds returns nil", func() {
-		mockWatcher.PollReturns(nil)
-		app.CreateWatcher = mockWatcherFactory()
+		watcherMock.PollReturns(nil)
+		app.CreateWatcher = watcherMockFactory()
 
 		err := app.Run(ctx, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(mockWatcher.PollCallCount()).To(Equal(1))
+		Expect(watcherMock.PollCallCount()).To(Equal(1))
 	})
 
 	It("Poll fails returns wrapped error", func() {
-		mockWatcher.PollReturns(stderrors.New("kafka unavailable"))
-		app.CreateWatcher = mockWatcherFactory()
+		watcherMock.PollReturns(stderrors.New("kafka unavailable"))
+		app.CreateWatcher = watcherMockFactory()
 
 		err := app.Run(ctx, nil)
 		Expect(err).To(HaveOccurred())
@@ -97,7 +94,7 @@ var _ = Describe("Run", func() {
 
 	It("empty REPO_ALLOWLIST returns error", func() {
 		app.RepoAllowlist = ""
-		app.CreateWatcher = mockWatcherFactory()
+		app.CreateWatcher = watcherMockFactory()
 
 		err := app.Run(ctx, nil)
 		Expect(err).To(HaveOccurred())
@@ -108,10 +105,7 @@ var _ = Describe("Run", func() {
 var _ = Describe("Main", func() {
 	It("Compiles", func() {
 		var err error
-		_, err = gexec.Build(
-			"github.com/bborbe/maintainer/watcher/github-release/cmd/run-once",
-			"-mod=mod",
-		)
+		_, err = gexec.Build(".", "-mod=mod", "-buildvcs=false")
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

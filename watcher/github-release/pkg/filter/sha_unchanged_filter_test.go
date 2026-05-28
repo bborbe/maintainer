@@ -9,49 +9,50 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
 )
 
-type fakeCursorReader struct {
-	data map[string]string
-}
-
-func (f *fakeCursorReader) LastSeenSHA(repoKey string) string {
-	return f.data[repoKey]
-}
-
 var _ = Describe("filter.SHAUnchangedFilter", func() {
+	newCursor := func(data map[string]string) *mocks.CursorReader {
+		c := &mocks.CursorReader{}
+		c.LastSeenSHAStub = func(repoKey string) string { return data[repoKey] }
+		return c
+	}
+
 	It("SHAUnchangedFilter skips when LastSeenSHA equals HeadSHA", func() {
-		data := map[string]string{"github.com/bborbe/docker-utils": "d630ef3"}
-		f := filter.NewSHAUnchangedFilter(&fakeCursorReader{data: data})
+		f := filter.NewSHAUnchangedFilter(newCursor(map[string]string{
+			"github.com/bborbe/docker-utils": "d630ef3",
+		}))
 		Expect(f.Skip(filter.Release{
 			RepoKey: "github.com/bborbe/docker-utils",
 			HeadSHA: "d630ef3",
-		})).To(BeTrue())
+		})).To(Equal("sha_unchanged"))
 	})
 
 	It("SHAUnchangedFilter emits when LastSeenSHA differs from HeadSHA", func() {
-		data := map[string]string{"github.com/bborbe/docker-utils": "d630ef3"}
-		f := filter.NewSHAUnchangedFilter(&fakeCursorReader{data: data})
+		f := filter.NewSHAUnchangedFilter(newCursor(map[string]string{
+			"github.com/bborbe/docker-utils": "d630ef3",
+		}))
 		Expect(f.Skip(filter.Release{
 			RepoKey: "github.com/bborbe/docker-utils",
 			HeadSHA: "different-sha",
-		})).To(BeFalse())
+		})).To(BeEmpty())
 	})
 
 	It("SHAUnchangedFilter emits when repo is unseen by the cursor", func() {
-		f := filter.NewSHAUnchangedFilter(&fakeCursorReader{data: map[string]string{}})
+		f := filter.NewSHAUnchangedFilter(newCursor(map[string]string{}))
 		Expect(f.Skip(filter.Release{
 			RepoKey: "github.com/bborbe/new-repo",
 			HeadSHA: "abc123",
-		})).To(BeFalse())
+		})).To(BeEmpty())
 	})
 
 	It("SHAUnchangedFilter handles empty HeadSHA against unseen repo", func() {
 		// degenerate case — production path never passes empty HeadSHA through; documented for posterity
-		f := filter.NewSHAUnchangedFilter(&fakeCursorReader{data: map[string]string{}})
+		f := filter.NewSHAUnchangedFilter(newCursor(map[string]string{}))
 		Expect(f.Skip(filter.Release{
 			RepoKey: "x",
 			HeadSHA: "",
-		})).To(BeTrue())
+		})).To(Equal("sha_unchanged"))
 	})
 })

@@ -16,7 +16,7 @@ import (
 
 var _ = Describe("Main", func() {
 	It("Compiles", func() {
-		_, err := gexec.Build("github.com/bborbe/maintainer/watcher/github-release", "-mod=mod")
+		_, err := gexec.Build(".", "-mod=mod", "-buildvcs=false")
 		Expect(err).NotTo(HaveOccurred())
 	})
 })

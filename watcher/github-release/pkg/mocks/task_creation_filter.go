@@ -11,22 +11,22 @@ import (
 )
 
 type TaskCreationFilter struct {
-	SkipStub        func(filter.Release) bool
+	SkipStub        func(filter.Release) string
 	skipMutex       sync.RWMutex
 	skipArgsForCall []struct {
 		arg1 filter.Release
 	}
 	skipReturns struct {
-		result1 bool
+		result1 string
 	}
 	skipReturnsOnCall map[int]struct {
-		result1 bool
+		result1 string
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *TaskCreationFilter) Skip(arg1 filter.Release) bool {
+func (fake *TaskCreationFilter) Skip(arg1 filter.Release) string {
 	fake.skipMutex.Lock()
 	ret, specificReturn := fake.skipReturnsOnCall[len(fake.skipArgsForCall)]
 	fake.skipArgsForCall = append(fake.skipArgsForCall, struct {
@@ -51,7 +51,7 @@ func (fake *TaskCreationFilter) SkipCallCount() int {
 	return len(fake.skipArgsForCall)
 }
 
-func (fake *TaskCreationFilter) SkipCalls(stub func(filter.Release) bool) {
+func (fake *TaskCreationFilter) SkipCalls(stub func(filter.Release) string) {
 	fake.skipMutex.Lock()
 	defer fake.skipMutex.Unlock()
 	fake.SkipStub = stub
@@ -64,26 +64,26 @@ func (fake *TaskCreationFilter) SkipArgsForCall(i int) filter.Release {
 	return argsForCall.arg1
 }
 
-func (fake *TaskCreationFilter) SkipReturns(result1 bool) {
+func (fake *TaskCreationFilter) SkipReturns(result1 string) {
 	fake.skipMutex.Lock()
 	defer fake.skipMutex.Unlock()
 	fake.SkipStub = nil
 	fake.skipReturns = struct {
-		result1 bool
+		result1 string
 	}{result1}
 }
 
-func (fake *TaskCreationFilter) SkipReturnsOnCall(i int, result1 bool) {
+func (fake *TaskCreationFilter) SkipReturnsOnCall(i int, result1 string) {
 	fake.skipMutex.Lock()
 	defer fake.skipMutex.Unlock()
 	fake.SkipStub = nil
 	if fake.skipReturnsOnCall == nil {
 		fake.skipReturnsOnCall = make(map[int]struct {
-			result1 bool
+			result1 string
 		})
 	}
 	fake.skipReturnsOnCall[i] = struct {
-		result1 bool
+		result1 string
 	}{result1}
 }
 

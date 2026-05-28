@@ -14,16 +14,16 @@ import (
 var _ = Describe("filter.EmptyUnreleasedFilter", func() {
 	It("EmptyUnreleasedFilter skips when UnreleasedBullets is 0", func() {
 		f := filter.NewEmptyUnreleasedFilter()
-		Expect(f.Skip(filter.Release{UnreleasedBullets: 0})).To(BeTrue())
+		Expect(f.Skip(filter.Release{UnreleasedBullets: 0})).To(Equal("empty_unreleased"))
 	})
 
 	It("EmptyUnreleasedFilter does not skip when UnreleasedBullets is 1", func() {
 		f := filter.NewEmptyUnreleasedFilter()
-		Expect(f.Skip(filter.Release{UnreleasedBullets: 1})).To(BeFalse())
+		Expect(f.Skip(filter.Release{UnreleasedBullets: 1})).To(BeEmpty())
 	})
 
 	It("EmptyUnreleasedFilter does not skip when UnreleasedBullets is large", func() {
 		f := filter.NewEmptyUnreleasedFilter()
-		Expect(f.Skip(filter.Release{UnreleasedBullets: 42})).To(BeFalse())
+		Expect(f.Skip(filter.Release{UnreleasedBullets: 42})).To(BeEmpty())
 	})
 })

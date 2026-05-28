@@ -4,8 +4,8 @@
 
 package filter
 
-// NewEmptyUnreleasedFilter skips Releases whose ## Unreleased section has
-// zero bullets (header present but no entries).
+// NewEmptyUnreleasedFilter returns "empty_unreleased" for Releases whose
+// ## Unreleased section has zero bullets (header present but no entries).
 //
 // Rationale: an empty Unreleased section is a CHANGELOG hygiene oddity —
 // either a contributor will fill it in (next poll picks it up) or the section
@@ -14,7 +14,10 @@ package filter
 // No knobs. The Release.UnreleasedBullets count is computed once by
 // ParseChangelog and passed through; this filter is a pure predicate.
 func NewEmptyUnreleasedFilter() TaskCreationFilter {
-	return TaskCreationFilterFunc(func(release Release) bool {
-		return release.UnreleasedBullets == 0
+	return TaskCreationFilterFunc(func(release Release) string {
+		if release.UnreleasedBullets == 0 {
+			return "empty_unreleased"
+		}
+		return ""
 	})
 }

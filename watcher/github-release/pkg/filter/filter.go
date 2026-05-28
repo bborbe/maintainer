@@ -27,30 +27,37 @@ type Release struct {
 }
 
 // TaskCreationFilter decides whether a single Release should be skipped
-// (no vault task created). Implementations return true to skip.
+// (no vault task created). Implementations return the metric-label reason
+// for the skip ("scope", "empty_unreleased", "auto_release", "sha_unchanged"),
+// or "" if the Release should pass through.
+//
+// The string-returning shape removes the need for the watcher to re-evaluate
+// each predicate after the chain votes skip — the chain itself bubbles up
+// the reason the caller needs for `Metrics.IncFilterSkipped`.
 type TaskCreationFilter interface {
-	// Skip returns true if the Release should be excluded from task creation.
-	Skip(release Release) bool
+	// Skip returns the skip reason (metric label) or "" to pass through.
+	Skip(release Release) string
 }
 
 // TaskCreationFilterFunc adapts a function to the TaskCreationFilter interface.
-type TaskCreationFilterFunc func(release Release) bool
+type TaskCreationFilterFunc func(release Release) string
 
 // Skip implements TaskCreationFilter for the function adapter.
-func (f TaskCreationFilterFunc) Skip(release Release) bool {
+func (f TaskCreationFilterFunc) Skip(release Release) string {
 	return f(release)
 }
 
-// TaskCreationFilters is a slice composite: skip if ANY member votes skip.
-// An empty slice never skips (no filters configured = process every Release).
+// TaskCreationFilters is a slice composite: returns the first non-empty
+// reason from its members. An empty slice never skips.
 type TaskCreationFilters []TaskCreationFilter
 
-// Skip returns true if any contained filter votes skip. Short-circuit on first hit.
-func (fs TaskCreationFilters) Skip(release Release) bool {
+// Skip returns the first non-empty reason from any contained filter.
+// Short-circuits on first hit.
+func (fs TaskCreationFilters) Skip(release Release) string {
 	for _, f := range fs {
-		if f.Skip(release) {
-			return true
+		if reason := f.Skip(release); reason != "" {
+			return reason
 		}
 	}
-	return false
+	return ""
 }

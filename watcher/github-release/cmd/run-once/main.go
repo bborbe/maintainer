@@ -11,16 +11,18 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"strconv"
 
+	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
@@ -62,13 +64,11 @@ type Application struct {
 // exactly so tests can substitute a mock-returning closure.
 type WatcherFactory func(
 	httpClient *http.Client,
-	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	sender task.CreateCommandSender,
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
 	metrics pkg.Metrics,
-	allowlist []string,
 	stage string,
 ) pkg.Watcher
 
@@ -82,24 +82,21 @@ type ProducerFactory func(
 ) (libkafka.SyncProducer, error)
 
 func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
-	allowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
-	if err != nil {
-		return errors.Wrap(ctx, err, "parse repo allowlist")
-	}
 	if a.RepoAllowlist == "" {
 		return errors.Errorf(
 			ctx,
 			"REPO_ALLOWLIST must be non-empty: set at least one host/owner/repo entry",
 		)
 	}
-	if len(allowlist) == 0 {
-		glog.V(2).Infof("repo-allowlist count=0 (allow-all within owner=%s)", a.Owner)
-	} else {
-		glog.V(2).Infof("repo-allowlist count=%d", len(allowlist))
-	}
+	allowlist := filter.ParseRepoAllowlist(a.RepoAllowlist)
+	glog.V(2).Infof("repo-allowlist count=%d", len(allowlist))
 
-	// keep in sync with watcher/github-release/main.go resolveAuth
-	httpClient, err := a.resolveAuth(ctx)
+	httpClient, err := auth.ResolveGitHubClient(ctx, auth.Credentials{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKey:         []byte(a.PEMKey),
+		Token:          a.GHToken,
+	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")
 	}
@@ -117,23 +114,17 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}()
 
-	metrics := pkg.NewMetrics()
-
-	staticFilters := filter.TaskCreationFilters{
-		filter.NewRepoAllowlistFilter(allowlist),
-		filter.NewEmptyUnreleasedFilter(),
-		filter.NewAutoReleaseFilter(),
-	}
+	metrics := pkg.NewMetrics(prometheus.NewRegistry())
+	sender := factory.CreateKafkaSender(syncProducer, base.Branch(a.Stage))
+	staticFilters := factory.CreateStaticFilters(allowlist)
 
 	w := a.CreateWatcher(
 		httpClient,
-		syncProducer,
-		base.Branch(a.Stage),
+		sender,
 		a.CursorPath,
 		a.Owner,
 		staticFilters,
 		metrics,
-		allowlist,
 		a.Stage,
 	)
 
@@ -141,63 +132,4 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrap(ctx, err, "poll failed")
 	}
 	return nil
-}
-
-// resolveAuth chooses GitHub App auth (preferred) over PAT.
-// keep in sync with watcher/github-release/main.go resolveAuth
-func (a *Application) resolveAuth(ctx context.Context) (*http.Client, error) {
-	appID := getEnvInt("APP_ID")
-	installationID := getEnvInt("INSTALLATION_ID")
-	pemKey := []byte(os.Getenv("PEM_KEY"))
-	token := os.Getenv("GH_TOKEN")
-
-	appPartial := (appID != 0) || (installationID != 0) || (len(pemKey) != 0)
-	appComplete := (appID != 0) && (installationID != 0) && (len(pemKey) != 0)
-	if appPartial && !appComplete {
-		var missing []string
-		if appID == 0 {
-			missing = append(missing, "APP_ID")
-		}
-		if installationID == 0 {
-			missing = append(missing, "INSTALLATION_ID")
-		}
-		if len(pemKey) == 0 {
-			missing = append(missing, "PEM_KEY")
-		}
-		return nil, errors.Errorf(
-			ctx,
-			"watcher auth: partial GitHub App config — missing %v; set all three or none",
-			missing,
-		)
-	}
-
-	if appComplete {
-		if token != "" {
-			glog.Warningf(
-				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
-		}
-		glog.Infof(
-			"watcher auth mode=github-app app_id=%d installation_id=%d",
-			appID,
-			installationID,
-		)
-		return factory.CreateGitHubAppClient(ctx, appID, installationID, pemKey)
-	}
-	if token != "" {
-		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
-		return factory.CreateGitHubPATClient(ctx, token), nil
-	}
-	return nil, errors.Errorf(
-		ctx,
-		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
-	)
-}
-
-func getEnvInt(name string) int64 {
-	v, err := strconv.ParseInt(os.Getenv(name), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return v
 }

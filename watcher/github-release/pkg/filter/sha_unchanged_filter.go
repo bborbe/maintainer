@@ -17,9 +17,10 @@ type CursorReader interface {
 	LastSeenSHA(repoKey string) string
 }
 
-// NewSHAUnchangedFilter skips Releases whose HeadSHA equals the cursor's
-// last-seen master SHA for the same repo. First-poll (cursor empty) always
-// emits; subsequent polls only emit when master HEAD has advanced.
+// NewSHAUnchangedFilter returns "sha_unchanged" when Release.HeadSHA equals
+// the cursor's last-seen master SHA for the same repo. First-poll (cursor
+// empty) always emits; subsequent polls only emit when master HEAD has
+// advanced.
 //
 // This is the dedup property called out in [[Watcher Writing Guide]] §
 // Required components #6 (Deterministic task_identifier). Two defenses against
@@ -33,6 +34,9 @@ type shaUnchangedFilter struct {
 	cursor CursorReader
 }
 
-func (f *shaUnchangedFilter) Skip(release Release) bool {
-	return f.cursor.LastSeenSHA(release.RepoKey) == release.HeadSHA
+func (f *shaUnchangedFilter) Skip(release Release) string {
+	if f.cursor.LastSeenSHA(release.RepoKey) == release.HeadSHA {
+		return "sha_unchanged"
+	}
+	return ""
 }

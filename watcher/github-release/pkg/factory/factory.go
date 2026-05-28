@@ -6,7 +6,6 @@
 package factory
 
 import (
-	"context"
 	"net/http"
 
 	task "github.com/bborbe/agent/lib/command/task"
@@ -14,35 +13,10 @@ import (
 	"github.com/bborbe/cqrs/cdb"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
-	"golang.org/x/oauth2"
 
-	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
-
-// CreateGitHubAppClient creates an HTTP client authenticated as a GitHub App installation.
-//
-// Carried verbatim from watcher/github-pr — same auth shape.
-func CreateGitHubAppClient(
-	ctx context.Context,
-	appID int64,
-	installationID int64,
-	pemKey []byte,
-) (*http.Client, error) {
-	cfg := githubapp.Config{
-		AppID:          appID,
-		InstallationID: installationID,
-		PEM:            pemKey,
-	}
-	return githubapp.NewClient(ctx, cfg)
-}
-
-// CreateGitHubPATClient creates an HTTP client authenticated with a personal access token.
-func CreateGitHubPATClient(ctx context.Context, token string) *http.Client {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	return oauth2.NewClient(ctx, ts)
-}
 
 // CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
 func CreateKafkaSender(
@@ -53,34 +27,41 @@ func CreateKafkaSender(
 	return task.NewCreateCommandSender(sender)
 }
 
+// CreateStaticFilters builds the cycle-invariant filter chain (scope +
+// empty_unreleased + auto_release). SHAUnchangedFilter is composed in per
+// cycle inside Watcher.Poll because it needs a fresh CursorReader.
+//
+// Shared by main.go and cmd/run-once/main.go so adding a new filter only
+// touches one place.
+func CreateStaticFilters(allowlist []string) filter.TaskCreationFilter {
+	return filter.TaskCreationFilters{
+		filter.NewRepoAllowlistFilter(allowlist),
+		filter.NewEmptyUnreleasedFilter(),
+		filter.NewAutoReleaseFilter(),
+	}
+}
+
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 //
-// Pure composition — no I/O. The Kafka sync producer is constructed and owned
-// by main.go (so the caller controls connection lifecycle + cleanup); the
-// HTTP client is constructed by resolveAuth before this is called.
-//
-// taskCreationFilter is constructed by main.go (scope filter, empty-unreleased,
-// auto-release; sha-unchanged is composed in by the watcher each poll because
-// it needs a fresh CursorReader per cycle). Cursor itself is loaded inside
-// Watcher.Poll on each cycle.
+// Pure composition — no I/O. The Kafka sync producer and the HTTP-resolved
+// task sender are constructed by main.go (so the caller controls connection
+// lifecycle + cleanup). The HTTP client is constructed by pkg/auth before
+// this is called. taskCreationFilter is built by CreateStaticFilters.
 //
 // Reference: watcher/github-pr/pkg/factory/factory.go follows the same
 // no-I/O-in-factory pattern.
 func CreateWatcher(
 	httpClient *http.Client,
-	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	sender task.CreateCommandSender,
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
 	metrics pkg.Metrics,
-	allowlist []string,
 	stage string,
 ) pkg.Watcher {
 	ghClient := pkg.NewGitHubClient(httpClient)
-	createSender := CreateKafkaSender(syncProducer, branch)
 	publisher := pkg.NewTaskPublisher(
-		createSender,
+		sender,
 		metrics,
 		pkg.TaskConfig{Stage: stage},
 	)
@@ -91,6 +72,5 @@ func CreateWatcher(
 		cursorPath,
 		owner,
 		taskCreationFilter,
-		allowlist,
 	)
 }

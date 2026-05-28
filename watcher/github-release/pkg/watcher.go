@@ -11,7 +11,6 @@ import (
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 
-	"github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
 
@@ -27,6 +26,9 @@ type Watcher interface {
 // NewWatcher wires the watcher's collaborators.
 //
 // Owner = single GitHub org per watcher instance (multi-org = multiple deployments).
+// taskCreationFilter is the cycle-invariant chain (scope + empty_unreleased +
+// auto_release); SHAUnchangedFilter is composed in per cycle since it needs a
+// fresh CursorReader.
 func NewWatcher(
 	ghClient GitHubClient,
 	publisher TaskPublisher,
@@ -34,7 +36,6 @@ func NewWatcher(
 	cursorPath string,
 	owner string,
 	taskCreationFilter filter.TaskCreationFilter,
-	allowlist []string,
 ) Watcher {
 	return &watcher{
 		ghClient:           ghClient,
@@ -43,7 +44,6 @@ func NewWatcher(
 		cursorPath:         cursorPath,
 		owner:              owner,
 		taskCreationFilter: taskCreationFilter,
-		allowlist:          allowlist,
 	}
 }
 
@@ -54,7 +54,6 @@ type watcher struct {
 	cursorPath         string
 	owner              string
 	taskCreationFilter filter.TaskCreationFilter
-	allowlist          []string
 }
 
 // Poll implements Watcher. One cycle:
@@ -65,7 +64,7 @@ type watcher struct {
 //     b. GetChangelogContent → ParseChangelog → ChangelogSummary
 //     c. GetAutoReleaseConfig
 //     d. Build Release struct
-//     e. taskCreationFilter.Skip(release) — bump filter metric on hit
+//     e. taskCreationFilter.Skip(release) — bump filter metric on returned label
 //     f. publisher.PublishCreate(release) — update cursor on true return
 //  4. SaveCursor (skip on abort)
 //  5. IncPollCycle("success")
@@ -83,7 +82,7 @@ func (w *watcher) Poll(ctx context.Context) error {
 			return nil
 		}
 		w.metrics.IncPollCycle("github_error")
-		glog.Errorf("poll cycle aborted: ListRepos owner=%s err=%v", w.owner, err)
+		glog.Warningf("poll cycle aborted: ListRepos owner=%s err=%v", w.owner, err)
 		return nil
 	}
 	w.metrics.IncReposScanned(len(repos))
@@ -145,9 +144,8 @@ func (w *watcher) processRepos(
 			UnreleasedBullets: release.UnreleasedBullets,
 			AutoRelease:       release.AutoRelease,
 		}
-		if cycleFilter.Skip(filterInput) {
-			// Specific reason metrics: probe each cycle-aware predicate. Cheap (≤4 calls per skipped release).
-			w.recordSkipReason(filterInput, cursorState)
+		if reason := cycleFilter.Skip(filterInput); reason != "" {
+			w.metrics.IncFilterSkipped(reason)
 			continue
 		}
 
@@ -205,30 +203,6 @@ func (w *watcher) gatherRelease(ctx context.Context, repo Repo) (Release, string
 		UnreleasedBullets: summary.UnreleasedBullets,
 		AutoRelease:       autoRelease,
 	}, "", false
-}
-
-// recordSkipReason maps the specific predicate that triggered the skip to
-// its metric label. Order MUST match main.go's static-filter ordering plus
-// the cycle-composed SHAUnchangedFilter.
-func (w *watcher) recordSkipReason(in filter.Release, cursorState *Cursor) {
-	switch {
-	case !isAllowed(in.RepoKey, w):
-		w.metrics.IncFilterSkipped("scope")
-	case in.UnreleasedBullets == 0:
-		w.metrics.IncFilterSkipped("empty_unreleased")
-	case in.AutoRelease:
-		w.metrics.IncFilterSkipped("auto_release")
-	case NewCursorReader(cursorState).LastSeenSHA(in.RepoKey) == in.HeadSHA:
-		w.metrics.IncFilterSkipped("sha_unchanged")
-	default:
-		// Composite voted skip but no single predicate matched our probes — should not happen.
-		glog.Warningf("unattributed skip repoKey=%s headSHA=%s", in.RepoKey, in.HeadSHA)
-	}
-}
-
-// isAllowed reports whether repoKey passes the allowlist check.
-func isAllowed(repoKey string, w *watcher) bool {
-	return repoallowlist.IsAllowed(w.allowlist, repoKey)
 }
 
 // CursorReader adapter — wraps *Cursor to satisfy filter.CursorReader without

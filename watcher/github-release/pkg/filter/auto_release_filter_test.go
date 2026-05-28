@@ -14,16 +14,16 @@ import (
 var _ = Describe("filter.AutoReleaseFilter", func() {
 	It("AutoReleaseFilter skips when AutoRelease is true", func() {
 		f := filter.NewAutoReleaseFilter()
-		Expect(f.Skip(filter.Release{AutoRelease: true})).To(BeTrue())
+		Expect(f.Skip(filter.Release{AutoRelease: true})).To(Equal("auto_release"))
 	})
 
 	It("AutoReleaseFilter does not skip when AutoRelease is false", func() {
 		f := filter.NewAutoReleaseFilter()
-		Expect(f.Skip(filter.Release{AutoRelease: false})).To(BeFalse())
+		Expect(f.Skip(filter.Release{AutoRelease: false})).To(BeEmpty())
 	})
 
 	It("AutoReleaseFilter does not skip the zero-value Release", func() {
 		f := filter.NewAutoReleaseFilter()
-		Expect(f.Skip(filter.Release{})).To(BeFalse())
+		Expect(f.Skip(filter.Release{})).To(BeEmpty())
 	})
 })
