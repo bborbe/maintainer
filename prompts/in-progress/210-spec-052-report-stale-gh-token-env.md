@@ -1,6 +1,6 @@
 ---
 status: approved
-spec: ["052"]
+spec: [052-fleet-app-only-auth]
 created: "2026-05-29T18:33:00Z"
 queued: "2026-05-29T18:24:44Z"
 ---

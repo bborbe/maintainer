@@ -61,15 +61,9 @@ type application struct {
 	// Task file for local development
 	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
 
-	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
-	// cmd/run-task uses NoopAuthSetup — the developer's existing gh auth login handles git credentials.
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth" display:"length"`
-
-	// GitHub App authentication. When AppID + InstallationID + PEMKeyFile are
-	// set, the pod mints an installation access token at startup and uses it
-	// in place of GHToken; the legacy GHToken env stays accepted as a fallback
-	// (see Run() for the resolution order).
-	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	// GitHub App authentication. The pod mints an installation access token at startup
+	// and forwards it to the agent subprocess. App auth is the only supported auth path.
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); required for App auth"`
 	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
 	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
 	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])" default:"ben-s-pull-request-reviewer[bot]"`
@@ -84,6 +78,11 @@ type application struct {
 	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
 	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL"                                  display:"length"`
 	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name; also exposed to the claude subprocess as ANTHROPIC_MODEL"                  default:"sonnet"`
+
+	// resolvedToken holds the GitHub App installation token minted in Run.
+	// It is NOT a config input (no env tag) — it is the value forwarded to the
+	// agent subprocess (gh CLI, git credential helper, repo manager, and agent provider).
+	resolvedToken string
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -114,45 +113,34 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
-	// Resolve auth mode and mint IAT before factory.RunAgent reads GHToken.
-	mode := prpkg.ResolveAuthMode(a.AppID, a.InstallationID, a.PEMKeyFile, a.GHToken)
-	switch mode {
-	case prpkg.AuthModeGitHubApp:
-		if a.GHToken != "" {
-			glog.Warningf(
-				"pr-reviewer auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
-		}
-		iat, err := githubapp.MintIAT(ctx, githubapp.Config{
-			AppID:          a.AppID,
-			InstallationID: a.InstallationID,
-			PEMPath:        a.PEMKeyFile,
-		})
-		if err != nil {
-			return errors.Wrap(ctx, err, "mint github app iat")
-		}
-		a.GHToken = iat
-		glog.V(2).Infof(
-			"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
-			a.AppID, a.InstallationID,
-		)
-	case prpkg.AuthModePATFallback:
-		glog.Warningf(
-			"pr-reviewer auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)",
-		)
-	case prpkg.AuthModeNone:
+	// Resolve auth: mint IAT before factory.RunAgent reads GHToken.
+	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && a.PEMKeyFile != ""
+	if !useGitHubApp {
 		return errors.Errorf(
 			ctx,
-			"pr-reviewer auth: neither App nor PAT configured — set APP_ID+INSTALLATION_ID+PEM_KEY_FILE, or set GH_TOKEN",
+			"pr-reviewer auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY_FILE",
 		)
 	}
+	iat, err := githubapp.MintIAT(ctx, githubapp.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMPath:        a.PEMKeyFile,
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "mint github app iat")
+	}
+	a.resolvedToken = iat
+	glog.V(2).Infof(
+		"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
+		a.AppID, a.InstallationID,
+	)
 
 	authSetup := githubauth.NewNoopAuthSetup()
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
 		ClaudeConfigDir:    a.ClaudeConfigDir,
 		AgentDir:           a.AgentDir,
 		Model:              a.AnthropicModel,
-		GHToken:            a.GHToken,
+		GHToken:            a.resolvedToken,
 		AnthropicBaseURL:   a.AnthropicBaseURL,
 		AnthropicAuthToken: a.AnthropicAuthToken,
 		ReposPath:          reposPath,

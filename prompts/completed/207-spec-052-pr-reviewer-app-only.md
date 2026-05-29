@@ -1,8 +1,13 @@
 ---
-status: approved
-spec: ["052"]
+status: completed
+spec: [052-fleet-app-only-auth]
+summary: Removed GH_TOKEN PAT input from pr-reviewer; both entry points now authenticate exclusively via GitHub App installation token, forwarded to the agent subprocess as resolvedToken
+container: maintainer-fleet-app-auth-exec-207-spec-052-pr-reviewer-app-only
+dark-factory-version: v0.173.0
 created: "2026-05-29T18:30:00Z"
 queued: "2026-05-29T18:24:44Z"
+started: "2026-05-29T18:25:27Z"
+completed: "2026-05-29T18:29:43Z"
 ---
 
 <summary>
