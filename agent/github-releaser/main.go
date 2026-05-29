@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/push"
 
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubauth"
 )
 
 const agentName = "github-releaser-agent"
@@ -71,8 +72,17 @@ type application struct {
 	KafkaBrokers libkafka.Brokers        `required:"false" arg:"kafka-brokers" env:"KAFKA_BROKERS" usage:"Comma separated list of Kafka brokers"`
 	TaskID       agentlib.TaskIdentifier `required:"false" arg:"task-id"       env:"TASK_ID"       usage:"Agent task identifier for publishing results back to task controller"`
 
-	// GitHub token for the planning fetcher (PAT for now; App auth in a follow-up spec).
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT for CHANGELOG fetch" display:"length"`
+	// GitHub token for the planning fetcher and execution push.
+	// Accepted as a fallback when App credentials are not configured.
+	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT fallback for CHANGELOG fetch and push (App auth preferred)" display:"length"`
+
+	// GitHub App authentication. When AppID + InstallationID + (PEMKeyFile or
+	// PEMKey) are set, the pod mints an installation access token at startup
+	// and uses it in place of GHToken (see Run() for the resolution order).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
 
 	PushgatewayURL string `required:"false" arg:"pushgateway-url" env:"PUSHGATEWAY_URL" usage:"Prometheus PushGateway URL"          default:"http://pushgateway:9090"`
 	TaskType       string `required:"false" arg:"task-type"       env:"TASK_TYPE"       usage:"Task type label for metric grouping" default:"unknown"`
@@ -94,6 +104,20 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}()
 	start := libtime.NewCurrentDateTime().Now().Time()
 	glog.V(2).Infof("%s started phase=%s", agentName, a.Phase)
+
+	resolvedToken, err := githubauth.Resolve(ctx, githubauth.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKeyFile:     a.PEMKeyFile,
+		PEMKey:         a.PEMKey,
+		GHToken:        a.GHToken,
+	})
+	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
+		return err
+	}
+	a.GHToken = resolvedToken
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {

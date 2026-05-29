@@ -1,8 +1,13 @@
 ---
-status: approved
-spec: ["052"]
+status: completed
+spec: [052-github-releaser-app-auth]
+summary: Migrated agent/github-releaser from PAT-only auth to GitHub App installation-token auth, mirroring pr-reviewer's resolution order
+container: maintainer-releaser-agent-exec-207-spec-052-github-releaser-app-auth
+dark-factory-version: v0.173.0
 created: "2026-05-29T00:00:00Z"
 queued: "2026-05-29T16:22:07Z"
+started: "2026-05-29T16:30:58Z"
+completed: "2026-05-29T16:34:51Z"
 ---
 
 <summary>

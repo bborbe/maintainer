@@ -22,6 +22,7 @@ import (
 	"github.com/bborbe/vault-cli/pkg/domain"
 
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubauth"
 )
 
 func main() {
@@ -41,7 +42,17 @@ type application struct {
 
 	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
 
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT for CHANGELOG fetch" display:"length"`
+	// GitHub token for the planning fetcher and execution push.
+	// Accepted as a fallback when App credentials are not configured.
+	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT fallback for CHANGELOG fetch and push (App auth preferred)" display:"length"`
+
+	// GitHub App authentication. When AppID + InstallationID + (PEMKeyFile or
+	// PEMKey) are set, the pod mints an installation access token at startup
+	// and uses it in place of GHToken (see Run() for the resolution order).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
 
 	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
 	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL" display:"length"`
@@ -49,6 +60,18 @@ type application struct {
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	resolvedToken, err := githubauth.Resolve(ctx, githubauth.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKeyFile:     a.PEMKeyFile,
+		PEMKey:         a.PEMKey,
+		GHToken:        a.GHToken,
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "resolve github auth")
+	}
+	a.GHToken = resolvedToken
+
 	taskContent, err := os.ReadFile(
 		a.TaskFilePath,
 	) // #nosec G304 -- filePath from trusted CLI input
