@@ -257,11 +257,16 @@ func trimTrailingWhitespace(s string) string {
 // Returns a wrapped bborbe/errors error if "## Unreleased" is not present.
 // The caller (execution step) maps this to error_category: unreleased_not_found.
 //
-// Pure function — no IO, deterministic. Safe for concurrent use.
-func RewriteUnreleasedHeader(content []byte, newHeader string) ([]byte, error) {
+// The ctx parameter is used only for error wrapping consistency.
+// No IO, deterministic. Safe for concurrent use.
+func RewriteUnreleasedHeader(
+	ctx context.Context,
+	content []byte,
+	newHeader string,
+) ([]byte, error) {
 	if len(content) == 0 {
 		return nil, bborbeerrors.New(
-			context.Background(),
+			ctx,
 			"unreleased header not found: empty content",
 		)
 	}
@@ -283,10 +288,10 @@ func RewriteUnreleasedHeader(content []byte, newHeader string) ([]byte, error) {
 		out.WriteByte('\n')
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, bborbeerrors.Wrap(context.Background(), err, "scan CHANGELOG content")
+		return nil, bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
 	}
 	if !found {
-		return nil, bborbeerrors.New(context.Background(), "unreleased header not found")
+		return nil, bborbeerrors.New(ctx, "unreleased header not found")
 	}
 
 	// Preserve a trailing-newline-less input: if the original content did

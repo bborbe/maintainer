@@ -5,6 +5,8 @@
 package changelog_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -150,7 +152,7 @@ var _ = Describe("InferHeaderPrefixStyle", func() {
 var _ = Describe("RewriteUnreleasedHeader", func() {
 	DescribeTable("replaces ## Unreleased line with the given header",
 		func(input []byte, newHeader string, expected []byte) {
-			got, err := changelog.RewriteUnreleasedHeader(input, newHeader)
+			got, err := changelog.RewriteUnreleasedHeader(context.Background(), input, newHeader)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(got)).To(Equal(string(expected)))
 		},
@@ -176,7 +178,7 @@ var _ = Describe("RewriteUnreleasedHeader", func() {
 
 	DescribeTable("returns a wrapped error when ## Unreleased is absent",
 		func(input []byte) {
-			_, err := changelog.RewriteUnreleasedHeader(input, "## v1.2.3")
+			_, err := changelog.RewriteUnreleasedHeader(context.Background(), input, "## v1.2.3")
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unreleased header not found"))
 		},

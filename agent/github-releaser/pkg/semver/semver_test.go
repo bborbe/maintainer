@@ -5,6 +5,8 @@
 package semver_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -13,7 +15,7 @@ import (
 
 var _ = DescribeTable("BumpVersion",
 	func(current, bump, wantNext, wantErrSubstr string) {
-		next, err := semver.BumpVersion(current, bump)
+		next, err := semver.BumpVersion(context.Background(), current, bump)
 		if wantErrSubstr == "" {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(next).To(Equal(wantNext))

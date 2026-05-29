@@ -30,9 +30,10 @@ import (
 // Errors are wrapped via github.com/bborbe/errors. Malformed current
 // versions produce an error whose message contains "parse version";
 // unknown bump kinds produce one containing "invalid bump".
-func BumpVersion(current string, bump string) (string, error) {
-	ctx := context.Background()
-
+//
+// The ctx parameter is used only for error wrapping consistency.
+// No IO, deterministic.
+func BumpVersion(ctx context.Context, current string, bump string) (string, error) {
 	stripped := strings.TrimPrefix(current, "v")
 	parts := strings.Split(stripped, ".")
 	if len(parts) != 3 {

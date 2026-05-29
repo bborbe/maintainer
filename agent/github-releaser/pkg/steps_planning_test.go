@@ -49,6 +49,7 @@ var _ = Describe("steps_planning", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 				Expect(result.NextPhase).To(Equal("execution"))
+				Expect(fakeFetcher.FetchCallCount()).To(Equal(1))
 
 				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
 					context.Background(),
@@ -282,6 +283,42 @@ var _ = Describe("steps_planning", func() {
 			})
 		})
 	})
+})
+
+var _ = Describe("parseOwnerRepo", func() {
+	DescribeTable("splits owner/name",
+		func(input, wantOwner, wantName string, wantOK bool) {
+			owner, name, ok := pkg.ParseOwnerRepoForTest(input)
+			Expect(ok).To(Equal(wantOK))
+			Expect(owner).To(Equal(wantOwner))
+			Expect(name).To(Equal(wantName))
+		},
+		Entry("empty string", "", "", "", false),
+		Entry("no slash", "badrepo", "", "", false),
+		Entry("empty owner", "/name", "", "", false),
+		Entry("empty name", "owner/", "", "", false),
+		Entry("happy path", "owner/name", "owner", "name", true),
+	)
+})
+
+var _ = Describe("classifyValidationFailure", func() {
+	DescribeTable("maps validator reason to precondition",
+		func(reason, want string) {
+			Expect(pkg.ClassifyValidationFailureForTest(reason)).To(Equal(want))
+		},
+		Entry("not-first branch",
+			"Unreleased is not the first ## section; found 'x' at line 1.",
+			"P1_unreleased_not_first"),
+		Entry("no bullet entries branch",
+			"Unreleased section has no bullet entries.",
+			"P2_unreleased_empty"),
+		Entry("not found branch",
+			"Unreleased section not found.",
+			"P2_unreleased_empty"),
+		Entry("default branch",
+			"some unexpected reason",
+			"P2_unreleased_empty"),
+	)
 })
 
 var _ = Describe("steps_planning integration (spec 048 regression guard)", func() {

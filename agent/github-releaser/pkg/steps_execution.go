@@ -72,7 +72,7 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 		return s.fail(ctx, md, git.ErrorCategoryUnknown, err)
 	}
 
-	cloneURL, ref, taskID, err := s.extractFrontmatter(md)
+	cloneURL, ref, taskID, err := s.extractFrontmatter(ctx, md)
 	if err != nil {
 		return s.fail(ctx, md, git.ErrorCategoryUnknown, err)
 	}
@@ -130,6 +130,7 @@ func (s *executionStep) validatePlan(
 
 // extractFrontmatter reads the required frontmatter fields.
 func (s *executionStep) extractFrontmatter(
+	ctx context.Context,
 	md *agentlib.Markdown,
 ) (cloneURL, ref, taskID string, _ error) {
 	cloneURL, _ = md.Frontmatter.String("clone_url")
@@ -137,7 +138,7 @@ func (s *executionStep) extractFrontmatter(
 	taskID, _ = md.Frontmatter.String("task_identifier")
 	if cloneURL == "" || ref == "" || taskID == "" {
 		return "", "", "", errors.Errorf(
-			context.Background(),
+			ctx,
 			"missing frontmatter: clone_url=%q ref=%q task_identifier=%q",
 			cloneURL, ref, taskID,
 		)
@@ -183,7 +184,7 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 
-	rewritten, err := changelog.RewriteUnreleasedHeader(content, plan.NextVersionHeader)
+	rewritten, err := changelog.RewriteUnreleasedHeader(ctx, content, plan.NextVersionHeader)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
 			errors.Wrap(ctx, err, "rewrite ## Unreleased"))

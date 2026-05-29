@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 )
 
 // BotIdentity holds the commit author/committer identity. Hardcoded
@@ -79,6 +80,7 @@ func (g *osExecGitOps) Clone(ctx context.Context, cloneURL, ref, workdir string)
 	if err := cmd.Run(); err != nil {
 		return errors.Errorf(ctx, "git clone: %s", redactToken(strings.TrimSpace(stderr.String())))
 	}
+	glog.V(2).Infof("git clone succeeded: ref=%s workdir=%s", ref, workdir)
 	return nil
 }
 

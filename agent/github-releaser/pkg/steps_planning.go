@@ -99,6 +99,8 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 			Message: "fetch CHANGELOG.md: " + err.Error(),
 		}, nil
 	}
+	glog.V(2).
+		Infof("planning: fetched CHANGELOG.md owner=%s name=%s ref=%s bytes=%d", owner, name, ref, len(changelogBytes))
 
 	valid, reason, _ := changelog.ValidateUnreleased(changelogBytes)
 	if !valid {
@@ -146,7 +148,7 @@ func (s *planningStep) runClassification(
 		}, nil
 	}
 
-	nextNumeric, err := semver.BumpVersion(currentVersion, verdict.Bump)
+	nextNumeric, err := semver.BumpVersion(ctx, currentVersion, verdict.Bump)
 	if err != nil {
 		glog.V(2).Infof("planning: bump version failed: %v", err)
 		return s.escalate(ctx, md, escalation{
