@@ -111,14 +111,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
-		return err
+		return errors.Wrap(ctx, err, "resolve github auth")
 	}
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
-		return err
+		return errors.Wrap(ctx, err, "create deliverer")
 	}
 	defer cleanup()
 

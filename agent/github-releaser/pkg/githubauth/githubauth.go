@@ -94,7 +94,7 @@ func Resolve(ctx context.Context, cfg Config) (string, error) {
 		if err != nil {
 			return "", errors.Wrap(ctx, err, "mint github app iat")
 		}
-		glog.Infof(
+		glog.V(1).Infof(
 			"github-releaser auth mode=github-app app_id=%d installation_id=%d",
 			cfg.AppID, cfg.InstallationID,
 		)
