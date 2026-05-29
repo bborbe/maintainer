@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -89,11 +90,13 @@ func (f *httpFetcher) Fetch(ctx context.Context, owner, repo, ref string) ([]byt
 		return nil, errors.Errorf(ctx, "fetch CHANGELOG.md: ref empty")
 	}
 
-	url := fmt.Sprintf(
+	// owner/repo are path segments, ref is a query value — escape each so a
+	// crafted owner/repo/ref cannot corrupt the URL or inject query params.
+	endpoint := fmt.Sprintf(
 		"%s/repos/%s/%s/contents/CHANGELOG.md?ref=%s",
-		f.apiBase, owner, repo, ref,
+		f.apiBase, url.PathEscape(owner), url.PathEscape(repo), url.QueryEscape(ref),
 	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "fetch CHANGELOG.md: build request")
 	}
