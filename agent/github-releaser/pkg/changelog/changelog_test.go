@@ -174,6 +174,12 @@ var _ = Describe("RewriteUnreleasedHeader", func() {
 			[]byte("## Unreleased\n\n- a\n\n## Unreleased\n\n- b\n"),
 			"## v1.2.8",
 			[]byte("## v1.2.8\n\n- a\n\n## Unreleased\n\n- b\n")),
+		Entry(
+			"rewrite unreleased — empty newHeader replaces the heading with a blank line (current behavior)",
+			[]byte("# Changelog\n\n## Unreleased\n\n- feat: add foo\n\n## v1.0.0\n\n- initial\n"),
+			"",
+			[]byte("# Changelog\n\n\n\n- feat: add foo\n\n## v1.0.0\n\n- initial\n"),
+		),
 	)
 
 	DescribeTable("returns a wrapped error when ## Unreleased is absent",

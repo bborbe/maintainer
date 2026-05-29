@@ -37,4 +37,5 @@ var _ = DescribeTable("BumpVersion",
 	Entry("alphabetic minor component", "v1.x.3", "patch", "", "parse version"),
 	Entry("negative component rejected", "v-1.2.3", "patch", "", "parse version"),
 	Entry("empty bump rejected", "v1.2.3", "", "", "invalid bump"),
+	Entry("empty current version rejected", "", "patch", "", "parse version"),
 )

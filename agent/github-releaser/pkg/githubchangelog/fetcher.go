@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 )
 
 //counterfeiter:generate -o mocks/fetcher.go --fake-name Fetcher . Fetcher
@@ -130,6 +131,9 @@ func (f *httpFetcher) Fetch(ctx context.Context, owner, repo, ref string) ([]byt
 			preview,
 		)
 	}
+
+	glog.V(2).
+		Infof("fetch CHANGELOG.md: GET %s/%s@%s status=%d bytes=%d", owner, repo, ref, resp.StatusCode, len(body))
 
 	var cr contentResponse
 	if err := json.Unmarshal(body, &cr); err != nil {

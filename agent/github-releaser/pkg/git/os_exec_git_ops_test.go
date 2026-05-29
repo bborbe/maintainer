@@ -70,6 +70,53 @@ var _ = Describe("osExecGitOps boundary contracts", func() {
 		os.RemoveAll(workdir)
 	})
 
+	It("Clone fetches a known branch into an empty workdir via --branch <ref> --depth 1", func() {
+		// Build a real source repo with a known branch + a known file. Cloning
+		// it proves Clone shells out correctly and honors --branch <ref>.
+		source, err := os.MkdirTemp("", "github-releaser-clone-source-*")
+		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll(source)
+
+		Expect(exec.Command("git", "-C", source, "init", "-b", "release-branch").Run()).
+			To(Succeed())
+		Expect(
+			os.WriteFile(
+				filepath.Join(source, "MARKER.txt"),
+				[]byte("clone-me\n"),
+				0o600,
+			),
+		).To(Succeed())
+		Expect(exec.Command("git", "-C", source, "add", "MARKER.txt").Run()).To(Succeed())
+		Expect(
+			exec.Command(
+				"git",
+				"-C", source,
+				"-c", "user.name=Test",
+				"-c", "user.email=test@example.com",
+				"commit", "-m", "seed",
+			).Run(),
+		).To(Succeed())
+
+		// Clone into a fresh, non-existent dir (git clone requires the target
+		// to be empty/absent).
+		dest := filepath.Join(workdir, "cloned")
+		Expect(ops.Clone(ctx, source, "release-branch", dest)).To(Succeed())
+
+		// The known file landed.
+		got, readErr := os.ReadFile(filepath.Join(dest, "MARKER.txt"))
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(string(got)).To(Equal("clone-me\n"))
+
+		// HEAD resolves and the checked-out branch is the one we asked for.
+		headOut, headErr := exec.Command("git", "-C", dest, "rev-parse", "HEAD").CombinedOutput()
+		Expect(headErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(headOut))).NotTo(BeEmpty())
+		branchOut, branchErr := exec.Command("git", "-C", dest, "rev-parse", "--abbrev-ref", "HEAD").
+			CombinedOutput()
+		Expect(branchErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(branchOut))).To(Equal("release-branch"))
+	})
+
 	It("Commit attributes the commit to DefaultBotIdentity via -c flags", func() {
 		sha, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
 		Expect(err).NotTo(HaveOccurred())

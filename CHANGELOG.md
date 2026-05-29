@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests
 - fix(agent/github-releaser): URL-escape owner/repo (path) + ref (query) in githubchangelog fetcher — prevents a crafted owner/repo/ref from corrupting the contents-API URL (PR #16 review)
 - refactor(watcher/github-release): use shared `REPO_ALLOWLIST` env var instead of dedicated `WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST`; aligns release watcher with pr/build watchers (single allowlist per stage)
 - fix(agent/github-releaser): address PR #16 review — thread ctx through RewriteUnreleasedHeader / BumpVersion / extractFrontmatter (drop context.Background() in pure + business logic); add agent/github-releaser/LICENSE; add parseOwnerRepo + classifyValidationFailure unit tests + happy-path FetchCallCount assertion; add success-path glog to planning fetch + git clone

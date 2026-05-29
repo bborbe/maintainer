@@ -5,6 +5,8 @@
 package prompts_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -45,7 +47,7 @@ var _ = Describe("BumpClassificationPrompt", func() {
 
 var _ = DescribeTable("ParseBumpVerdict",
 	func(input, wantBump, wantReasoning, wantErrSubstr string) {
-		verdict, err := prompts.ParseBumpVerdict(input)
+		verdict, err := prompts.ParseBumpVerdict(context.Background(), input)
 		if wantErrSubstr == "" {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(verdict.Bump).To(Equal(wantBump))

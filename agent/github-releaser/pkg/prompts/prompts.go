@@ -55,8 +55,7 @@ type BumpVerdict struct {
 // Errors are wrapped via github.com/bborbe/errors and always contain
 // the literal substring "parse bump verdict" so callers can grep
 // verdict-parse failures apart from clone/git failures.
-func ParseBumpVerdict(claudeOutput string) (BumpVerdict, error) {
-	ctx := context.Background()
+func ParseBumpVerdict(ctx context.Context, claudeOutput string) (BumpVerdict, error) {
 	trimmed := strings.TrimSpace(claudeOutput)
 
 	var v BumpVerdict

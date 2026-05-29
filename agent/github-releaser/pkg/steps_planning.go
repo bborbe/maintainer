@@ -139,7 +139,7 @@ func (s *planningStep) runClassification(
 		}, nil
 	}
 
-	verdict, err := prompts.ParseBumpVerdict(runResult.Result)
+	verdict, err := prompts.ParseBumpVerdict(ctx, runResult.Result)
 	if err != nil {
 		glog.V(2).Infof("planning: parse verdict failed: %v", err)
 		return &agentlib.Result{
@@ -171,7 +171,7 @@ func (s *planningStep) runClassification(
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {
-		return nil, errors.Wrapf(ctx, err, "marshal ## Plan section")
+		return nil, errors.Wrap(ctx, err, "marshal ## Plan section")
 	}
 	md.ReplaceSection(section)
 
@@ -215,7 +215,7 @@ func (s *planningStep) escalate(
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {
-		return nil, errors.Wrapf(ctx, err, "marshal ## Plan section (needs_input)")
+		return nil, errors.Wrap(ctx, err, "marshal ## Plan section (needs_input)")
 	}
 	md.ReplaceSection(section)
 
