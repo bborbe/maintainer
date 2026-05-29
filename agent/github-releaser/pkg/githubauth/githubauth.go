@@ -78,6 +78,15 @@ func ResolveAuthMode(appID, installationID int64, pemKeyFile, pemKey, ghToken st
 // The returned token is the bearer credential wired to BOTH the planning
 // fetcher and the execution push. It is never logged in full (MintIAT logs
 // only token_prefix).
+//
+// Token lifetime (known constraint): the App-mode IAT is minted ONCE at
+// startup and is valid for ~1 hour (GitHub's max IAT lifetime); it is not
+// refreshed during the run. This mirrors the pr-reviewer agent, which uses
+// the same one-shot MintIAT. It is safe because a release task — shallow
+// clone of a single repo, one Claude bump-classification call, a CHANGELOG
+// rewrite, commit, tag, push — completes in minutes, far under the IAT
+// lifetime. If a future long-running phase is ever added, switch to
+// lib/githubapp.NewClient, whose transport auto-refreshes the IAT.
 func Resolve(ctx context.Context, cfg Config) (string, error) {
 	switch ResolveAuthMode(cfg.AppID, cfg.InstallationID, cfg.PEMKeyFile, cfg.PEMKey, cfg.GHToken) {
 	case AuthModeGitHubApp:
