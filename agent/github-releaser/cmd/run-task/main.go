@@ -71,7 +71,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.TaskFilePath,
 	) // #nosec G304 -- filePath from trusted CLI input
 	if err != nil {
-		return errors.Wrapf(ctx, err, "read task file: %s", a.TaskFilePath)
+		return errors.Wrap(ctx, err, "read task file: "+a.TaskFilePath)
 	}
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
