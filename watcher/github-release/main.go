@@ -111,33 +111,39 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage, a.Owner, pollInterval, a.Listen,
 	)
 
+	poll := func(ctx context.Context) error {
+		glog.V(2).Infof("poll cycle start stage=%s", a.Stage)
+		return w.Poll(ctx)
+	}
+
 	return run.CancelOnFirstFinish(ctx,
-		a.pollLoop(w, pollInterval),
-		a.runHTTPServer(),
+		a.pollLoop(poll, pollInterval),
+		a.runHTTPServer(poll),
 	)
 }
 
 // runHTTPServer serves the mandatory triple (/healthz, /readiness, /metrics)
-// per coding-guidelines/go-k8s-binary-conventions.md. Without these, k8s
-// probes can never pass and Prometheus never scrapes — silent operational
-// failure.
-func (a *application) runHTTPServer() run.Func {
+// per coding-guidelines/go-k8s-binary-conventions.md plus /trigger, which runs
+// one poll cycle on demand (mirrors watcher/github-pr /check) so operators can
+// force a scan without waiting for the poll interval.
+func (a *application) runHTTPServer(poll run.Func) run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
 		router.Path("/readiness").Handler(libhttp.NewPrintHandler("OK"))
 		router.Path("/metrics").Handler(promhttp.Handler())
+		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}
 }
 
-func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {
+func (a *application) pollLoop(poll run.Func, interval time.Duration) run.Func {
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		// Fire one cycle immediately on start, then on each tick.
-		if err := w.Poll(ctx); err != nil {
+		if err := poll(ctx); err != nil {
 			glog.Errorf("initial poll: %v", err)
 		}
 		for {
@@ -145,7 +151,7 @@ func (a *application) pollLoop(w pkg.Watcher, interval time.Duration) run.Func {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
-				if err := w.Poll(ctx); err != nil {
+				if err := poll(ctx); err != nil {
 					glog.Errorf("poll: %v", err)
 				}
 			}
