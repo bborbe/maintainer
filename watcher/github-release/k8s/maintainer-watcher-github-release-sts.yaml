@@ -51,7 +51,7 @@ spec:
             - name: OWNER
               value: '{{"WATCHER_GITHUB_RELEASE_OWNER" | env}}'
             - name: REPO_ALLOWLIST
-              value: '{{"WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST" | env}}'
+              value: '{{"REPO_ALLOWLIST" | env}}'
             - name: POLL_INTERVAL
               value: '{{"WATCHER_GITHUB_RELEASE_POLL_INTERVAL" | env}}'
             - name: CURSOR_PATH

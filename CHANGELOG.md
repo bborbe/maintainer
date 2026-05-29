@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- refactor(watcher/github-release): use shared `REPO_ALLOWLIST` env var instead of dedicated `WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST`; aligns release watcher with pr/build watchers (single allowlist per stage)
+
 ## v0.26.39
 
 - refactor(watcher/github-release): rewire AutoReleaseFilter gate from `.dark-factory/config.yml` to `.maintainer.yaml` — flip filter semantics from "skip when true" to "pass only when true" (positive opt-in); remove `GetAutoReleaseConfig`, `parseAutoReleaseConfig`, `darkFactoryConfig` from GitHubClient; update watcher gatherer to call `GetMaintainerConfig`; migrate four watcher Ginkgo tests to new mock surface; counterfeiter mock regenerated without old method; update README, decision-chains doc, and godoc to reflect new config source
