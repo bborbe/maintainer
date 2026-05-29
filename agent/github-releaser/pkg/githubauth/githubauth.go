@@ -11,12 +11,18 @@ package githubauth
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 
 	githubapp "github.com/bborbe/maintainer/lib/githubapp"
 )
+
+// ErrAppCredentialsRequired is returned (wrapped) when no usable GitHub App
+// credentials are configured at startup. Exposed as a sentinel so callers
+// and tests can match it via errors.Is rather than string comparison.
+var ErrAppCredentialsRequired = stderrors.New("github-releaser auth: App credentials required")
 
 // AuthMode classifies which credential type is active at pod startup.
 type AuthMode int
@@ -101,9 +107,10 @@ func Resolve(ctx context.Context, cfg Config) (string, error) {
 		return iat, nil
 	default:
 		// AuthModeNone (or any future unhandled mode): no usable credential.
-		return "", errors.Errorf(
+		return "", errors.Wrap(
 			ctx,
-			"github-releaser auth: App credentials required — set APP_ID + INSTALLATION_ID + (PEM_KEY_FILE or PEM_KEY)",
+			ErrAppCredentialsRequired,
+			"set APP_ID + INSTALLATION_ID + (PEM_KEY_FILE or PEM_KEY)",
 		)
 	}
 }

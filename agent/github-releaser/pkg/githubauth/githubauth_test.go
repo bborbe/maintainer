@@ -74,6 +74,7 @@ var _ = Describe("Resolve", func() {
 		func(ctx context.Context) {
 			token, err := githubauth.Resolve(ctx, githubauth.Config{})
 			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(githubauth.ErrAppCredentialsRequired))
 			Expect(err.Error()).To(ContainSubstring("APP_ID"))
 			Expect(err.Error()).To(ContainSubstring("INSTALLATION_ID"))
 			Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
