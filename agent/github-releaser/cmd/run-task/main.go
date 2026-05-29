@@ -21,7 +21,9 @@ import (
 	"github.com/bborbe/service"
 	"github.com/bborbe/vault-cli/pkg/domain"
 
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubauth"
 )
 
 func main() {
@@ -41,7 +43,13 @@ type application struct {
 
 	TaskFilePath string `required:"true" arg:"task-file" env:"TASK_FILE" usage:"Path to the markdown task file"`
 
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT for CHANGELOG fetch" display:"length"`
+	// GitHub App authentication. AppID + InstallationID + (PEMKeyFile or
+	// PEMKey) are required; the pod mints an installation access token at
+	// startup and forwards it to the Claude/git subprocess (see Run()).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric)"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
 
 	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
 	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL" display:"length"`
@@ -49,34 +57,37 @@ type application struct {
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
+	resolvedToken, err := githubauth.Resolve(ctx, githubauth.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKeyFile:     a.PEMKeyFile,
+		PEMKey:         a.PEMKey,
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "resolve github auth")
+	}
+
 	taskContent, err := os.ReadFile(
 		a.TaskFilePath,
 	) // #nosec G304 -- filePath from trusted CLI input
 	if err != nil {
-		return errors.Wrapf(ctx, err, "read task file: %s", a.TaskFilePath)
+		return errors.Wrap(ctx, err, "read task file")
 	}
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
-	env := map[string]string{}
-	if a.GHToken != "" {
-		env["GH_TOKEN"] = a.GHToken
-	}
-	if a.AnthropicBaseURL != "" {
-		env["ANTHROPIC_BASE_URL"] = a.AnthropicBaseURL
-	}
-	if a.AnthropicAuthToken != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = a.AnthropicAuthToken
-	}
-	if a.AnthropicModel != "" {
-		env["ANTHROPIC_MODEL"] = a.AnthropicModel.String()
-	}
+	env := pkg.BuildEnv(
+		resolvedToken,
+		a.AnthropicBaseURL,
+		a.AnthropicAuthToken,
+		a.AnthropicModel.String(),
+	)
 
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,
 		a.AnthropicModel,
-		a.GHToken,
+		resolvedToken,
 		env,
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
