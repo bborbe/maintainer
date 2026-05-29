@@ -8,8 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.26.39
 
+- refactor(watcher/github-release): rewire AutoReleaseFilter gate from `.dark-factory/config.yml` to `.maintainer.yaml` — flip filter semantics from "skip when true" to "pass only when true" (positive opt-in); remove `GetAutoReleaseConfig`, `parseAutoReleaseConfig`, `darkFactoryConfig` from GitHubClient; update watcher gatherer to call `GetMaintainerConfig`; migrate four watcher Ginkgo tests to new mock surface; counterfeiter mock regenerated without old method; update README, decision-chains doc, and godoc to reflect new config source
 - feat(watcher/github-release): add `.maintainer.yaml` fetch+parse surface to GitHubClient — `MaintainerConfig` type, `GetMaintainerConfig` method, `parseMaintainerConfig` parser; mirrors `GetChangelogContent` control flow (404 → zero-value, rate-limit → `ErrRateLimited`, 1 MiB cap); 10 Ginkgo tests covering all acceptance criteria branches
 - feat(watcher/github-release): add cmd/run-once smoke-test binary for rung-1 verification against real GitHub + dev Kafka; mirrors watcher/github-build/cmd/run-once structure with Poll-once semantics and Ginkgo test suite
 - feat(watcher/github-release): implement Watcher.Poll cycle (load cursor → ListRepos → per-repo gather/filter/publish → save cursor); cycle-abort on rate-limit or github_error skips cursor save; per-repo transient errors prune without aborting; add six Ginkgo tests covering all named acceptance criteria

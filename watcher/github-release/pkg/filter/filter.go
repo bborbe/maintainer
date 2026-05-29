@@ -10,7 +10,7 @@
 //
 //  1. RepoAllowlistFilter — scope guard (allowlist via env)
 //  2. EmptyUnreleasedFilter — skip if ## Unreleased has zero bullets
-//  3. AutoReleaseFilter — skip if .dark-factory/config.yml: autoRelease: true
+//  3. AutoReleaseFilter — pass only if .maintainer.yaml: release.autoRelease: true; skip otherwise (gate)
 //  4. SHAUnchangedFilter — skip if cursor already recorded this master HEAD
 package filter
 
@@ -23,7 +23,7 @@ type Release struct {
 	RepoKey           string // "github.com/owner/name" — for RepoAllowlistFilter
 	HeadSHA           string // full SHA — for SHAUnchangedFilter
 	UnreleasedBullets int    // for EmptyUnreleasedFilter
-	AutoRelease       bool   // for AutoReleaseFilter
+	AutoRelease       bool   // .maintainer.yaml: release.autoRelease — true means opted in to maintainer-bot auto-release
 }
 
 // TaskCreationFilter decides whether a single Release should be skipped

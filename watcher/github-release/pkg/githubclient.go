@@ -59,11 +59,6 @@ type GitHubClient interface {
 	// base64 encoding can only inflate, never deflate — a Size under 1 MiB
 	// cannot decode to over 1 MiB.
 	GetMaintainerConfig(ctx context.Context, repo Repo) (MaintainerConfig, error)
-
-	// GetAutoReleaseConfig returns whether the repo has dark-factory autoRelease
-	// enabled (.dark-factory/config.yml: autoRelease: true). Returns (false, nil)
-	// if the config file does not exist (the common case — autoRelease defaults off).
-	GetAutoReleaseConfig(ctx context.Context, repo Repo) (bool, error)
 }
 
 // NewGitHubClient returns the production GitHubClient backed by the given HTTP client
@@ -256,72 +251,6 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 	return []byte(decoded), nil
 }
 
-func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (bool, error) {
-	opts := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
-	fileContent, _, _, err := c.client.Repositories.GetContents(
-		ctx,
-		repo.Owner,
-		repo.Name,
-		".dark-factory/config.yml",
-		opts,
-	)
-	if err != nil {
-		var ghErr *gogithub.ErrorResponse
-		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
-			return false, nil
-		}
-		if isRateLimitError(err) {
-			return false, ErrRateLimited
-		}
-		return false, errors.Wrapf(
-			ctx,
-			err,
-			"get .dark-factory/config.yml %s/%s@%s",
-			repo.Owner,
-			repo.Name,
-			repo.DefaultBranch,
-		)
-	}
-	if fileContent == nil {
-		return false, nil
-	}
-	decoded, err := fileContent.GetContent()
-	if err != nil {
-		return false, errors.Wrapf(
-			ctx,
-			err,
-			"decode .dark-factory/config.yml %s/%s",
-			repo.Owner,
-			repo.Name,
-		)
-	}
-	autoRelease, err := parseAutoReleaseConfig([]byte(decoded))
-	if err != nil {
-		return false, errors.Wrapf(
-			ctx,
-			err,
-			"parse .dark-factory/config.yml %s/%s",
-			repo.Owner,
-			repo.Name,
-		)
-	}
-	return autoRelease, nil
-}
-
-// parseAutoReleaseConfig unmarshals a .dark-factory/config.yml document and
-// returns the autoRelease flag. Pure data extraction — no I/O.
-func parseAutoReleaseConfig(content []byte) (bool, error) {
-	var cfg darkFactoryConfig
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return false, err //nolint:wrapcheck // caller wraps with repo context
-	}
-	return cfg.AutoRelease, nil
-}
-
-type darkFactoryConfig struct {
-	AutoRelease bool `yaml:"autoRelease"`
-}
-
 // MaintainerConfig is the parsed shape of `.maintainer.yaml` at the root of a
 // target repo. It is the trust gate that opts the repo into maintainer-bot
 // behaviors. v1 has a single `release` namespace; future maintainer bots
@@ -354,7 +283,10 @@ func parseMaintainerConfig(content []byte) (MaintainerConfig, error) {
 	return cfg, nil
 }
 
-func (c *githubClient) GetMaintainerConfig(ctx context.Context, repo Repo) (MaintainerConfig, error) {
+func (c *githubClient) GetMaintainerConfig(
+	ctx context.Context,
+	repo Repo,
+) (MaintainerConfig, error) {
 	opts := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
 	fileContent, _, _, err := c.client.Repositories.GetContents(
 		ctx,
@@ -394,11 +326,23 @@ func (c *githubClient) GetMaintainerConfig(ctx context.Context, repo Repo) (Main
 	}
 	decoded, err := fileContent.GetContent()
 	if err != nil {
-		return MaintainerConfig{}, errors.Wrapf(ctx, err, "decode .maintainer.yaml %s/%s", repo.Owner, repo.Name)
+		return MaintainerConfig{}, errors.Wrapf(
+			ctx,
+			err,
+			"decode .maintainer.yaml %s/%s",
+			repo.Owner,
+			repo.Name,
+		)
 	}
 	cfg, err := parseMaintainerConfig([]byte(decoded))
 	if err != nil {
-		return MaintainerConfig{}, errors.Wrapf(ctx, err, "parse .maintainer.yaml %s/%s", repo.Owner, repo.Name)
+		return MaintainerConfig{}, errors.Wrapf(
+			ctx,
+			err,
+			"parse .maintainer.yaml %s/%s",
+			repo.Owner,
+			repo.Name,
+		)
 	}
 	return cfg, nil
 }

@@ -62,7 +62,7 @@ type watcher struct {
 //  3. For each repo (sequential):
 //     a. GetMasterSHA — abort cycle on rate_limited; prune on transient error
 //     b. GetChangelogContent → ParseChangelog → ChangelogSummary
-//     c. GetAutoReleaseConfig
+//     c. GetMaintainerConfig
 //     d. Build Release struct
 //     e. taskCreationFilter.Skip(release) — bump filter metric on returned label
 //     f. publisher.PublishCreate(release) — update cursor on true return
@@ -114,7 +114,7 @@ func (w *watcher) Poll(ctx context.Context) error {
 //
 // Per-repo error policy (spec failure-modes):
 //   - Cycle-aborting (return early): rate_limited at any layer; 5xx during ListRepos (handled in Poll above).
-//   - Per-repo prune (continue loop): GetMasterSHA / GetChangelogContent / GetAutoReleaseConfig transient
+//   - Per-repo prune (continue loop): GetMasterSHA / GetChangelogContent / GetMaintainerConfig transient
 //     non-rate-limit error — log via glog.V(2).Infof so operator can grep "repo dropped from cycle".
 func (w *watcher) processRepos(
 	ctx context.Context,
@@ -159,7 +159,7 @@ func (w *watcher) processRepos(
 	return ""
 }
 
-// gatherRelease fetches HeadSHA, ChangelogContent, AutoReleaseConfig for one repo.
+// gatherRelease fetches HeadSHA, ChangelogContent, MaintainerConfig for one repo.
 // Returns (release, "", false) on success.
 // Returns ({}, "rate_limited"|"github_error", false) when the whole cycle should abort.
 // Returns ({}, "", true) when this repo should be silently pruned from the cycle.
@@ -182,7 +182,7 @@ func (w *watcher) gatherRelease(ctx context.Context, repo Repo) (Release, string
 			Infof("repo dropped from cycle: owner=%s repo=%s err=%v", repo.Owner, repo.Name, err)
 		return Release{}, "", true
 	}
-	autoRelease, err := w.ghClient.GetAutoReleaseConfig(ctx, repo)
+	maintainerCfg, err := w.ghClient.GetMaintainerConfig(ctx, repo)
 	if err != nil {
 		if stderrors.Is(err, ErrRateLimited) {
 			return Release{}, "rate_limited", false
@@ -201,7 +201,7 @@ func (w *watcher) gatherRelease(ctx context.Context, repo Repo) (Release, string
 		HeadSHA:           headSHA,
 		CurrentVersion:    currentVersion,
 		UnreleasedBullets: summary.UnreleasedBullets,
-		AutoRelease:       autoRelease,
+		AutoRelease:       maintainerCfg.Release.AutoRelease,
 	}, "", false
 }
 

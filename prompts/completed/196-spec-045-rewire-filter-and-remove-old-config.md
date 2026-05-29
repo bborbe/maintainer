@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [045-introduce-maintainer-yaml-release-gate]
+summary: Rewired release watcher trust gate from dark-factory/config.yml to .maintainer.yaml, flipped AutoReleaseFilter semantics from skip-when-true to pass-only-when-true, removed GetAutoReleaseConfig/parseAutoReleaseConfig/darkFactoryConfig, migrated watcher tests to new mock surface, and updated README/decisions-chains/factory godoc
+container: maintainer-exec-196-spec-045-rewire-filter-and-remove-old-config
+dark-factory-version: v0.173.0
 created: "2026-05-29T12:00:00Z"
 queued: "2026-05-29T09:15:05Z"
+started: "2026-05-29T09:54:10Z"
+completed: "2026-05-29T09:58:32Z"
 ---
 
 <summary>
