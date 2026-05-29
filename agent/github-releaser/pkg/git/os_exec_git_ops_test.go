@@ -1,0 +1,184 @@
+// Copyright (c) 2026 Benjamin Borbe All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package git_test
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
+)
+
+var _ = Describe("DefaultBotIdentity", func() {
+	It("returns Phase 1 verbatim identity", func() {
+		id := git.DefaultBotIdentity()
+		Expect(id.Name).To(Equal("Benjamin Borbe"))
+		Expect(id.Email).To(Equal("bborbe@users.noreply.github.com"))
+	})
+})
+
+var _ = Describe("NewOSExecGitOps", func() {
+	It("returns a non-nil GitOps", func() {
+		ops := git.NewOSExecGitOps()
+		Expect(ops).NotTo(BeNil())
+	})
+})
+
+// Boundary-crossing integration tests — exercise the real `git` binary
+// against a local repo. These prove the -c user.name / -c user.email
+// identity injection works through the actual shell-out, not just via mocks.
+// Skip on systems without git (CI containers have it; macOS dev workstations
+// have it). Use a per-test tempdir for isolation.
+var _ = Describe("osExecGitOps boundary contracts", func() {
+	var (
+		ctx     context.Context
+		workdir string
+		ops     git.GitOps
+	)
+
+	BeforeEach(func() {
+		if _, err := exec.LookPath("git"); err != nil {
+			Skip("git binary not available")
+		}
+		ctx = context.Background()
+		var err error
+		workdir, err = os.MkdirTemp("", "github-releaser-git-test-*")
+		Expect(err).NotTo(HaveOccurred())
+		// Initialize a local repo so Commit/Tag have something to operate on.
+		init := exec.Command("git", "-C", workdir, "init", "-b", "master")
+		Expect(init.Run()).To(Succeed())
+		// Seed an initial commit so `git commit` against CHANGELOG.md has a parent.
+		Expect(
+			os.WriteFile(
+				filepath.Join(workdir, "CHANGELOG.md"),
+				[]byte("# Changelog\n\n## Unreleased\n\n- feat: stub\n"),
+				0o600,
+			),
+		).To(Succeed())
+		ops = git.NewOSExecGitOps()
+	})
+
+	AfterEach(func() {
+		os.RemoveAll(workdir)
+	})
+
+	It("Clone fetches a known branch into an empty workdir via --branch <ref> --depth 1", func() {
+		// Build a real source repo with a known branch + a known file. Cloning
+		// it proves Clone shells out correctly and honors --branch <ref>.
+		source, err := os.MkdirTemp("", "github-releaser-clone-source-*")
+		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll(source)
+
+		Expect(exec.Command("git", "-C", source, "init", "-b", "release-branch").Run()).
+			To(Succeed())
+		Expect(
+			os.WriteFile(
+				filepath.Join(source, "MARKER.txt"),
+				[]byte("clone-me\n"),
+				0o600,
+			),
+		).To(Succeed())
+		Expect(exec.Command("git", "-C", source, "add", "MARKER.txt").Run()).To(Succeed())
+		Expect(
+			exec.Command(
+				"git",
+				"-C", source,
+				"-c", "user.name=Test",
+				"-c", "user.email=test@example.com",
+				"commit", "-m", "seed",
+			).Run(),
+		).To(Succeed())
+
+		// Clone into a fresh, non-existent dir (git clone requires the target
+		// to be empty/absent).
+		dest := filepath.Join(workdir, "cloned")
+		Expect(ops.Clone(ctx, source, "release-branch", dest)).To(Succeed())
+
+		// The known file landed.
+		got, readErr := os.ReadFile(filepath.Join(dest, "MARKER.txt"))
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(string(got)).To(Equal("clone-me\n"))
+
+		// HEAD resolves and the checked-out branch is the one we asked for.
+		headOut, headErr := exec.Command("git", "-C", dest, "rev-parse", "HEAD").CombinedOutput()
+		Expect(headErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(headOut))).NotTo(BeEmpty())
+		branchOut, branchErr := exec.Command("git", "-C", dest, "rev-parse", "--abbrev-ref", "HEAD").
+			CombinedOutput()
+		Expect(branchErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(branchOut))).To(Equal("release-branch"))
+	})
+
+	It("Commit attributes the commit to DefaultBotIdentity via -c flags", func() {
+		sha, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sha).NotTo(BeEmpty())
+
+		// Inspect the commit's author/committer name+email.
+		out, runErr := exec.Command("git", "-C", workdir, "log", "-1", "--format=%an <%ae>|%cn <%ce>").
+			CombinedOutput()
+		Expect(runErr).NotTo(HaveOccurred())
+		expect := "Benjamin Borbe <bborbe@users.noreply.github.com>|Benjamin Borbe <bborbe@users.noreply.github.com>"
+		Expect(strings.TrimSpace(string(out))).To(Equal(expect))
+	})
+
+	It("Tag creates an annotated tag attributed to the bot identity", func() {
+		_, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ops.Tag(ctx, workdir, "v1.2.8", "release v1.2.8")).To(Succeed())
+
+		// `taggername` is only set on annotated tags (not lightweight) — proves
+		// we used `git tag -a` AND the -c flags were honored.
+		out, runErr := exec.Command("git", "-C", workdir, "tag", "-l", "--format=%(taggername) <%(taggeremail)>", "v1.2.8").
+			CombinedOutput()
+		Expect(runErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(out))).To(ContainSubstring("Benjamin Borbe"))
+		Expect(
+			strings.TrimSpace(string(out)),
+		).To(ContainSubstring("bborbe@users.noreply.github.com"))
+	})
+
+	It("Push --atomic to a local bare remote lands HEAD and tag together", func() {
+		// Make commit + tag locally.
+		_, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ops.Tag(ctx, workdir, "v1.2.8", "release v1.2.8")).To(Succeed())
+
+		// Set up a local bare remote and wire it as origin.
+		remote, err := os.MkdirTemp("", "github-releaser-bare-*")
+		Expect(err).NotTo(HaveOccurred())
+		defer os.RemoveAll(remote)
+		Expect(exec.Command("git", "init", "--bare", remote).Run()).To(Succeed())
+		Expect(
+			exec.Command("git", "-C", workdir, "remote", "add", "origin", remote).Run(),
+		).To(Succeed())
+
+		Expect(ops.Push(ctx, workdir, "HEAD:master", "refs/tags/v1.2.8")).To(Succeed())
+
+		// Verify both refs landed on the bare remote.
+		headOut, headErr := exec.Command("git", "-C", remote, "rev-parse", "master").
+			CombinedOutput()
+		Expect(headErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(headOut))).NotTo(BeEmpty())
+		tagOut, tagErr := exec.Command("git", "-C", remote, "rev-parse", "v1.2.8").CombinedOutput()
+		Expect(tagErr).NotTo(HaveOccurred())
+		Expect(strings.TrimSpace(string(tagOut))).NotTo(BeEmpty())
+	})
+})
+
+var _ = Describe("redactToken", func() {
+	It("strips x-access-token credentials from stderr-like strings", func() {
+		in := "fatal: unable to access 'https://x-access-token:ghp_AAA@github.com/owner/repo/': repository not found"
+		out := git.RedactTokenForTest(in)
+		Expect(out).NotTo(ContainSubstring("ghp_AAA"))
+		Expect(out).To(ContainSubstring("x-access-token:[REDACTED]@"))
+	})
+})

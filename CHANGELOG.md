@@ -11,7 +11,20 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## Unreleased
 
 - feat(watcher/github-release): add `/trigger` HTTP endpoint that runs one poll cycle on demand (mirrors watcher/github-pr `/check`); lets operators force a scan without waiting for the poll interval
+- fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests
+- fix(agent/github-releaser): URL-escape owner/repo (path) + ref (query) in githubchangelog fetcher — prevents a crafted owner/repo/ref from corrupting the contents-API URL (PR #16 review)
 - refactor(watcher/github-release): use shared `REPO_ALLOWLIST` env var instead of dedicated `WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST`; aligns release watcher with pr/build watchers (single allowlist per stage)
+- fix(agent/github-releaser): address PR #16 review — thread ctx through RewriteUnreleasedHeader / BumpVersion / extractFrontmatter (drop context.Background() in pure + business logic); add agent/github-releaser/LICENSE; add parseOwnerRepo + classifyValidationFailure unit tests + happy-path FetchCallCount assertion; add success-path glog to planning fetch + git clone
+- feat(agent/github-releaser): wire execution phase direct-push path — adds pkg/git GitOps interface + osExecGitOps shell-out impl + 8-category error classifier; extends pkg/changelog with RewriteUnreleasedHeader; adds pkg/steps_execution ExecutionStep that clones target repo, rewrites ## Unreleased → next version header, commits + annotated tags + pushes via GitOps; factory wires planning + execution phases together (spec 049)
+- feat(agent/github-releaser): add RewriteUnreleasedHeader to pkg/changelog — pure function that locates ## Unreleased (whitespace-tolerant) and replaces it with a caller-supplied header; used by execution step to rewrite the cloned repo's CHANGELOG before commit (spec 049)
+- feat(agent/github-releaser): add pkg/git package — thin GitOps interface wrapping git clone/commit/tag/push shell-outs with 8-category error_classifier for execution step consumption (spec 049)
+- fix(agent/github-releaser): planning escalation now returns `AgentStatusNeedsInput` (not `AgentStatusDone`) at the three escalation sites (missing frontmatter, P1 unreleased-not-first, P2 unreleased-empty) so the framework deliverer leaves `status: in_progress` + `phase: planning` unchanged instead of auto-advancing to terminal `completed` / `done`; existing escalation unit tests re-pointed; new offline integration test via FileResultDeliverer guards the regression (spec 048)
+- feat(agent/github-releaser): wire planning phase end-to-end — adds pkg/factory wiring, main.go dispatch via AgentProvider, and cmd/run-task local CLI entry point (spec 047)
+- feat(agent/github-releaser): add pkg/githubchangelog Fetcher interface + httpFetcher implementation backed by GitHub REST contents API; add pkg/plan_output typed PlanOutput struct with Outcome/PreconditionFailed constants for planning step JSON contract (spec 047)
+- feat(agent/github-releaser): add pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser for the planning step (spec 046)
+- feat(agent/github-releaser): add pkg/semver with BumpVersion(current, bump) for Phase 1 → Phase 2 version arithmetic (spec 045)
+- feat(agent/github-releaser): add pkg/changelog parser library — pure-Go ValidateUnreleased/ExtractUnreleasedBullets/InferHeaderPrefixStyle for planning step (spec 044)
+- feat(agent/github-releaser): scaffold Pattern B Job skeleton — Milestone 1 of Phase 2 graduation of the github-releaser agent
 
 ## v0.26.39
 
