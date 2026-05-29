@@ -20,6 +20,7 @@ import (
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 
 	releaserpkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
 )
 
@@ -36,6 +37,12 @@ var taskTypeGitHubRelease = agentlib.TaskType("github-release")
 // Planning is read-only verdict classification — Claude needs no tools to
 // do its job. Tightening to an empty set per spec § Security.
 var planningTools = claudelib.AllowedTools{}
+
+// CreateGitOps returns the production GitOps implementation, wired with
+// the Phase 1 verbatim bot identity. Pure plumbing.
+func CreateGitOps() git.GitOps {
+	return git.NewOSExecGitOps()
+}
 
 // CreateClaudeRunner constructs a ClaudeRunner pre-configured with tools,
 // model, working directory, and CLI environment. env is forwarded as-is
@@ -84,10 +91,11 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
-// CreateAgent assembles the single-phase planning agent.
+// CreateAgent assembles the planning + execution agent.
 //
-// Future specs (047-execution, 047-ai-review) will add the execution and
-// ai_review phases here. For now planning is the only phase wired.
+// The two phases advance in order: planning writes ## Plan(outcome=ready),
+// then execution reads it, clones the target repo, rewrites ## Unreleased,
+// commits + tags + pushes, and writes ## Result(outcome=released).
 func CreateAgent(
 	claudeConfigDir claudelib.ClaudeConfigDir,
 	agentDir claudelib.AgentDir,
@@ -98,8 +106,13 @@ func CreateAgent(
 	planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
 	fetcher := githubchangelog.NewHTTPFetcher(ghToken)
 	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher)
+
+	executionOps := CreateGitOps()
+	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
+
 	return agentlib.NewAgent(
 		agentlib.NewPhase(domain.TaskPhasePlanning, planningStep),
+		agentlib.NewPhase(domain.TaskPhaseExecution, executionStep),
 	)
 }
 

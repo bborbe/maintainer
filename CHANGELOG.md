@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/github-releaser): wire execution phase direct-push path — adds pkg/git GitOps interface + osExecGitOps shell-out impl + 8-category error classifier; extends pkg/changelog with RewriteUnreleasedHeader; adds pkg/steps_execution ExecutionStep that clones target repo, rewrites ## Unreleased → next version header, commits + annotated tags + pushes via GitOps; factory wires planning + execution phases together (spec 049)
 - feat(agent/github-releaser): add RewriteUnreleasedHeader to pkg/changelog — pure function that locates ## Unreleased (whitespace-tolerant) and replaces it with a caller-supplied header; used by execution step to rewrite the cloned repo's CHANGELOG before commit (spec 049)
 - feat(agent/github-releaser): add pkg/git package — thin GitOps interface wrapping git clone/commit/tag/push shell-outs with 8-category error_classifier for execution step consumption (spec 049)
 - fix(agent/github-releaser): planning escalation now returns `AgentStatusNeedsInput` (not `AgentStatusDone`) at the three escalation sites (missing frontmatter, P1 unreleased-not-first, P2 unreleased-empty) so the framework deliverer leaves `status: in_progress` + `phase: planning` unchanged instead of auto-advancing to terminal `completed` / `done`; existing escalation unit tests re-pointed; new offline integration test via FileResultDeliverer guards the regression (spec 048)
