@@ -41,8 +41,7 @@ type Application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	GHToken        string           `required:"false" arg:"gh-token"        env:"GH_TOKEN"        usage:"GitHub token (read scope sufficient); ignored when App auth is configured"             display:"length"`
-	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); required for App auth"`
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
 	PEMKeyFile     string           `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM) mounted from k8s Secret"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
@@ -96,7 +95,6 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		InstallationID: a.InstallationID,
 		PEMKeyFile:     a.PEMKeyFile,
 		PEMKey:         a.PEMKey,
-		GHToken:        a.GHToken,
 		LogPrefix:      "watcher/github-build-run-once",
 	})
 	if err != nil {

@@ -211,7 +211,9 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				}
 
 				ghClient.GetMaintainerConfigReturns(
-					maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
+					maintainerconfig.MaintainerConfig{
+						Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
+					},
 					nil,
 				)
 				publisher.PublishCreateReturns(true)
@@ -278,7 +280,9 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			}
 
 			ghClient.GetMaintainerConfigReturns(
-				maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
+				maintainerconfig.MaintainerConfig{
+					Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
+				},
 				nil,
 			)
 		})
@@ -324,7 +328,9 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				nil,
 			)
 			ghClient.GetMaintainerConfigReturns(
-				maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
+				maintainerconfig.MaintainerConfig{
+					Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
+				},
 				nil,
 			)
 

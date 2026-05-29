@@ -53,7 +53,6 @@ type application struct {
 	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (preferred auth path)"`
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
-	GHToken        string           `required:"false" arg:"gh-token"        env:"GH_TOKEN"        usage:"Legacy PAT fallback (prefer APP_ID + INSTALLATION_ID + PEM_KEY)"                                                             display:"length"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -73,7 +72,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		AppID:          a.AppID,
 		InstallationID: a.InstallationID,
 		PEMKey:         []byte(a.PEMKey),
-		Token:          a.GHToken,
 	})
 	if err != nil {
 		return errors.Wrap(ctx, err, "resolve auth")

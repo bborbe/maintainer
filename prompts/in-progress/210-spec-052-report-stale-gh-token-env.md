@@ -3,6 +3,12 @@ status: approved
 spec: [052-fleet-app-only-auth]
 created: "2026-05-29T18:33:00Z"
 queued: "2026-05-29T18:24:44Z"
+completed: "2026-05-29T18:32:10Z"
+lastFailReason: |-
+    setup workflow: git merge origin default branch: merge origin/master: error: Merging is not possible because you have unmerged files.
+    hint: Fix them up in the work tree, and then use 'git add/rm <file>'
+    hint: as appropriate to mark resolution and make a commit.
+    fatal: Exiting because of an unresolved conflict.: exit status 128
 ---
 
 <summary>
