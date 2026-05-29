@@ -16,3 +16,5 @@
 # pr-reviewer image is deployed to prod; removed in a follow-up cleanup).
 prReviewer:
   autoApprove: true
+release:
+  autoRelease: true
