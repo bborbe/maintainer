@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-29T14:47:05Z"
 generating: "2026-05-29T16:22:56Z"
 prompted: "2026-05-29T16:22:56Z"
+verifying: "2026-05-29T16:37:24Z"
 branch: dark-factory/migrate-pr-reviewer-to-maintainer-yaml
 ---
 
