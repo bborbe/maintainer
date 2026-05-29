@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- refactor(watcher/github-release): delegate MaintainerConfig parsing to `github.com/bborbe/maintainer/lib/maintainerconfig`; delete local `MaintainerConfig`/`MaintainerReleaseConfig`/`parseMaintainerConfig` definitions; counterfeiter mock regenerated
 - feat(lib/maintainerconfig): add shared package defining `.maintainer.yaml` schema with `release` and `prReviewer` namespaces and pure Parse function
 - feat(watcher/github-release): add `/trigger` HTTP endpoint that runs one poll cycle on demand (mirrors watcher/github-pr `/check`); lets operators force a scan without waiting for the poll interval
 - fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests
