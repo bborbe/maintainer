@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/github-releaser): add k8s deploy unit (`agent/github-releaser/k8s/`) mirroring pr-reviewer — Config CR (`assignee: github-releaser-agent`, `taskTypes: [github-release, healthcheck]`, `trigger.phases: [planning, execution]`, App-auth env from `AGENT_GITHUB_RELEASER_*`), Secret (dedicated releaser App PEM), PVC, PriorityClass, dev/prod ResourceQuota, Makefile. ai_review phase deliberately omitted until implemented
 - feat(agent/github-releaser): migrate to GitHub App installation-token auth — mints an IAT at startup from APP_ID + INSTALLATION_ID + PEM_KEY_FILE/PEM_KEY (via lib/githubapp.MintIAT), falls back to GH_TOKEN PAT, errors before any clone when neither is set; the resolved token flows to both the changelog fetch and the release push, mirroring pr-reviewer (spec 052)
 - feat(watcher/github-release): add `/trigger` HTTP endpoint that runs one poll cycle on demand (mirrors watcher/github-pr `/check`); lets operators force a scan without waiting for the poll interval
 - fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests

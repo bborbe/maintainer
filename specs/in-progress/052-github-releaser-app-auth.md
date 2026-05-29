@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-05-29T16:14:45Z"
 generating: "2026-05-29T16:22:07Z"
 prompted: "2026-05-29T16:22:07Z"
+verifying: "2026-05-29T16:34:51Z"
 branch: dark-factory/github-releaser-app-auth
 ---
 

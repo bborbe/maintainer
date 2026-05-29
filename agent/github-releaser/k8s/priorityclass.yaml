@@ -1,0 +1,8 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: maintainer-agent-github-releaser
+value: 500
+globalDefault: false
+preemptionPolicy: Never
+description: "Agent github-releaser — namespace-local concurrency via matching ResourceQuota. Never preempts."
