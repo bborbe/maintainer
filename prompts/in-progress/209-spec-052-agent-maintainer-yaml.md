@@ -1,6 +1,6 @@
 ---
 status: approved
-spec: ["052"]
+spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
 created: "2026-05-29T15:32:00Z"
 queued: "2026-05-29T16:26:53Z"
 ---

@@ -1,8 +1,13 @@
 ---
-status: approved
-spec: ["052"]
+status: completed
+spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
+summary: Created shared lib/maintainerconfig package defining .maintainer.yaml schema with release and prReviewer namespaces and pure Parse function
+container: maintainer-pr-reviewer-yaml-exec-207-spec-052-maintainerconfig-lib
+dark-factory-version: v0.173.0
 created: "2026-05-29T15:30:00Z"
 queued: "2026-05-29T16:26:53Z"
+started: "2026-05-29T16:27:18Z"
+completed: "2026-05-29T16:30:00Z"
 ---
 
 <summary>

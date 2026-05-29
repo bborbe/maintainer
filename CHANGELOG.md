@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(lib/maintainerconfig): add shared package defining `.maintainer.yaml` schema with `release` and `prReviewer` namespaces and pure Parse function
 - feat(watcher/github-release): add `/trigger` HTTP endpoint that runs one poll cycle on demand (mirrors watcher/github-pr `/check`); lets operators force a scan without waiting for the poll interval
 - fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests
 - fix(agent/github-releaser): URL-escape owner/repo (path) + ref (query) in githubchangelog fetcher — prevents a crafted owner/repo/ref from corrupting the contents-API URL (PR #16 review)
