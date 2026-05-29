@@ -73,3 +73,9 @@ Two examples that have come up:
 
 The two chains are independent. A PR that survives TaskCreationFilter then
 runs through TrustGate; both must agree before the task is auto-processed.
+
+## Release Watcher Trust Gate (`.maintainer.yaml`)
+
+The `maintainer-watcher-github-release` predicate chain reads `.maintainer.yaml` from the target repo's default branch and emits a release task only when `release.autoRelease: true`. Absent file, absent `release:` key, absent `autoRelease` key, and explicit `false` all skip the repo with the `auto_release` `filter_skipped_total` label.
+
+The github-releaser agent itself does NOT consult `.maintainer.yaml` — the gate is watcher-side only, so operator-authored manual tasks bypass it.

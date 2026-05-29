@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -309,14 +308,12 @@ var _ = Describe("pkg.GitHubClient", func() {
 		})
 	})
 
-	Describe("GetAutoReleaseConfig", func() {
+	Describe("GetMaintainerConfig", func() {
 		Context("file not found (404)", func() {
-			It("returns (false, nil)", func() {
+			It("returns zero-value config and nil error on HTTP 404", func() {
 				server := httptest.NewServer(
 					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						Expect(
-							r.URL.Path,
-						).To(Equal("/repos/bborbe/x/contents/.dark-factory/config.yml"))
+						Expect(r.URL.Path).To(Equal("/repos/bborbe/x/contents/.maintainer.yaml"))
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusNotFound)
 						fmt.Fprintf(w, `{"message":"Not Found"}`)
@@ -328,18 +325,44 @@ var _ = Describe("pkg.GitHubClient", func() {
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(
+				cfg, err := client.GetMaintainerConfig(
 					ctx,
 					pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"},
 				)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(enabled).To(BeFalse())
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
 			})
 		})
 
-		Context("autoRelease: true", func() {
-			It("parses autoRelease: true", func() {
-				yamlContent := "autoRelease: true\n"
+		Context("file is empty", func() {
+			It("returns zero-value config and nil error when file is empty", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":0,"encoding":"base64","content":""}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := pkg.NewGitHubClient(server.Client())
+				err := pkg.SetBaseURL(client, server.URL+"/")
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := client.GetMaintainerConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+			})
+		})
+
+		Context("release key absent", func() {
+			It("returns zero-value Release.AutoRelease when release key is absent", func() {
+				yamlContent := "pr-reviewer:\n  enabled: true\n"
 				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
 
 				server := httptest.NewServer(
@@ -347,7 +370,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 						w.Header().Set("Content-Type", "application/json")
 						fmt.Fprintf(
 							w,
-							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":%d,"encoding":"base64","content":"%s"}`,
 							len(yamlContent),
 							encoded,
 						)
@@ -359,18 +382,18 @@ var _ = Describe("pkg.GitHubClient", func() {
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(
+				cfg, err := client.GetMaintainerConfig(
 					ctx,
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(enabled).To(BeTrue())
+				Expect(cfg.Release.AutoRelease).To(BeFalse())
 			})
 		})
 
-		Context("key missing from YAML", func() {
-			It("returns false when key is missing", func() {
-				yamlContent := "someOtherKey: value\n"
+		Context("release.autoRelease: false", func() {
+			It("returns AutoRelease=false when release.autoRelease is explicitly false", func() {
+				yamlContent := "release:\n  autoRelease: false\n"
 				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
 
 				server := httptest.NewServer(
@@ -378,7 +401,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 						w.Header().Set("Content-Type", "application/json")
 						fmt.Fprintf(
 							w,
-							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":%d,"encoding":"base64","content":"%s"}`,
 							len(yamlContent),
 							encoded,
 						)
@@ -390,18 +413,48 @@ var _ = Describe("pkg.GitHubClient", func() {
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(
+				cfg, err := client.GetMaintainerConfig(
 					ctx,
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(enabled).To(BeFalse())
+				Expect(cfg.Release.AutoRelease).To(BeFalse())
 			})
 		})
 
-		Context("invalid YAML", func() {
-			It("surfaces YAML parse error", func() {
-				// "{invalid" is not valid YAML - unbalanced brace
+		Context("release.autoRelease: true", func() {
+			It("returns AutoRelease=true when release.autoRelease is true", func() {
+				yamlContent := "release:\n  autoRelease: true\n"
+				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
+
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":%d,"encoding":"base64","content":"%s"}`,
+							len(yamlContent),
+							encoded,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := pkg.NewGitHubClient(server.Client())
+				err := pkg.SetBaseURL(client, server.URL+"/")
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := client.GetMaintainerConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.Release.AutoRelease).To(BeTrue())
+			})
+		})
+
+		Context("malformed YAML", func() {
+			It("surfaces wrapped error on malformed YAML", func() {
 				invalidYAML := "{invalid"
 				encoded := base64.StdEncoding.EncodeToString([]byte(invalidYAML))
 
@@ -410,7 +463,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 						w.Header().Set("Content-Type", "application/json")
 						fmt.Fprintf(
 							w,
-							`{"name":"config.yml","path":".dark-factory/config.yml","size":%d,"encoding":"base64","content":"%s"}`,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":%d,"encoding":"base64","content":"%s"}`,
 							len(invalidYAML),
 							encoded,
 						)
@@ -422,21 +475,49 @@ var _ = Describe("pkg.GitHubClient", func() {
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(
+				cfg, err := client.GetMaintainerConfig(
 					ctx,
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).To(HaveOccurred())
-				Expect(
-					strings.Contains(err.Error(), "parse") ||
-						strings.Contains(err.Error(), "invalid"),
-				).To(BeTrue())
-				Expect(enabled).To(BeFalse())
+				Expect(err.Error()).To(ContainSubstring("parse .maintainer.yaml"))
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+			})
+		})
+
+		Context("unknown top-level keys", func() {
+			It("ignores unknown top-level keys", func() {
+				yamlContent := "pr-reviewer:\n  enabled: true\nbuild-fix:\n  channel: stable\nrelease:\n  autoRelease: true\n"
+				encoded := base64.StdEncoding.EncodeToString([]byte(yamlContent))
+
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":%d,"encoding":"base64","content":"%s"}`,
+							len(yamlContent),
+							encoded,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := pkg.NewGitHubClient(server.Client())
+				err := pkg.SetBaseURL(client, server.URL+"/")
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := client.GetMaintainerConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.Release.AutoRelease).To(BeTrue())
 			})
 		})
 
 		Context("rate limited", func() {
-			It("returns ErrRateLimited on rate limit error", func() {
+			It("returns ErrRateLimited on rate-limit response", func() {
 				server := httptest.NewServer(
 					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						w.Header().Set("Content-Type", "application/json")
@@ -452,12 +533,64 @@ var _ = Describe("pkg.GitHubClient", func() {
 				err := pkg.SetBaseURL(client, server.URL+"/")
 				Expect(err).NotTo(HaveOccurred())
 
-				enabled, err := client.GetAutoReleaseConfig(
+				cfg, err := client.GetMaintainerConfig(
 					ctx,
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).To(MatchError(pkg.ErrRateLimited))
-				Expect(enabled).To(BeFalse())
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+			})
+		})
+
+		Context("HTTP 500", func() {
+			It("returns wrapped error on HTTP 500 response", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusInternalServerError)
+						fmt.Fprintf(w, `{"message":"server error"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := pkg.NewGitHubClient(server.Client())
+				err := pkg.SetBaseURL(client, server.URL+"/")
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := client.GetMaintainerConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("get .maintainer.yaml"))
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+			})
+		})
+
+		Context("oversize file", func() {
+			It("returns wrapped error on oversize response", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(
+							w,
+							`{"name":"maintainer.yaml","path":".maintainer.yaml","size":2000000,"encoding":"base64","content":""}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := pkg.NewGitHubClient(server.Client())
+				err := pkg.SetBaseURL(client, server.URL+"/")
+				Expect(err).NotTo(HaveOccurred())
+
+				cfg, err := client.GetMaintainerConfig(
+					ctx,
+					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
+				)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("too large"))
+				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
 			})
 		})
 	})

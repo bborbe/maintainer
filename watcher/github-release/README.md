@@ -24,11 +24,11 @@ On each poll cycle:
 2. For each repo in scope (filtered against `REPO_ALLOWLIST`):
    - Fetch master HEAD SHA.
    - Fetch `CHANGELOG.md`; parse `## Unreleased` bullet count + first-section flag + latest version header.
-   - Fetch `.dark-factory/config.yml` to check `autoRelease: true` (skip if so — existing autorelease path handles it).
+   - Fetch `.maintainer.yaml` to read `release.autoRelease`; the watcher proceeds only when this is `true` (trust gate — repos without the file are skipped).
 3. **Apply filter chain** (skip if ANY votes skip):
    - `RepoAllowlistFilter` — host-qualified scope filter
    - `EmptyUnreleasedFilter` — skip repos whose `## Unreleased` has zero bullets
-   - `AutoReleaseFilter` — skip repos with dark-factory autoRelease enabled
+   - `AutoReleaseFilter` — gate; passes only when `.maintainer.yaml: release.autoRelease: true`, skips every other shape (file absent, key absent, false)
    - `SHAUnchangedFilter` — skip if cursor already records this master HEAD (cursor-aware, composed per-cycle)
 4. **Publish** `CreateTaskCommand` per non-skipped repo.
 5. **Save cursor** at `/data/cursor.json` (per-repo `LastSeenMasterSHA`, atomic temp+rename).

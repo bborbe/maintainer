@@ -74,8 +74,10 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				return []byte("## Unreleased\n\n## v0.0.1\n"), nil
 			}
 
-			ghClient.GetAutoReleaseConfigStub = func(_ context.Context, r pkg.Repo) (bool, error) {
-				return false, nil
+			ghClient.GetMaintainerConfigStub = func(_ context.Context, r pkg.Repo) (pkg.MaintainerConfig, error) {
+				return pkg.MaintainerConfig{
+					Release: pkg.MaintainerReleaseConfig{AutoRelease: true},
+				}, nil
 			}
 
 			publisher.PublishCreateReturns(true)
@@ -207,7 +209,10 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 					return []byte("## Unreleased\n\n- fix bug\n\n## v2.0.0\n"), nil
 				}
 
-				ghClient.GetAutoReleaseConfigReturns(false, nil)
+				ghClient.GetMaintainerConfigReturns(
+					pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+					nil,
+				)
 				publisher.PublishCreateReturns(true)
 			})
 
@@ -271,7 +276,10 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				return []byte("## Unreleased\n\n- bugfix\n\n## v1.0.0\n"), nil
 			}
 
-			ghClient.GetAutoReleaseConfigReturns(false, nil)
+			ghClient.GetMaintainerConfigReturns(
+				pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+				nil,
+			)
 		})
 
 		It("Poll aborts mid-cycle on per-repo rate-limit during GetChangelogContent", func() {
@@ -314,7 +322,10 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				[]byte("## Unreleased\n\n- entry\n\n## v1.7.7\n"),
 				nil,
 			)
-			ghClient.GetAutoReleaseConfigReturns(false, nil)
+			ghClient.GetMaintainerConfigReturns(
+				pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+				nil,
+			)
 
 			// Simulate Kafka send failure — PublishCreate returns false
 			publisher.PublishCreateReturns(false)

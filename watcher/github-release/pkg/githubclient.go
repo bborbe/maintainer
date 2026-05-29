@@ -38,10 +38,27 @@ type GitHubClient interface {
 	// Other errors propagate.
 	GetChangelogContent(ctx context.Context, repo Repo) ([]byte, error)
 
-	// GetAutoReleaseConfig returns whether the repo has dark-factory autoRelease
-	// enabled (.dark-factory/config.yml: autoRelease: true). Returns (false, nil)
-	// if the config file does not exist (the common case — autoRelease defaults off).
-	GetAutoReleaseConfig(ctx context.Context, repo Repo) (bool, error)
+	// GetMaintainerConfig returns the parsed `.maintainer.yaml` document at
+	// HEAD of repo's default branch. The file is the trust gate for maintainer
+	// bots; a repo without it is treated as "not opted in" (zero-value config,
+	// nil error). This is the common case — the file is rare.
+	//
+	// Returns:
+	//   - (parsed config, nil) on a valid YAML document (including empty input
+	//     and documents with the `release:` key absent — both yield zero-value).
+	//   - (zero-value MaintainerConfig, nil) on HTTP 404 (file absent).
+	//   - (zero-value MaintainerConfig, ErrRateLimited) on primary or abuse
+	//     rate-limit responses.
+	//   - (zero-value MaintainerConfig, wrapped error) on every other failure
+	//     including network errors, 5xx responses, oversize files (>1 MiB),
+	//     base64 decode failures, and YAML parse failures. Malformed YAML
+	//     must NOT be silently treated as `autoRelease: false`.
+	//
+	// The 1 MiB cap is enforced via the API-reported Size before decoding
+	// (cheap upstream rejection). A post-decode re-check is not added because
+	// base64 encoding can only inflate, never deflate — a Size under 1 MiB
+	// cannot decode to over 1 MiB.
+	GetMaintainerConfig(ctx context.Context, repo Repo) (MaintainerConfig, error)
 }
 
 // NewGitHubClient returns the production GitHubClient backed by the given HTTP client
@@ -234,68 +251,98 @@ func (c *githubClient) GetChangelogContent(ctx context.Context, repo Repo) ([]by
 	return []byte(decoded), nil
 }
 
-func (c *githubClient) GetAutoReleaseConfig(ctx context.Context, repo Repo) (bool, error) {
+// MaintainerConfig is the parsed shape of `.maintainer.yaml` at the root of a
+// target repo. It is the trust gate that opts the repo into maintainer-bot
+// behaviors. v1 has a single `release` namespace; future maintainer bots
+// (`pr-reviewer`, `build-fix`, `dep-pin`, …) land as sibling top-level keys.
+//
+// Unknown top-level keys are tolerated by design — `yaml.Unmarshal` into
+// this struct silently ignores fields it does not recognise, which is the
+// forward-compat behavior the spec mandates.
+type MaintainerConfig struct {
+	Release MaintainerReleaseConfig `yaml:"release"`
+}
+
+// MaintainerReleaseConfig is the `release:` namespace of `.maintainer.yaml`.
+// AutoRelease=true is the ONLY shape that lets the github-release watcher
+// emit a release task; everything else (key absent, value false, file
+// absent) skips the repo.
+type MaintainerReleaseConfig struct {
+	AutoRelease bool `yaml:"autoRelease"`
+}
+
+// parseMaintainerConfig unmarshals a .maintainer.yaml document and returns
+// the parsed config. Pure data extraction — no I/O. Empty input returns a
+// zero-value MaintainerConfig with nil error (matches the "file empty"
+// happy-path branch of GetMaintainerConfig).
+func parseMaintainerConfig(content []byte) (MaintainerConfig, error) {
+	var cfg MaintainerConfig
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
+		return MaintainerConfig{}, err //nolint:wrapcheck // caller wraps with repo context
+	}
+	return cfg, nil
+}
+
+func (c *githubClient) GetMaintainerConfig(
+	ctx context.Context,
+	repo Repo,
+) (MaintainerConfig, error) {
 	opts := &gogithub.RepositoryContentGetOptions{Ref: repo.DefaultBranch}
 	fileContent, _, _, err := c.client.Repositories.GetContents(
 		ctx,
 		repo.Owner,
 		repo.Name,
-		".dark-factory/config.yml",
+		".maintainer.yaml",
 		opts,
 	)
 	if err != nil {
 		var ghErr *gogithub.ErrorResponse
 		if stderrors.As(err, &ghErr) && ghErr.Response.StatusCode == http.StatusNotFound {
-			return false, nil
+			return MaintainerConfig{}, nil
 		}
 		if isRateLimitError(err) {
-			return false, ErrRateLimited
+			return MaintainerConfig{}, ErrRateLimited
 		}
-		return false, errors.Wrapf(
+		return MaintainerConfig{}, errors.Wrapf(
 			ctx,
 			err,
-			"get .dark-factory/config.yml %s/%s@%s",
+			"get .maintainer.yaml %s/%s@%s",
 			repo.Owner,
 			repo.Name,
 			repo.DefaultBranch,
 		)
 	}
 	if fileContent == nil {
-		return false, nil
+		return MaintainerConfig{}, nil
+	}
+	if fileContent.GetSize() > 1024*1024 {
+		return MaintainerConfig{}, errors.Errorf(
+			ctx,
+			".maintainer.yaml %s/%s too large: %d bytes (max 1 MiB)",
+			repo.Owner,
+			repo.Name,
+			fileContent.GetSize(),
+		)
 	}
 	decoded, err := fileContent.GetContent()
 	if err != nil {
-		return false, errors.Wrapf(
+		return MaintainerConfig{}, errors.Wrapf(
 			ctx,
 			err,
-			"decode .dark-factory/config.yml %s/%s",
+			"decode .maintainer.yaml %s/%s",
 			repo.Owner,
 			repo.Name,
 		)
 	}
-	autoRelease, err := parseAutoReleaseConfig([]byte(decoded))
+	cfg, err := parseMaintainerConfig([]byte(decoded))
 	if err != nil {
-		return false, errors.Wrapf(
+		return MaintainerConfig{}, errors.Wrapf(
 			ctx,
 			err,
-			"parse .dark-factory/config.yml %s/%s",
+			"parse .maintainer.yaml %s/%s",
 			repo.Owner,
 			repo.Name,
 		)
 	}
-	return autoRelease, nil
-}
-
-// parseAutoReleaseConfig unmarshals a .dark-factory/config.yml document and
-// returns the autoRelease flag. Pure data extraction — no I/O.
-func parseAutoReleaseConfig(content []byte) (bool, error) {
-	var cfg darkFactoryConfig
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return false, err //nolint:wrapcheck // caller wraps with repo context
-	}
-	return cfg.AutoRelease, nil
-}
-
-type darkFactoryConfig struct {
-	AutoRelease bool `yaml:"autoRelease"`
+	return cfg, nil
 }
