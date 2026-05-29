@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["047"]
+spec: [047-github-releaser-planning-phase-integration]
 summary: Created pkg/githubchangelog with Fetcher interface + httpFetcher implementation (87.2% coverage) and pkg/plan_output.go with typed PlanOutput struct and Outcome/PreconditionFailed constants
 container: maintainer-github-releaser-exec-191-spec-047-githubchangelog-fetcher-and-plan-output
 dark-factory-version: v0.173.0

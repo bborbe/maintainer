@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["045"]
+spec: [045-github-releaser-semver-bump]
 summary: Created github.com/bborbe/maintainer/agent/github-releaser/pkg/semver with BumpVersion(current, bump) function, 12 Ginkgo table entries, 92.6% coverage, and CHANGELOG update
 container: maintainer-github-releaser-exec-189-spec-045-semver-bump
 dark-factory-version: v0.173.0
