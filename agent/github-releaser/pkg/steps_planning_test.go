@@ -316,9 +316,11 @@ var _ = Describe("steps_planning integration (spec 048 regression guard)", func(
 			_ = os.RemoveAll(tmpDir)
 		})
 
-		It("framework deliverer leaves status: in_progress and phase: planning unchanged on escalation", func() {
-			// Fixture: ## Unreleased is the SECOND ## heading → P1 fail.
-			initialTask := `---
+		It(
+			"framework deliverer leaves status: in_progress and phase: planning unchanged on escalation",
+			func() {
+				// Fixture: ## Unreleased is the SECOND ## heading → P1 fail.
+				initialTask := `---
 status: in_progress
 phase: planning
 assignee: github-releaser-agent
@@ -332,77 +334,80 @@ task_identifier: gh-release-bborbe-maintainer-master-spec048
 
 # release task
 `
-			Expect(os.WriteFile(taskFile, []byte(initialTask), 0o600)).To(Succeed())
+				Expect(os.WriteFile(taskFile, []byte(initialTask), 0o600)).To(Succeed())
 
-			// Inject the mock Fetcher via package-level seam: we cannot use
-			// factory.CreateAgent directly because it wires the real
-			// HTTPFetcher. Build the planning step manually with the mock
-			// fetcher, wrap it in a one-phase Agent identical in shape to
-			// what factory.CreateAgent produces. This is intentional — the
-			// factory's job is just composition; the integration we care
-			// about is the agent.Run + FileResultDeliverer chain, which
-			// this exercises identically.
-			badChangelog := []byte("# Changelog\n\nIntro.\n\n## v1.2.6\n\n- old release\n\n## Unreleased\n\n- new bullet\n")
-			fakeFetcher := &githubchangelogmocks.Fetcher{}
-			fakeFetcher.FetchReturns(badChangelog, nil)
-			fakeRunner := &agentmocks.ClaudeRunnerMock{} // never called on P1
+				// Inject the mock Fetcher via package-level seam: we cannot use
+				// factory.CreateAgent directly because it wires the real
+				// HTTPFetcher. Build the planning step manually with the mock
+				// fetcher, wrap it in a one-phase Agent identical in shape to
+				// what factory.CreateAgent produces. This is intentional — the
+				// factory's job is just composition; the integration we care
+				// about is the agent.Run + FileResultDeliverer chain, which
+				// this exercises identically.
+				badChangelog := []byte(
+					"# Changelog\n\nIntro.\n\n## v1.2.6\n\n- old release\n\n## Unreleased\n\n- new bullet\n",
+				)
+				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher.FetchReturns(badChangelog, nil)
+				fakeRunner := &agentmocks.ClaudeRunnerMock{} // never called on P1
 
-			step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
-			agent := agentlib.NewAgent(agentlib.NewPhase(domain.TaskPhasePlanning, step))
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				agent := agentlib.NewAgent(agentlib.NewPhase(domain.TaskPhasePlanning, step))
 
-			// Use the real FileResultDeliverer + passthrough generator —
-			// same wiring as cmd/run-task. This is the deliverer whose
-			// Status switch contains the bug being fixed.
-			deliverer := delivery.NewFileResultDeliverer(
-				delivery.NewPassthroughContentGenerator(),
-				taskFile,
-			)
+				// Use the real FileResultDeliverer + passthrough generator —
+				// same wiring as cmd/run-task. This is the deliverer whose
+				// Status switch contains the bug being fixed.
+				deliverer := delivery.NewFileResultDeliverer(
+					delivery.NewPassthroughContentGenerator(),
+					taskFile,
+				)
 
-			result, err := agent.Run(
-				context.Background(),
-				domain.TaskPhasePlanning,
-				initialTask,
-				deliverer,
-			)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+				result, err := agent.Run(
+					context.Background(),
+					domain.TaskPhasePlanning,
+					initialTask,
+					deliverer,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
 
-			// Read back the file the deliverer wrote.
-			mutated, err := os.ReadFile(taskFile)
-			Expect(err).NotTo(HaveOccurred())
-			mutatedStr := string(mutated)
+				// Read back the file the deliverer wrote.
+				mutated, err := os.ReadFile(taskFile)
+				Expect(err).NotTo(HaveOccurred())
+				mutatedStr := string(mutated)
 
-			// Regression assertions — the bug-fix invariant lives here.
-			// Each of these failed against the OLD code (AgentStatusDone
-			// on escalation) because the framework switch wrote
-			// phase: done + status: completed.
-			Expect(mutatedStr).To(ContainSubstring("status: in_progress"))
-			Expect(mutatedStr).To(ContainSubstring("phase: planning"))
+				// Regression assertions — the bug-fix invariant lives here.
+				// Each of these failed against the OLD code (AgentStatusDone
+				// on escalation) because the framework switch wrote
+				// phase: done + status: completed.
+				Expect(mutatedStr).To(ContainSubstring("status: in_progress"))
+				Expect(mutatedStr).To(ContainSubstring("phase: planning"))
 
-			// Defense in depth: explicitly negate the bug state.
-			Expect(mutatedStr).NotTo(ContainSubstring("status: completed"))
-			Expect(mutatedStr).NotTo(ContainSubstring("phase: done"))
+				// Defense in depth: explicitly negate the bug state.
+				Expect(mutatedStr).NotTo(ContainSubstring("status: completed"))
+				Expect(mutatedStr).NotTo(ContainSubstring("phase: done"))
 
-			// Sanity: assignee cleared, previous_assignee set
-			// (these were already correct in the buggy version — included
-			// here so a future refactor doesn't accidentally regress the
-			// escalation rule's other half).
-			// Note: YAML serializes empty string as "assignee: " (no quotes).
-			// We use a regexp to match the line exactly (start of line, assignee:,
-			// optional space, then newline — not "assignee: github-releaser-agent").
-			assigneeLineRegex := `(?m)^assignee:\s*$\n`
-			Expect(mutatedStr).To(MatchRegexp(assigneeLineRegex))
-			Expect(mutatedStr).To(ContainSubstring("previous_assignee: github-releaser-agent"))
+				// Sanity: assignee cleared, previous_assignee set
+				// (these were already correct in the buggy version — included
+				// here so a future refactor doesn't accidentally regress the
+				// escalation rule's other half).
+				// Note: YAML serializes empty string as "assignee: " (no quotes).
+				// We use a regexp to match the line exactly (start of line, assignee:,
+				// optional space, then newline — not "assignee: github-releaser-agent").
+				assigneeLineRegex := `(?m)^assignee:\s*$\n`
+				Expect(mutatedStr).To(MatchRegexp(assigneeLineRegex))
+				Expect(mutatedStr).To(ContainSubstring("previous_assignee: github-releaser-agent"))
 
-			// Claude must NOT have been invoked — P1 escalation
-			// short-circuits before classification.
-			Expect(fakeRunner.RunCallCount()).To(Equal(0))
+				// Claude must NOT have been invoked — P1 escalation
+				// short-circuits before classification.
+				Expect(fakeRunner.RunCallCount()).To(Equal(0))
 
-			// Avoid "imported and not used" if claudelib is otherwise
-			// unreferenced by this block.
-			var _ claudelib.ClaudeRunner = fakeRunner
-		})
+				// Avoid "imported and not used" if claudelib is otherwise
+				// unreferenced by this block.
+				var _ claudelib.ClaudeRunner = fakeRunner
+			},
+		)
 	})
 })
 
