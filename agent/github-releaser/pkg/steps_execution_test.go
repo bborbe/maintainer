@@ -236,6 +236,104 @@ task_identifier: gh-release-bborbe-example-master-049a
 		})
 	})
 
+	Context("clone_url normalization end-to-end", func() {
+		const sshTaskMD = `---
+status: in_progress
+phase: execution
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/example
+clone_url: git@github.com:bborbe/example.git
+ref: master
+current_version: v1.2.7
+task_identifier: gh-release-bborbe-example-master-ssh
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "patch",
+  "reasoning": "fix-only batch",
+  "current_version": "v1.2.7",
+  "next_version": "1.2.8",
+  "next_version_header": "## v1.2.8",
+  "header_prefix_style": "v",
+  "bullets": ["fix: thing"]
+}
+` + "```" + `
+`
+
+		It("rewrites an SSH clone_url to token-authenticated HTTPS before Clone", func() {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.TagReturns(nil)
+			fakeOps.PushReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "test-token")
+			md, err := agentlib.ParseMarkdown(context.Background(), sshTaskMD)
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+			Expect(fakeOps.CloneCallCount()).To(Equal(1))
+			_, gotCloneURL, _, _ := fakeOps.CloneArgsForCall(0)
+			Expect(gotCloneURL).To(Equal("https://x-access-token:test-token@github.com/bborbe/example.git"))
+		})
+	})
+
+	DescribeTable("normalizes clone_url before clone (empty token isolates normalization)",
+		func(inputCloneURL, wantCloneURL string) {
+			taskMD := `---
+status: in_progress
+phase: execution
+task_identifier: gh-release-norm-table
+clone_url: ` + inputCloneURL + `
+ref: master
+---
+
+## Plan
+
+` + "```json" + `
+{"outcome":"ready","next_version":"1.2.8","next_version_header":"## v1.2.8"}
+` + "```" + `
+`
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.TagReturns(nil)
+			fakeOps.PushReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "") // empty token → injectToken is a no-op
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeOps.CloneCallCount()).To(Equal(1))
+			_, gotCloneURL, _, _ := fakeOps.CloneArgsForCall(0)
+			Expect(gotCloneURL).To(Equal(wantCloneURL))
+		},
+		Entry("scp form", "git@github.com:owner/repo.git", "https://github.com/owner/repo.git"),
+		Entry("ssh:// form", "ssh://git@github.com/owner/repo.git", "https://github.com/owner/repo.git"),
+		Entry("https with .git unchanged", "https://github.com/owner/repo.git", "https://github.com/owner/repo.git"),
+		Entry("https without .git unchanged", "https://github.com/owner/repo", "https://github.com/owner/repo"),
+		Entry("unrecognized form unchanged", "git://example.com/owner/repo.git", "git://example.com/owner/repo.git"),
+	)
+
 	Context("clone failure", func() {
 		It("Clone returns error → Result(failed); Status=Failed; Commit NOT called", func() {
 			fakeOps := &gitmocks.GitOps{}

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
+spec: [053-migrate-pr-reviewer-to-maintainer-yaml]
 summary: Delegated MaintainerConfig parsing in github-release watcher to shared lib/maintainerconfig package; deleted local types; counterfeiter mock regenerated
 container: maintainer-pr-reviewer-yaml-exec-208-spec-052-watcher-shared-type
 dark-factory-version: v0.173.0

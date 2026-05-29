@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: 'Added normalizeCloneURLToHTTPS helper to github-releaser that rewrites SSH clone URLs (git@github.com: and ssh://git@github.com/) to canonical HTTPS before token injection, plus end-to-end and table-driven tests covering all URL forms'
+container: maintainer-clone-https-exec-210-github-releaser-clone-https
+dark-factory-version: v0.173.0
 created: "2026-05-30T00:00:00Z"
 queued: "2026-05-29T23:11:44Z"
+started: "2026-05-29T23:11:53Z"
+completed: "2026-05-29T23:13:31Z"
 ---
 
 <summary>
