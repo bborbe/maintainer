@@ -1,14 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [052-fleet-app-only-auth]
+summary: Audit complete — no live GH_TOKEN env declarations found in four services; one accurate historical comment in pr-reviewer k8s manifest left unchanged
+container: maintainer-fleet-app-auth-exec-210-spec-052-report-stale-gh-token-env
+dark-factory-version: v0.173.0
 created: "2026-05-29T18:33:00Z"
 queued: "2026-05-29T18:24:44Z"
-completed: "2026-05-29T18:32:10Z"
-lastFailReason: |-
-    setup workflow: git merge origin default branch: merge origin/master: error: Merging is not possible because you have unmerged files.
-    hint: Fix them up in the work tree, and then use 'git add/rm <file>'
-    hint: as appropriate to mark resolution and make a commit.
-    fatal: Exiting because of an unresolved conflict.: exit status 128
+started: "2026-05-29T19:39:37Z"
+completed: "2026-05-29T19:40:15Z"
 ---
 
 <summary>
