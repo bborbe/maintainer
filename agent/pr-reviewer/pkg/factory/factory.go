@@ -34,7 +34,7 @@ const serviceName = "maintainer-agent-pr-reviewer"
 // gets broader git access for cross-file reads; posting happens in-process
 // via the PrPoster (Go net/http, not gh CLI) after the LLM step completes,
 // gated by bot-identity self-check (GET /app slug-derived login) and
-// per-repo .pr-reviewer.yaml (autoApprove: bool). The ai_review phase
+// per-repo .maintainer.yaml (prReviewer.autoApprove: bool). The ai_review phase
 // independently verifies the post via GET /pulls/{n}/reviews before
 // advancing to done.
 var (

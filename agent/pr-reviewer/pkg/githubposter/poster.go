@@ -63,7 +63,7 @@ type postReviewResp struct {
 }
 
 // PostLGTM posts a COMMENT review with body "Reviewed by <botLogin> — no concerns flagged."
-// workDir is ignored (no .pr-reviewer.yaml lookup needed for LGTM).
+// workDir is ignored (no .maintainer.yaml lookup needed for LGTM).
 // Verdict is not applicable — always COMMENT event.
 func (p *prPoster) PostLGTM(
 	ctx context.Context,
@@ -88,11 +88,11 @@ func (p *prPoster) PostLGTM(
 
 func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostResult {
 	start := time.Time(p.currentDateTime.Now())
-	config, err := ReadAutoApproveConfig(ctx, req.WorkDir)
+	autoApprove, err := ReadAutoApprove(ctx, req.WorkDir)
 	if err != nil {
 		return prpkg.PostResult{
 			Outcome:      "failed",
-			FailureStep:  "read .pr-reviewer.yaml",
+			FailureStep:  "read .maintainer.yaml",
 			Class:        prpkg.ErrorClassPermanent,
 			EscalateHint: true,
 			Attempt:      1,
@@ -104,7 +104,7 @@ func (p *prPoster) Post(ctx context.Context, req prpkg.PostRequest) prpkg.PostRe
 		result.ElapsedMs = time.Since(start).Milliseconds()
 		return result
 	}
-	event, body, warnings := mapVerdictAndSummary(req.Verdict, config.AutoApprove, req.Summary)
+	event, body, warnings := mapVerdictAndSummary(req.Verdict, autoApprove, req.Summary)
 	result := p.postAndVerify(ctx, req.PR, req.HeadSHA, event, body, warnings)
 	result.ElapsedMs = time.Since(start).Milliseconds()
 	return result

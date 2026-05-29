@@ -1,9 +1,19 @@
-# migrate-pr-reviewer-to-maintainer-yaml
+---
+status: verifying
+tags:
+    - dark-factory
+    - spec
+approved: "2026-05-29T14:47:05Z"
+generating: "2026-05-29T16:22:56Z"
+prompted: "2026-05-29T16:22:56Z"
+verifying: "2026-05-29T16:37:24Z"
+branch: dark-factory/migrate-pr-reviewer-to-maintainer-yaml
+---
 
 ## Summary
 
 - Migrate the pr-reviewer agent's per-repo trust config off `.pr-reviewer.yaml` onto `.maintainer.yaml`, under a `prReviewer` top-level namespace — the migration spec 045 explicitly deferred (its Non-goals: "Migrating the pr-reviewer agent off `.pr-reviewer.yaml` onto `.maintainer.yaml`. Tracked separately.").
-- Namespace key is camelCase `prReviewer` (NOT kebab `prReviewer`), consistent with the camelCase field names (`autoApprove`, `autoRelease`) and the already-shipped `release` namespace. The whole `.maintainer.yaml` document stays camelCase.
+- Namespace key is camelCase `prReviewer` (NOT kebab `pr-reviewer`), consistent with the camelCase field names (`autoApprove`, `autoRelease`) and the already-shipped `release` namespace. The whole `.maintainer.yaml` document stays camelCase. This intentionally supersedes spec 045's tentative kebab `pr-reviewer:` key (045 named it in its Non-goals as future work but shipped no consumer of that key — its parser ignores unknown top-level keys — so there is nothing to migrate).
 - v1 `prReviewer` schema: a single field, `autoApprove: bool`, mapped from `.maintainer.yaml: prReviewer.autoApprove`. Same semantics as today's `.pr-reviewer.yaml: autoApprove`.
 - Introduce a shared `lib/maintainerconfig` package holding the **single** `.maintainer.yaml` schema with all bot namespaces as sibling top-level keys (`release`, `prReviewer`) plus a pure `Parse([]byte)`. Both the github-release watcher and the pr-reviewer agent consume this one type — no divergent definitions of the same file.
 - Clean break: the pr-reviewer agent reads `.maintainer.yaml: prReviewer.autoApprove` exclusively. The `.pr-reviewer.yaml` reader, its `AutoApproveConfig` type, and its tests are removed. No fallback. We are early and we control every repo currently using pr-reviewer.
@@ -41,7 +51,7 @@ The pr-reviewer agent's auto-approve decision is made exclusively by reading `.m
 ## Constraints
 
 - Repository: `~/Documents/workspaces/maintainer`; new worktree `~/Documents/workspaces/maintainer-pr-reviewer-yaml`, branch `feat/pr-reviewer-maintainer-yaml`, forked off `origin/master`.
-- New shared code lives in `lib/maintainerconfig/`. Consumers changed: `agent/pr-reviewer/pkg/githubposter/` and `watcher/github-release/pkg/`. No other agent or watcher is touched.
+- New shared code lives in `lib/maintainerconfig/` as a plain package inside the existing `lib` Go module (`github.com/bborbe/maintainer/lib`) — NOT its own module, NOT its own Makefile. It sits beside `lib/repoallowlist` (the precedent: plain package, no per-package Makefile) and is built/tested via the `lib` module's top-level `make precommit`. Consumers changed: `agent/pr-reviewer/pkg/githubposter/` and `watcher/github-release/pkg/`. No other agent or watcher is touched.
 - Error wrapping must use `github.com/bborbe/errors` context form (`errors.New(ctx, …)`, `errors.Wrap(ctx, err, …)`, `errors.Wrapf(ctx, err, …)`). Never `fmt.Errorf` on production paths.
 - Tests use Ginkgo v2 + Gomega, external `_test` packages, matching existing conventions.
 - Mocks regenerated via the existing `make generate` (counterfeiter v6). No new tooling.
@@ -74,7 +84,7 @@ The pr-reviewer agent's auto-approve decision is made exclusively by reading `.m
 
 ## Acceptance Criteria
 
-- [ ] `make precommit` exits 0 in each touched module (`lib/maintainerconfig` if it has its own, `agent/pr-reviewer`, `watcher/github-release`) — evidence: exit code 0.
+- [ ] `make precommit` exits 0 in each touched module (`lib`, `agent/pr-reviewer`, `watcher/github-release`) — evidence: exit code 0.
 - [ ] A shared package exists at `lib/maintainerconfig/` exporting a struct with both `Release` (`AutoRelease bool`) and `PrReviewer` (`AutoApprove bool`) sections and a pure parse function — evidence: `grep -rn "PrReviewer\|AutoApprove\|AutoRelease" lib/maintainerconfig/` shows all three fields.
 - [ ] `grep -rn "\.pr-reviewer\.yaml\|AutoApproveConfig" agent/pr-reviewer/` returns zero matches — evidence: empty output, exit code 1.
 - [ ] `grep -rn "\.maintainer\.yaml" agent/pr-reviewer/pkg/githubposter/` returns at least one match — evidence: non-empty output.
@@ -89,8 +99,8 @@ The pr-reviewer agent's auto-approve decision is made exclusively by reading `.m
 
 ```
 cd ~/Documents/workspaces/maintainer-pr-reviewer-yaml
-make -C lib/maintainerconfig precommit 2>/dev/null || (cd lib/maintainerconfig && go test -cover ./...)
-cd agent/pr-reviewer && make precommit
+cd lib && make precommit
+cd ../agent/pr-reviewer && make precommit
 cd ../../watcher/github-release && make precommit
 cd ../..
 grep -rn "\.pr-reviewer\.yaml\|AutoApproveConfig" agent/pr-reviewer/pkg/
@@ -110,5 +120,4 @@ If we ship nothing, pr-reviewer keeps reading `.pr-reviewer.yaml` and the watche
 
 ## Open Questions
 
-- Whether `lib/maintainerconfig` gets its own `Makefile`/module or is a plain package compiled by its consumers' modules. Agent decides at impl time based on the existing `lib/` layout (e.g. how `lib/repoallowlist` is structured).
 - Whether to keep the agent reader function named `ReadAutoApproveConfig` (returns just the bool) or rename to e.g. `ReadMaintainerConfig` (returns the whole config, caller picks `.PrReviewer.AutoApprove`). Either is fine; the spec constrains behavior, not the name.
