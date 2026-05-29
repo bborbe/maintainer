@@ -95,11 +95,12 @@ func Resolve(ctx context.Context, cfg Config) (string, error) {
 			return "", errors.Wrap(ctx, err, "mint github app iat")
 		}
 		glog.V(1).Infof(
-			"github-releaser auth mode=github-app app_id=%d installation_id=%d",
+			"github-releaser: minted github-app iat app_id=%d installation_id=%d",
 			cfg.AppID, cfg.InstallationID,
 		)
 		return iat, nil
 	default:
+		// AuthModeNone (or any future unhandled mode): no usable credential.
 		return "", errors.Errorf(
 			ctx,
 			"github-releaser auth: App credentials required — set APP_ID + INSTALLATION_ID + (PEM_KEY_FILE or PEM_KEY)",
