@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubauth"
 )
@@ -72,14 +73,10 @@ type application struct {
 	KafkaBrokers libkafka.Brokers        `required:"false" arg:"kafka-brokers" env:"KAFKA_BROKERS" usage:"Comma separated list of Kafka brokers"`
 	TaskID       agentlib.TaskIdentifier `required:"false" arg:"task-id"       env:"TASK_ID"       usage:"Agent task identifier for publishing results back to task controller"`
 
-	// GitHub token for the planning fetcher and execution push.
-	// Accepted as a fallback when App credentials are not configured.
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub PAT fallback for CHANGELOG fetch and push (App auth preferred)" display:"length"`
-
-	// GitHub App authentication. When AppID + InstallationID + (PEMKeyFile or
-	// PEMKey) are set, the pod mints an installation access token at startup
-	// and uses it in place of GHToken (see Run() for the resolution order).
-	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); when set, App auth is used instead of GH_TOKEN"`
+	// GitHub App authentication. AppID + InstallationID + (PEMKeyFile or
+	// PEMKey) are required; the pod mints an installation access token at
+	// startup and forwards it to the Claude/git subprocess (see Run()).
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric)"`
 	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
 	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
 	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
@@ -110,14 +107,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		InstallationID: a.InstallationID,
 		PEMKeyFile:     a.PEMKeyFile,
 		PEMKey:         a.PEMKey,
-		GHToken:        a.GHToken,
 	})
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
 		return err
 	}
-	a.GHToken = resolvedToken
 
 	deliverer, cleanup, err := a.createDeliverer(ctx)
 	if err != nil {
@@ -127,12 +122,17 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer cleanup()
 
-	env := a.buildEnv()
+	env := pkg.BuildEnv(
+		resolvedToken,
+		a.AnthropicBaseURL,
+		a.AnthropicAuthToken,
+		a.AnthropicModel.String(),
+	)
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,
 		a.AnthropicModel,
-		a.GHToken,
+		resolvedToken,
 		env,
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
@@ -151,25 +151,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	jobMetrics.RecordRun(result.Status)
 	jobMetrics.RecordDuration(time.Since(start))
 	return agentlib.PrintResult(ctx, result)
-}
-
-// buildEnv assembles the env map forwarded into the Claude CLI subprocess.
-// Only non-empty values are set so the subprocess sees a clean env.
-func (a *application) buildEnv() map[string]string {
-	env := map[string]string{}
-	if a.GHToken != "" {
-		env["GH_TOKEN"] = a.GHToken
-	}
-	if a.AnthropicBaseURL != "" {
-		env["ANTHROPIC_BASE_URL"] = a.AnthropicBaseURL
-	}
-	if a.AnthropicAuthToken != "" {
-		env["ANTHROPIC_AUTH_TOKEN"] = a.AnthropicAuthToken
-	}
-	if a.AnthropicModel != "" {
-		env["ANTHROPIC_MODEL"] = a.AnthropicModel.String()
-	}
-	return env
 }
 
 // createDeliverer builds the Kafka deliverer when TASK_ID is set,

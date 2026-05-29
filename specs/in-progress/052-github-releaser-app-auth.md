@@ -9,10 +9,10 @@ branch: dark-factory/github-releaser-app-auth
 
 ## Summary
 
-- Migrate `agent/github-releaser` from PAT-only auth (`GH_TOKEN`) to **GitHub App installation-token auth**, mirroring the resolution order already shipped in `agent/pr-reviewer/main.go` exactly.
-- App fields (`APP_ID` + `INSTALLATION_ID` + `PEM_KEY_FILE` or `PEM_KEY`) mint an installation access token at pod startup via the same agent-lib helper the pr-reviewer uses; `GH_TOKEN` (PAT) stays accepted as a fallback for local dev/tests.
+- Migrate `agent/github-releaser` from PAT-only auth (`GH_TOKEN`) to **GitHub App installation-token auth ONLY**, reusing the same agent-lib mint helper as `agent/pr-reviewer`.
+- App fields (`APP_ID` + `INSTALLATION_ID` + `PEM_KEY_FILE` or `PEM_KEY`) mint an installation access token at pod startup. **No PAT fallback** — if App credentials are absent, the binary errors before any clone. (The PAT credential type was retired fleet-wide; a dormant PAT path would only widen the auth surface on a push-capable agent.)
 - This is the code half of "make the releaser deployable/runnable" — fleet-wide PAT (`GH_TOKEN`) auth was retired on 2026-05-24, so the agent cannot authenticate in the cluster until it speaks App auth.
-- The single effective token (minted IAT, or PAT fallback) flows to BOTH the planning fetcher (changelog HTTP fetch) AND the execution step's push, identical to today's single-token wiring through the factory.
+- The single minted IAT flows to BOTH the planning fetcher (changelog HTTP fetch) AND the execution step's push, via the existing single-token wiring through the factory. (The IAT is still forwarded to the Claude/git subprocess as the `GH_TOKEN` env var — that is the credential *value*, not the retired PAT input path.)
 - Code-only: this spec wires the binary to READ `APP_ID` / `INSTALLATION_ID` / `PEM_KEY*` from env/secret. Writing k8s manifests, creating the App, and granting branch-protection bypass are out of scope.
 
 ## Problem
@@ -21,7 +21,7 @@ The github-releaser agent (Phase 2) authenticates with `GH_TOKEN` only — the c
 
 ## Goal
 
-After this work, the github-releaser binary authenticates as a GitHub App installation when App credentials are present (falling back to `GH_TOKEN` when they are not, and erroring clearly before any clone when neither is configured). The minted installation token reaches both the planning fetcher and the execution push, identically to the current single-token wiring. The resolution order and env-var names match the pr-reviewer agent exactly.
+After this work, the github-releaser binary authenticates **only** as a GitHub App installation: when App credentials are present it mints an IAT; when they are absent it errors clearly before any clone. There is no PAT fallback. The minted installation token reaches both the planning fetcher and the execution push, identically to the current single-token wiring. The App env-var names match the pr-reviewer agent exactly.
 
 ## Non-goals
 
@@ -34,9 +34,8 @@ After this work, the github-releaser binary authenticates as a GitHub App instal
 ## Desired Behavior
 
 1. The binary accepts four new config fields with env names **identical to pr-reviewer**: `APP_ID` (int64, env `APP_ID`), `INSTALLATION_ID` (int64, env `INSTALLATION_ID`), `PEM_KEY_FILE` (string, env `PEM_KEY_FILE`), `PEM_KEY` (string, env `PEM_KEY`, `display:"length"`).
-2. At startup, before any clone, auth resolves in this order: (a) when `APP_ID != 0` AND `INSTALLATION_ID != 0` AND (`PEM_KEY_FILE` set OR `PEM_KEY` set) → mint an installation access token via `lib/githubapp.MintIAT` (preferring `PEMPath` when both PEM forms are present, mirroring pr-reviewer) and use it as the effective token; (b) else when `GH_TOKEN` is non-empty → use the PAT, logging a pat-fallback warning; (c) else → return a clear error naming the required env vars and exit non-zero.
-3. When both App credentials and `GH_TOKEN` are set, App auth wins and a warning notes `GH_TOKEN` is ignored (mirroring pr-reviewer).
-4. The effective token (minted IAT or PAT) flows to BOTH the planning fetcher (`githubchangelog.NewHTTPFetcher`) AND the execution step (`NewExecutionStep`), via the existing single-token wiring through `pkg/factory` — no second token is introduced.
+2. At startup, before any clone, auth resolves: (a) when `APP_ID != 0` AND `INSTALLATION_ID != 0` AND (`PEM_KEY_FILE` set OR `PEM_KEY` set) → mint an installation access token via `lib/githubapp.MintIAT` (preferring `PEMPath` when both PEM forms are present) and use it as the effective token; (b) else → return a clear error naming the required App env vars and exit non-zero. There is no `GH_TOKEN` PAT fallback.
+3. The minted IAT flows to BOTH the planning fetcher (`githubchangelog.NewHTTPFetcher`) AND the execution step (`NewExecutionStep`), via the existing single-token wiring through `pkg/factory` — no second token is introduced. It is also forwarded to the Claude/git subprocess as the `GH_TOKEN` env var (the credential value, carrying the IAT — not the retired PAT input path).
 
 ## Constraints
 
@@ -51,12 +50,11 @@ After this work, the github-releaser binary authenticates as a GitHub App instal
 
 | Trigger | Detection | Expected behavior | Recovery | Reversibility | Concurrency |
 |---------|-----------|-------------------|----------|---------------|-------------|
-| Neither App creds nor `GH_TOKEN` set | startup error returned before any clone | binary exits non-zero with message naming required env vars; no clone, no fetch, no push | operator sets env and re-runs | reversible (nothing pushed) | n/a — fails before work |
+| App creds absent/incomplete (no `APP_ID`/`INSTALLATION_ID`/PEM) | startup error returned before any clone | binary exits non-zero with message naming required App env vars; no clone, no fetch, no push | operator sets the App env and re-runs | reversible (nothing pushed) | n/a — fails before work |
 | `MintIAT` fails: malformed PEM | pod exits non-zero at startup; log line `resolve PEM: ...` / `mint IAT: ...`; CrashLoopBackOff | startup error returned; no clone, no push | operator fixes the PEM in the Secret; controller retry re-mints | reversible | n/a — fails before work |
 | GitHub IAT exchange unavailable / 4xx-5xx / network error mid-mint | pod exits non-zero; startup log line `mint IAT: ...`; CrashLoopBackOff | startup error; no clone, no push | controller retry (per its cap) re-mints later | reversible | n/a |
 | GitHub IAT endpoint rate-limited | pod exits non-zero; startup log line `mint IAT: ...` citing 403/429 | startup error; no clone, no push | controller retry after backoff re-mints | reversible | n/a |
 | Clock skew makes minted JWT appear expired (`iat`/`exp` rejected) | pod exits non-zero; startup log line `mint IAT: ...` citing JWT rejection | startup error; no clone, no push | controller retry; `ghinstallation/v2` re-mints a fresh JWT each call | reversible | n/a |
-| Both App creds and `GH_TOKEN` set | resolution sees both | App wins; warning logged that `GH_TOKEN` is ignored; proceeds with IAT | n/a (not a failure) | n/a | n/a |
 
 ## Security / Abuse Cases
 
@@ -70,10 +68,9 @@ After this work, the github-releaser binary authenticates as a GitHub App instal
 - [ ] `make precommit` exits 0 in `agent/github-releaser/` — evidence: exit code 0.
 - [ ] The binary's config struct declares `APP_ID`, `INSTALLATION_ID`, `PEM_KEY_FILE`, `PEM_KEY` with the pr-reviewer env names — evidence: `grep -nE 'env:"(APP_ID|INSTALLATION_ID|PEM_KEY_FILE|PEM_KEY)"' agent/github-releaser/main.go` returns 4 lines; the `PEM_KEY` line also matches `display:"length"`.
 - [ ] App-mode auth mints via `lib/githubapp` and no JWT is hand-rolled — evidence: `grep -rn 'githubapp.MintIAT' agent/github-releaser/` returns ≥1 line (location is an impl choice per the implementation note — main.go or a pkg helper), AND `grep -rn 'golang-jwt' agent/github-releaser/ | wc -l` returns `0`.
-- [ ] With App creds set and `GH_TOKEN` empty, the effective token is the minted IAT (not the PAT) and is the value wired to both fetcher and execution step — evidence: a Ginkgo unit test on the auth-resolution function (using `githubapp.Config.BaseURL` pointed at an `httptest` IAT endpoint, the pattern `lib/githubapp` tests already use) asserts the resolved effective token equals the stubbed IAT string; test passes under `make precommit`.
-- [ ] With `GH_TOKEN` set and no App creds, auth resolves to the PAT and logs a pat-fallback warning — evidence: Ginkgo unit test asserts the resolved effective token == the `GH_TOKEN` value; test passes.
-- [ ] With both App creds and `GH_TOKEN` set, App wins — evidence: Ginkgo unit test asserts the resolved effective token == the stubbed IAT (NOT the PAT value); test passes.
-- [ ] With neither configured, startup returns a non-nil error naming the required env vars before any clone — evidence: Ginkgo unit test asserts a non-nil error whose message contains both `APP_ID` and `GH_TOKEN`; test passes.
+- [ ] With App creds set, the effective token is the minted IAT and is the value wired to both fetcher and execution step — evidence: a Ginkgo unit test on the auth-resolution function (using `githubapp.Config.BaseURL` pointed at an `httptest` IAT endpoint, the pattern `lib/githubapp` tests already use) asserts the resolved effective token equals the stubbed IAT string; test passes under `make precommit`.
+- [ ] With both PEM forms set, `PEM_KEY_FILE` wins silently — evidence: Ginkgo unit test sets a valid `PEM_KEY_FILE` plus a garbage `PEM_KEY`, asserts the resolved token equals the stubbed IAT (proving the file PEM was used); test passes.
+- [ ] With App creds absent, startup returns a non-nil error before any clone and there is no PAT fallback — evidence: Ginkgo unit test asserts a non-nil error whose message names the required App env vars (`APP_ID`/`INSTALLATION_ID`/`PEM_KEY*`) and does NOT mention `GH_TOKEN`; test passes. Plus `grep -rn 'AuthModePATFallback' agent/github-releaser/ | wc -l` returns `0`.
 
 Scenario coverage: NO new scenario. The behavior is reachable by unit tests on the auth-resolution function against an `httptest` IAT endpoint (the exact pattern `lib/githubapp` tests already use) — real Docker / real `gh` / real cluster are not needed, and the pr-reviewer migration of the same shape shipped with no scenario. Live App-auth end-to-end validation belongs to the deploy step (which owns the manifests and the real App).
 
