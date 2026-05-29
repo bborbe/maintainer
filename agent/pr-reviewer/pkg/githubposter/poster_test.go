@@ -125,9 +125,9 @@ var _ = Describe("PrPoster", func() {
 	})
 
 	writeYAML := func(autoApprove bool) {
-		content := fmt.Sprintf("autoApprove: %v\n", autoApprove)
+		content := fmt.Sprintf("prReviewer:\n  autoApprove: %v\n", autoApprove)
 		Expect(
-			os.WriteFile(filepath.Join(tmpDir, ".pr-reviewer.yaml"), []byte(content), 0600),
+			os.WriteFile(filepath.Join(tmpDir, ".maintainer.yaml"), []byte(content), 0600),
 		).To(Succeed())
 	}
 
