@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- chore(spec 052 review): drop now-indirect `golang.org/x/oauth2` from `watcher/github-pr` go.mod (go mod tidy after PAT client removal); fix stale "App vs PAT" / "static-PAT via oauth2" doc comments in `watcher/github-build/pkg/auth` + `watcher/github-pr/pkg/githubclient.go`; correct `cmd/run-task` IAT comment
 - refactor(watcher/github-build,watcher/github-release): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch from shared `pkg/auth` resolver in both services; drop `tokenTransport` type and `golang.org/x/oauth2` import from github-release; remove PAT-fallback test specs; add App-mode success spec to github-build; reword `AppID` field usage strings that incorrectly reference GH_TOKEN
 - refactor(watcher/github-pr): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch in `resolveAuth`; remove `CreateGitHubPATClient` from factory; remove PAT-client test; add absent-App-credentials startup error test
 - refactor(agent/pr-reviewer): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token minted at startup; forward minted token to agent subprocess (gh CLI, git credential helper, repo manager, agent provider); delete `ResolveAuthMode` / `AuthMode` enum and PAT-fallback tests; add absent-App-credentials test

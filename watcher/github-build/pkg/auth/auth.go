@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package auth resolves the GitHub auth mode (App vs PAT) for the watcher binaries.
+// Package auth resolves a GitHub App HTTP client for the watcher binaries.
 package auth
 
 import (

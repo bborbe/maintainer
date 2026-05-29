@@ -113,7 +113,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
-	// Resolve auth: mint IAT before factory.RunAgent reads GHToken.
+	// Resolve auth: mint the GitHub App IAT before factory.RunAgent reads the resolved token.
 	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && a.PEMKeyFile != ""
 	if !useGitHubApp {
 		return errors.Errorf(

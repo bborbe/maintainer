@@ -90,8 +90,8 @@ type GitHubClient interface {
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
-// The httpClient must already carry authentication (either App auth via
-// lib/githubapp.NewClient, or static-PAT via oauth2.NewClient).
+// The httpClient must already carry authentication (App auth via
+// lib/githubapp.NewClient).
 func NewGitHubClient(httpClient *http.Client) GitHubClient {
 	return &githubClient{
 		client: gogithub.NewClient(httpClient),
