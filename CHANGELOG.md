@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- refactor(watcher/github-release): use shared `REPO_ALLOWLIST` env var instead of dedicated `WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST`; aligns release watcher with pr/build watchers (single allowlist per stage)
 - fix(agent/github-releaser): address PR #16 review — thread ctx through RewriteUnreleasedHeader / BumpVersion / extractFrontmatter (drop context.Background() in pure + business logic); add agent/github-releaser/LICENSE; add parseOwnerRepo + classifyValidationFailure unit tests + happy-path FetchCallCount assertion; add success-path glog to planning fetch + git clone
 - feat(agent/github-releaser): wire execution phase direct-push path — adds pkg/git GitOps interface + osExecGitOps shell-out impl + 8-category error classifier; extends pkg/changelog with RewriteUnreleasedHeader; adds pkg/steps_execution ExecutionStep that clones target repo, rewrites ## Unreleased → next version header, commits + annotated tags + pushes via GitOps; factory wires planning + execution phases together (spec 049)
 - feat(agent/github-releaser): add RewriteUnreleasedHeader to pkg/changelog — pure function that locates ## Unreleased (whitespace-tolerant) and replaces it with a caller-supplied header; used by execution step to rewrite the cloned repo's CHANGELOG before commit (spec 049)
