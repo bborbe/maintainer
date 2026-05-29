@@ -1,8 +1,12 @@
 ---
+status: prompted
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-05-29T17:59:25Z"
+generating: "2026-05-29T18:10:20Z"
+prompted: "2026-05-29T18:10:20Z"
+branch: dark-factory/fleet-app-only-auth
 ---
 
 ## Summary
