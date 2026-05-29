@@ -1,8 +1,10 @@
 ---
+status: approved
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-05-29T14:47:05Z"
+branch: dark-factory/migrate-pr-reviewer-to-maintainer-yaml
 ---
 
 ## Summary
