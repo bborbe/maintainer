@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [045-introduce-maintainer-yaml-release-gate]
+summary: 'Replaced GetAutoReleaseConfig/.dark-factory/config.yml trust gate with GetMaintainerConfig/.maintainer.yaml: release.autoRelease, flipped AutoReleaseFilter semantics from skip-when-true to pass-when-true, removed all legacy config code and tests, regenerated counterfeiter mock, updated README and decision-chains doc'
+container: maintainer-yaml-exec-196-spec-045-rewire-filter-and-remove-old-config
+dark-factory-version: v0.173.0
 created: "2026-05-29T12:00:00Z"
 queued: "2026-05-29T09:15:05Z"
+started: "2026-05-29T09:18:50Z"
+completed: "2026-05-29T09:26:41Z"
 ---
 
 <summary>

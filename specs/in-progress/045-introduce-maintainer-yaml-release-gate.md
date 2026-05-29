@@ -1,9 +1,11 @@
 ---
-status: approved
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-05-29T09:05:42Z"
+generating: "2026-05-29T09:23:36Z"
+prompted: "2026-05-29T09:23:36Z"
 branch: dark-factory/introduce-maintainer-yaml-release-gate
 ---
 

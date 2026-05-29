@@ -19,7 +19,7 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		}
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 3,
-			AutoRelease:       false,
+			AutoRelease:       true,
 		})).To(BeEmpty())
 	})
 
@@ -30,7 +30,7 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		}
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 0,
-			AutoRelease:       false,
+			AutoRelease:       true,
 		})).To(Equal("empty_unreleased"))
 	})
 
@@ -41,7 +41,7 @@ var _ = Describe("filter.TaskCreationFilters", func() {
 		}
 		Expect(chain.Skip(filter.Release{
 			UnreleasedBullets: 3,
-			AutoRelease:       true,
+			AutoRelease:       false,
 		})).To(Equal("auto_release"))
 	})
 

@@ -10,7 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- feat(watcher/github-release): add `.maintainer.yaml` fetch+parse surface to GitHubClient — `MaintainerConfig` type, `GetMaintainerConfig` method, `parseMaintainerConfig` parser; mirrors `GetChangelogContent` control flow (404 → zero-value, rate-limit → `ErrRateLimited`, 1 MiB cap); 10 Ginkgo tests covering all acceptance criteria branches
+- feat(watcher/github-release): replace `GetAutoReleaseConfig` / `.dark-factory/config.yml` trust gate with `GetMaintainerConfig` / `.maintainer.yaml: release.autoRelease`; flip `AutoReleaseFilter` semantics from "skip when true" to "pass when true" (positive opt-in gate); remove all legacy config code and tests; update README and decision-chains doc; counterfeiter mock regenerated
 - feat(watcher/github-release): add cmd/run-once smoke-test binary for rung-1 verification against real GitHub + dev Kafka; mirrors watcher/github-build/cmd/run-once structure with Poll-once semantics and Ginkgo test suite
 - feat(watcher/github-release): implement Watcher.Poll cycle (load cursor → ListRepos → per-repo gather/filter/publish → save cursor); cycle-abort on rate-limit or github_error skips cursor save; per-repo transient errors prune without aborting; add six Ginkgo tests covering all named acceptance criteria
 - feat(watcher/github-release): implement resolveAuth in main.go mirroring watcher/github-pr (App auth wins over PAT, partial-config rejected); frontmatter emits frozen Phase 1 contract (task_type: github-release, phase: planning, status: in_progress, stage, task_identifier, title, repo, clone_url, ref, current_version); body is operator-readable markdown header without bullet content
