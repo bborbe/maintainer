@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [052-fleet-app-only-auth]
+summary: Removed GH_TOKEN PAT authentication from watcher/github-pr; authenticate exclusively via GitHub App installation token
+container: maintainer-fleet-app-auth-exec-208-spec-052-github-pr-watcher-app-only
+dark-factory-version: v0.173.0
 created: "2026-05-29T18:31:00Z"
 queued: "2026-05-29T18:24:44Z"
+started: "2026-05-29T18:29:44Z"
+completed: "2026-05-29T18:32:08Z"
 ---
 
 <summary>

@@ -13,6 +13,24 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("resolveAuth", func() {
+	ctx := context.Background()
+
+	It("returns error when App credentials are not configured", func() {
+		// Ensure App credentials are unset
+		GinkgoT().Setenv("APP_ID", "")
+		GinkgoT().Setenv("INSTALLATION_ID", "")
+		GinkgoT().Setenv("PEM_KEY", "")
+
+		app := &application{}
+		client, err := app.resolveAuth(ctx)
+		Expect(err).NotTo(BeNil())
+		Expect(client).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("APP_ID"))
+		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+	})
+})
+
 var _ = DescribeTable("parseMaxPRAge",
 	func(raw string, expected libtime.Duration, expectError bool, errContains string) {
 		ctx := context.Background()

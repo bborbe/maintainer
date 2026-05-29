@@ -13,15 +13,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 )
 
-var _ = Describe("CreateGitHubPATClient", func() {
-	ctx := context.Background()
-
-	It("returns a non-nil *http.Client", func() {
-		client := factory.CreateGitHubPATClient(ctx, "ghp_test")
-		Expect(client).NotTo(BeNil())
-	})
-})
-
 var _ = Describe("CreateGitHubAppClient", func() {
 	ctx := context.Background()
 

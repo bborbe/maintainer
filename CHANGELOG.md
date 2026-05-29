@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- refactor(watcher/github-pr): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch in `resolveAuth`; remove `CreateGitHubPATClient` from factory; remove PAT-client test; add absent-App-credentials startup error test
 - refactor(agent/pr-reviewer): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token minted at startup; forward minted token to agent subprocess (gh CLI, git credential helper, repo manager, agent provider); delete `ResolveAuthMode` / `AuthMode` enum and PAT-fallback tests; add absent-App-credentials test
 - refactor(agent/pr-reviewer): migrate auto-approve config from `.pr-reviewer.yaml` to `.maintainer.yaml: prReviewer.autoApprove`; delete `AutoApproveConfig` type; delegate parsing to `github.com/bborbe/maintainer/lib/maintainerconfig`; update all per-repo filepath references in source, tests, and godoc
 - refactor(watcher/github-release): delegate MaintainerConfig parsing to `github.com/bborbe/maintainer/lib/maintainerconfig`; delete local `MaintainerConfig`/`MaintainerReleaseConfig`/`parseMaintainerConfig` definitions; counterfeiter mock regenerated

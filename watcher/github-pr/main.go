@@ -118,8 +118,7 @@ type application struct {
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
 	Listen           string           `required:"false" arg:"listen"            env:"LISTEN"            usage:"HTTP listen address (healthz/readiness/metrics)"                                                                                                                                                           default:":9090"`
-	GHToken          string           `required:"false" arg:"gh-token"          env:"GH_TOKEN"          usage:"GitHub PAT (legacy fallback when App credentials are not set)"                                                                                                                                                                                     display:"length"`
-	AppID            int64            `required:"false" arg:"app-id"            env:"APP_ID"            usage:"GitHub App ID (numeric); when set with InstallationID + PEMKey, App auth is used instead of GH_TOKEN"`
+	AppID            int64            `required:"false" arg:"app-id"            env:"APP_ID"            usage:"GitHub App ID (numeric); requires InstallationID + PEMKey to be set for App auth"`
 	InstallationID   int64            `required:"false" arg:"installation-id"   env:"INSTALLATION_ID"   usage:"GitHub App Installation ID (numeric)"`
 	PEMKey           string           `required:"false" arg:"pem-key"           env:"PEM_KEY"           usage:"GitHub App private key (PEM content from k8s Secret envFrom)"                                                                                                                                                                                      display:"length"`
 	KafkaBrokers     libkafka.Brokers `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma-separated Kafka broker list"`
@@ -139,13 +138,12 @@ type application struct {
 }
 
 // resolveAuth determines the GitHub auth mode from environment variables and returns
-// an authenticated *http.Client. App auth wins when APP_ID + INSTALLATION_ID + PEM_KEY
-// are all set; otherwise GH_TOKEN PAT fallback is used.
+// an authenticated *http.Client. App auth requires APP_ID + INSTALLATION_ID + PEM_KEY
+// all set.
 func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
 	appID := getEnvInt("APP_ID")
 	installationID := getEnvInt("INSTALLATION_ID")
 	pemKey := []byte(os.Getenv("PEM_KEY"))
-	token := os.Getenv("GH_TOKEN")
 
 	appPartial := (appID != 0) || (installationID != 0) || (len(pemKey) != 0)
 	appComplete := (appID != 0) && (installationID != 0) && (len(pemKey) != 0)
@@ -167,27 +165,18 @@ func (a *application) resolveAuth(ctx context.Context) (*http.Client, error) {
 		)
 	}
 
-	if appComplete {
-		if token != "" {
-			glog.Warningf(
-				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
-		}
-		glog.Infof(
-			"watcher auth mode=github-app app_id=%d installation_id=%d",
-			appID,
-			installationID,
+	if !appComplete {
+		return nil, errors.Errorf(
+			ctx,
+			"watcher auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY",
 		)
-		return factory.CreateGitHubAppClient(ctx, appID, installationID, pemKey)
 	}
-	if token != "" {
-		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
-		return factory.CreateGitHubPATClient(ctx, token), nil
-	}
-	return nil, errors.Errorf(
-		ctx,
-		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
+	glog.Infof(
+		"watcher auth mode=github-app app_id=%d installation_id=%d",
+		appID,
+		installationID,
 	)
+	return factory.CreateGitHubAppClient(ctx, appID, installationID, pemKey)
 }
 
 func (a *application) validateConfig(ctx context.Context) error {
