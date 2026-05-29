@@ -146,3 +146,43 @@ var _ = Describe("InferHeaderPrefixStyle", func() {
 			"v"),
 	)
 })
+
+var _ = Describe("RewriteUnreleasedHeader", func() {
+	DescribeTable("replaces ## Unreleased line with the given header",
+		func(input []byte, newHeader string, expected []byte) {
+			got, err := changelog.RewriteUnreleasedHeader(input, newHeader)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(got)).To(Equal(string(expected)))
+		},
+		Entry(
+			"rewrite unreleased — happy path replaces the heading and preserves bullets",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- feat: add foo\n- fix: bar\n\n## v1.0.0\n\n- initial\n",
+			),
+			"## v1.0.1",
+			[]byte(
+				"# Changelog\n\n## v1.0.1\n\n- feat: add foo\n- fix: bar\n\n## v1.0.0\n\n- initial\n",
+			),
+		),
+		Entry("rewrite unreleased — tolerates trailing whitespace on the heading line",
+			[]byte("# Changelog\n\n## Unreleased   \n\n- feat: bar\n\n## v0.9.0\n\n- old\n"),
+			"## v0.9.1",
+			[]byte("# Changelog\n\n## v0.9.1\n\n- feat: bar\n\n## v0.9.0\n\n- old\n")),
+		Entry("rewrite unreleased — first occurrence only when duplicate ## Unreleased present",
+			[]byte("## Unreleased\n\n- a\n\n## Unreleased\n\n- b\n"),
+			"## v1.2.8",
+			[]byte("## v1.2.8\n\n- a\n\n## Unreleased\n\n- b\n")),
+	)
+
+	DescribeTable("returns a wrapped error when ## Unreleased is absent",
+		func(input []byte) {
+			_, err := changelog.RewriteUnreleasedHeader(input, "## v1.2.3")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unreleased header not found"))
+		},
+		Entry("rewrite unreleased — error when no Unreleased heading present",
+			[]byte("# Changelog\n\n## v1.0.0\n\n- initial\n")),
+		Entry("rewrite unreleased — error on empty content",
+			[]byte("")),
+	)
+})

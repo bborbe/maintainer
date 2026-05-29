@@ -11,8 +11,11 @@ package changelog
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
+
+	bborbeerrors "github.com/bborbe/errors"
 )
 
 // Package-level compiled regexes for InferHeaderPrefixStyle.
@@ -236,4 +239,63 @@ func trimTrailingWhitespace(s string) string {
 		end--
 	}
 	return s[:end]
+}
+
+// RewriteUnreleasedHeader returns content with the "## Unreleased" line
+// replaced by newHeader (e.g. "## v1.2.8"). Whitespace-tolerant: trailing
+// spaces/tabs/CR on the Unreleased heading are accepted and discarded along
+// with the original line. All other lines (bullets, blank lines, other
+// headings) are preserved verbatim, including their original line endings.
+//
+// Line endings are normalized to `\n` on rewrite.
+//
+// newHeader is inserted as-is. The caller is responsible for the leading
+// "## " prefix and any trailing newline normalization is left to the
+// existing content's line-ending convention (the function preserves the
+// newline that followed the original "## Unreleased" line, if any).
+//
+// Returns a wrapped bborbe/errors error if "## Unreleased" is not present.
+// The caller (execution step) maps this to error_category: unreleased_not_found.
+//
+// Pure function — no IO, deterministic. Safe for concurrent use.
+func RewriteUnreleasedHeader(content []byte, newHeader string) ([]byte, error) {
+	if len(content) == 0 {
+		return nil, bborbeerrors.New(
+			context.Background(),
+			"unreleased header not found: empty content",
+		)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	// The bufio default 64KB token limit is plenty for CHANGELOGs.
+
+	var out bytes.Buffer
+	found := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !found && isHeading(line) && parseHeading(line) == "Unreleased" {
+			out.WriteString(newHeader)
+			out.WriteByte('\n')
+			found = true
+			continue
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, bborbeerrors.Wrap(context.Background(), err, "scan CHANGELOG content")
+	}
+	if !found {
+		return nil, bborbeerrors.New(context.Background(), "unreleased header not found")
+	}
+
+	// Preserve a trailing-newline-less input: if the original content did
+	// NOT end with '\n', drop the final '\n' we appended above.
+	result := out.Bytes()
+	if len(content) > 0 && content[len(content)-1] != '\n' && len(result) > 0 &&
+		result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	return result, nil
 }

@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [049-github-releaser-execution-phase-direct-push]
+summary: Added RewriteUnreleasedHeader pure function to pkg/changelog/changelog.go with 5-entry DescribeTable in changelog_test.go; coverage 96.4%; precommit exits 0.
+container: maintainer-github-releaser-exec-196-spec-049-changelog-rewrite-header
+dark-factory-version: v0.173.0
 created: "2026-05-29T00:00:00Z"
 queued: "2026-05-28T22:17:49Z"
+started: "2026-05-29T08:30:09Z"
+completed: "2026-05-29T08:32:49Z"
 ---
 
 <summary>
