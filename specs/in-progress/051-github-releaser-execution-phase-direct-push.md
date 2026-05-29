@@ -1,6 +1,7 @@
 ---
-status: approved
+status: verifying
 approved: "2026-05-28T21:49:43Z"
+verifying: "2026-05-29T14:40:08Z"
 branch: dark-factory/github-releaser-execution-phase-direct-push
 ---
 
