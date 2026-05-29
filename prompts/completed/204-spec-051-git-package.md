@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [049-github-releaser-execution-phase-direct-push]
+spec: [051-github-releaser-execution-phase-direct-push]
 summary: Created agent/github-releaser/pkg/git package with GitOps interface, osExecGitOps implementation, 8-category error_classifier enum, and counterfeiter mock
 container: maintainer-github-releaser-exec-195-spec-049-git-package
 dark-factory-version: v0.173.0

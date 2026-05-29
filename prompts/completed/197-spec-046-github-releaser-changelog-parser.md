@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [044-github-releaser-changelog-parser]
+spec: [046-github-releaser-changelog-parser]
 summary: Created github.com/bborbe/maintainer/agent/github-releaser/pkg/changelog with ValidateUnreleased/ExtractUnreleasedBullets/InferHeaderPrefixStyle functions, Ginkgo DescribeTable tests at 97.7% coverage, and root CHANGELOG entry
 container: maintainer-github-releaser-exec-188-spec-044-github-releaser-changelog-parser
 dark-factory-version: v0.173.0

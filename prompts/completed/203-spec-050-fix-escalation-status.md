@@ -31,7 +31,7 @@ Open questions / deviations from the requester's brief:
    logic, swap Step 5's deliverer construction accordingly.
 -->
 ---
-spec: ["048"]
+spec: [050-bug-github-releaser-escalation-wrong-status]
 status: draft
 created: "2026-05-28T19:00:00Z"
 ---

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [047-github-releaser-planning-phase-integration]
+spec: [049-github-releaser-planning-phase-integration]
 summary: Implemented PlanningStep for github-releaser agent with full test coverage
 container: maintainer-github-releaser-exec-192-spec-047-planning-step
 dark-factory-version: v0.173.0

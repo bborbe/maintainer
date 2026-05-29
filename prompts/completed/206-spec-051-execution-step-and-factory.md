@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [049-github-releaser-execution-phase-direct-push]
+spec: [051-github-releaser-execution-phase-direct-push]
 summary: Implemented execution phase for github-releaser agent — created steps_execution.go, result_output.go, steps_execution_test.go, wired factory with execution phase, added regression test, updated CHANGELOG
 container: maintainer-github-releaser-exec-197-spec-049-execution-step-and-factory
 dark-factory-version: v0.173.0

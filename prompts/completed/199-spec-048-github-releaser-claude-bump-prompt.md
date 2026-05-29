@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [046-github-releaser-claude-bump-prompt]
+spec: [048-github-releaser-claude-bump-prompt]
 summary: Created pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser achieving 90.3% coverage
 container: maintainer-github-releaser-exec-190-spec-046-github-releaser-claude-bump-prompt
 dark-factory-version: v0.173.0
