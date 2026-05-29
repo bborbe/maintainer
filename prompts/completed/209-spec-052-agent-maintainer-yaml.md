@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
+summary: 'Migrated pr-reviewer agent auto-approve config from .pr-reviewer.yaml to .maintainer.yaml: prReviewer.autoApprove via lib/maintainerconfig'
+container: maintainer-pr-reviewer-yaml-exec-209-spec-052-agent-maintainer-yaml
+dark-factory-version: v0.173.0
 created: "2026-05-29T15:32:00Z"
 queued: "2026-05-29T16:26:53Z"
+started: "2026-05-29T16:34:21Z"
+completed: "2026-05-29T16:37:24Z"
 ---
 
 <summary>

@@ -15,7 +15,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
 )
 
-var _ = Describe("ReadAutoApproveConfig", func() {
+var _ = Describe("ReadAutoApprove", func() {
 	var ctx context.Context
 	var tmpDir string
 
@@ -28,39 +28,36 @@ var _ = Describe("ReadAutoApproveConfig", func() {
 	})
 
 	DescribeTable(
-		"file variants",
-		func(content string, writeFile bool, expected githubposter.AutoApproveConfig, expectErr bool, errContains string) {
+		"maintainer.yaml variants",
+		func(content string, writeFile bool, expected bool, expectErr bool, errContains string) {
 			if writeFile {
 				err := os.WriteFile(
-					filepath.Join(tmpDir, ".pr-reviewer.yaml"),
+					filepath.Join(tmpDir, ".maintainer.yaml"),
 					[]byte(content),
 					0600,
 				)
 				Expect(err).NotTo(HaveOccurred())
 			}
-			cfg, err := githubposter.ReadAutoApproveConfig(ctx, tmpDir)
+			autoApprove, err := githubposter.ReadAutoApprove(ctx, tmpDir)
 			if expectErr {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring(errContains))
 			} else {
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cfg).To(Equal(expected))
+				Expect(autoApprove).To(Equal(expected))
 			}
 		},
-		Entry("file missing → AutoApprove false, no error",
-			"", false,
-			githubposter.AutoApproveConfig{AutoApprove: false}, false, ""),
-		Entry("autoApprove: true → AutoApprove true",
-			"autoApprove: true\n", true,
-			githubposter.AutoApproveConfig{AutoApprove: true}, false, ""),
-		Entry("autoApprove: false → AutoApprove false",
-			"autoApprove: false\n", true,
-			githubposter.AutoApproveConfig{AutoApprove: false}, false, ""),
-		Entry("field absent → AutoApprove false",
-			"someOtherField: hello\n", true,
-			githubposter.AutoApproveConfig{AutoApprove: false}, false, ""),
-		Entry("malformed YAML → error with parse prefix",
-			"autoApprove: [unclosed", true,
-			githubposter.AutoApproveConfig{}, true, "parse .pr-reviewer.yaml"),
+		Entry("file missing -> false, no error",
+			"", false, false, false, ""),
+		Entry("prReviewer.autoApprove: true -> true",
+			"prReviewer:\n  autoApprove: true\n", true, true, false, ""),
+		Entry("prReviewer.autoApprove: false -> false",
+			"prReviewer:\n  autoApprove: false\n", true, false, false, ""),
+		Entry("prReviewer key absent -> false",
+			"release:\n  autoRelease: true\n", true, false, false, ""),
+		Entry("only release populated (no prReviewer) -> false",
+			"release:\n  autoRelease: true\n", true, false, false, ""),
+		Entry("malformed YAML -> wrapped error",
+			"prReviewer:\n  autoApprove: [unclosed\n", true, false, true, "parse .maintainer.yaml"),
 	)
 })

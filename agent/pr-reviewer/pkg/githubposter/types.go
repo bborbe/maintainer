@@ -13,11 +13,6 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// AutoApproveConfig holds the parsed .pr-reviewer.yaml content.
-type AutoApproveConfig struct {
-	AutoApprove bool `yaml:"autoApprove"`
-}
-
 const (
 	// DefaultBotLogin is the GitHub login the agent posts as by default.
 	DefaultBotLogin = "ben-s-pull-request-reviewer[bot]"

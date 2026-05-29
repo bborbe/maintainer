@@ -21,7 +21,7 @@ type PrPoster interface {
 	Post(ctx context.Context, req PostRequest) PostResult
 	// PostLGTM posts an LGTM COMMENT review when planning finds no concerns.
 	// event is always "COMMENT"; body is "Reviewed by <botLogin> — no concerns flagged."
-	// workDir is optional (empty string is fine — no .pr-reviewer.yaml lookup needed for LGTM).
+	// workDir is optional (empty string is fine — no .maintainer.yaml lookup needed for LGTM).
 	// On success, returns a PostResult with Outcome="success" and PostedEvent="COMMENT".
 	// On failure, returns a PostResult with Outcome="failed" and ErrorClass/ErrorMessage set.
 	PostLGTM(ctx context.Context, pr prurl.PRInfo, headSHA, workDir, botLogin string) PostResult
