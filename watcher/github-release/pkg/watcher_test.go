@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/lib/maintainerconfig"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
@@ -74,9 +75,9 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				return []byte("## Unreleased\n\n## v0.0.1\n"), nil
 			}
 
-			ghClient.GetMaintainerConfigStub = func(_ context.Context, r pkg.Repo) (pkg.MaintainerConfig, error) {
-				return pkg.MaintainerConfig{
-					Release: pkg.MaintainerReleaseConfig{AutoRelease: true},
+			ghClient.GetMaintainerConfigStub = func(_ context.Context, r pkg.Repo) (maintainerconfig.MaintainerConfig, error) {
+				return maintainerconfig.MaintainerConfig{
+					Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
 				}, nil
 			}
 
@@ -210,7 +211,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				}
 
 				ghClient.GetMaintainerConfigReturns(
-					pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+					maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
 					nil,
 				)
 				publisher.PublishCreateReturns(true)
@@ -277,7 +278,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			}
 
 			ghClient.GetMaintainerConfigReturns(
-				pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+				maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
 				nil,
 			)
 		})
@@ -323,7 +324,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				nil,
 			)
 			ghClient.GetMaintainerConfigReturns(
-				pkg.MaintainerConfig{Release: pkg.MaintainerReleaseConfig{AutoRelease: true}},
+				maintainerconfig.MaintainerConfig{Release: maintainerconfig.ReleaseConfig{AutoRelease: true}},
 				nil,
 			)
 

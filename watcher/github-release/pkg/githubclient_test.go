@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/lib/maintainerconfig"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 )
 
@@ -330,7 +331,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 					pkg.Repo{Owner: "bborbe", Name: "x", DefaultBranch: "main"},
 				)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 
@@ -356,7 +357,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 
@@ -481,7 +482,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 				)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("parse .maintainer.yaml"))
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 
@@ -538,7 +539,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 					pkg.Repo{Owner: "bborbe", Name: "repo", DefaultBranch: "main"},
 				)
 				Expect(err).To(MatchError(pkg.ErrRateLimited))
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 
@@ -563,7 +564,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 				)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("get .maintainer.yaml"))
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 
@@ -590,7 +591,7 @@ var _ = Describe("pkg.GitHubClient", func() {
 				)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("too large"))
-				Expect(cfg).To(Equal(pkg.MaintainerConfig{}))
+				Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 			})
 		})
 	})
