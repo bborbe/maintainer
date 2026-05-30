@@ -7,14 +7,14 @@ The watcher is the **producer** half of the pipeline. It never modifies the targ
 ## Links
 
 Dev:
-
-- https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
-- https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
+https://dev.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/trigger
 
 Prod:
-
-- https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
-- https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/setloglevel/3
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/metrics
+https://prod.quant.benjamin-borbe.de/admin/maintainer-watcher-github-release/trigger
 
 ## How It Works
 
