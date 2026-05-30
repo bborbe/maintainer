@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.27.1
 
 - fix(agent/pr-reviewer): anchor the verdict-block parser window on the block's CLOSING brace instead of the `"verdict"` key line — a well-formed `"verdict": "approve"` whose long `comments` array pushed the key >50 lines above the closing brace fell outside the old key-line window, so `ParseVerdict` returned "no verdict block", fail-closed to request-changes, and posted a false `CHANGES_REQUESTED` (observed: maintainer PR #29). The block may now span arbitrarily many lines; the verdict block must still end at the bottom of the review (per the execution output-format spec), so earlier in-prose JSON examples stay ignored. Fail-closed-to-request-changes for genuinely empty/ambiguous/unknown verdicts is preserved (spec-030). No change to the `Verdict` type or the verdict→event mapping
 
