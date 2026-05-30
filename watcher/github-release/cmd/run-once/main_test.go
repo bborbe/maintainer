@@ -6,6 +6,10 @@ package main_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	stderrors "errors"
 	"net/http"
 	"testing"
@@ -25,6 +29,18 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
 )
+
+// generateTestPEM produces a fresh 2048-bit RSA PEM block for testing.
+func generateTestPEM() []byte {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+}
 
 // fakeProducerFactory returns a sarama mock SyncProducer that records calls in
 // memory — no network connection. Tests inject this so producer creation in
@@ -55,7 +71,9 @@ var _ = Describe("Run", func() {
 			RepoAllowlist:  "github.com/owner/repo",
 			CursorPath:     "/tmp/cursor.json",
 			KafkaBrokers:   libkafka.Brokers{"localhost:9092"},
-			GHToken:        "fake-token",
+			AppID:          1,
+			InstallationID: 2,
+			PEMKey:         string(generateTestPEM()),
 			CreateProducer: fakeProducerFactory(GinkgoT()),
 		}
 	})

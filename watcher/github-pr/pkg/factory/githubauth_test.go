@@ -13,15 +13,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 )
 
-var _ = Describe("CreateGitHubPATClient", func() {
-	ctx := context.Background()
-
-	It("returns a non-nil *http.Client", func() {
-		client := factory.CreateGitHubPATClient(ctx, "ghp_test")
-		Expect(client).NotTo(BeNil())
-	})
-})
-
 var _ = Describe("CreateGitHubAppClient", func() {
 	ctx := context.Background()
 
@@ -33,6 +24,15 @@ var _ = Describe("CreateGitHubAppClient", func() {
 
 	It("returns error when installationID is zero", func() {
 		client, err := factory.CreateGitHubAppClient(ctx, 1, 0, []byte("invalid"))
+		Expect(err).To(HaveOccurred())
+		Expect(client).To(BeNil())
+	})
+
+	It("returns error when App IDs are valid but the PEM is malformed", func() {
+		// Valid AppID + InstallationID so resolution passes the ID guards and
+		// reaches the ghinstallation transport construction, which fails to
+		// parse the bogus PEM bytes.
+		client, err := factory.CreateGitHubAppClient(ctx, 1, 2, []byte("not-a-valid-pem"))
 		Expect(err).To(HaveOccurred())
 		Expect(client).To(BeNil())
 	})
