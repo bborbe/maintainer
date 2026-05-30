@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-30T10:42:57Z"
 generating: "2026-05-30T11:04:58Z"
 prompted: "2026-05-30T11:04:58Z"
+verifying: "2026-05-30T19:13:01Z"
 branch: dark-factory/parallel-agent-reviews-bake-plugin-drop-pvc
 ---
 Tags: [[Dark Factory - Spec Writing Guide]]
