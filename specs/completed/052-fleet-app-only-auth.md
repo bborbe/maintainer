@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-29T17:59:25Z"
 generating: "2026-05-29T18:10:20Z"
 prompted: "2026-05-29T18:10:20Z"
 verifying: "2026-05-29T19:40:15Z"
+completed: "2026-05-30T11:15:52Z"
 branch: dark-factory/fleet-app-only-auth
 ---
 
