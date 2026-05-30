@@ -206,6 +206,72 @@ task_identifier: gh-release-bborbe-example-master-049a
 		)
 	})
 
+	Context("pre-push guard (CommittedFiles)", func() {
+		// The guard is the primary security assertion of the direct-push
+		// trust model: a release commit must change ONLY CHANGELOG.md. These
+		// specs prove it fails closed — Tag and Push are NEVER reached when
+		// the committed file set is wrong or unobtainable.
+		runGuard := func(committed []string, committedErr error) (agentlib.AgentResult, *gitmocks.GitOps, *agentlib.Markdown) {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
+				return "def5678", nil
+			}
+			fakeOps.CommittedFilesReturns(committed, committedErr)
+			fakeOps.TagReturns(nil)
+			fakeOps.PushReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "")
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			result, err := step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+			return result, fakeOps, md
+		}
+
+		assertFailClosed := func(fakeOps *gitmocks.GitOps, md *agentlib.Markdown, wantCategory string) {
+			// Fail closed: nothing tagged, nothing pushed.
+			Expect(fakeOps.TagCallCount()).To(Equal(0))
+			Expect(fakeOps.PushCallCount()).To(Equal(0))
+			got, err := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md,
+				"## Result",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Outcome).To(Equal("failed"))
+			Expect(string(got.ErrorCategory)).To(Equal(wantCategory))
+			Expect(got.Tag).To(BeEmpty())
+		}
+
+		It("extra files → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+			result, fakeOps, md := runGuard([]string{"CHANGELOG.md", "config.yml"}, nil)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unexpected_diff")
+		})
+
+		It(
+			"wrong single file → Status=Failed, error_category=unexpected_diff, no tag/push",
+			func() {
+				result, fakeOps, md := runGuard([]string{"main.go"}, nil)
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				assertFailClosed(fakeOps, md, "unexpected_diff")
+			},
+		)
+
+		It("CommittedFiles error → Status=Failed, error_category=unknown, no tag/push", func() {
+			result, fakeOps, md := runGuard(
+				nil,
+				errors.Errorf(context.Background(), "git diff-tree boom"),
+			)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unknown")
+		})
+	})
+
 	Context("workdir cleanup observability", func() {
 		// The cleanup-failure path is hard to trigger from a unit test
 		// (would require an unwritable parent dir). This test instead
