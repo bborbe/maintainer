@@ -287,11 +287,14 @@ task_identifier: gh-release-bborbe-example-master-ssh
 
 			Expect(fakeOps.CloneCallCount()).To(Equal(1))
 			_, gotCloneURL, _, _ := fakeOps.CloneArgsForCall(0)
-			Expect(gotCloneURL).To(Equal("https://x-access-token:test-token@github.com/bborbe/example.git"))
+			Expect(
+				gotCloneURL,
+			).To(Equal("https://x-access-token:test-token@github.com/bborbe/example.git"))
 		})
 	})
 
-	DescribeTable("normalizes clone_url before clone (empty token isolates normalization)",
+	DescribeTable(
+		"normalizes clone_url before clone (empty token isolates normalization)",
 		func(inputCloneURL, wantCloneURL string) {
 			taskMD := `---
 status: in_progress
@@ -328,10 +331,26 @@ ref: master
 			Expect(gotCloneURL).To(Equal(wantCloneURL))
 		},
 		Entry("scp form", "git@github.com:owner/repo.git", "https://github.com/owner/repo.git"),
-		Entry("ssh:// form", "ssh://git@github.com/owner/repo.git", "https://github.com/owner/repo.git"),
-		Entry("https with .git unchanged", "https://github.com/owner/repo.git", "https://github.com/owner/repo.git"),
-		Entry("https without .git unchanged", "https://github.com/owner/repo", "https://github.com/owner/repo"),
-		Entry("unrecognized form unchanged", "git://example.com/owner/repo.git", "git://example.com/owner/repo.git"),
+		Entry(
+			"ssh:// form",
+			"ssh://git@github.com/owner/repo.git",
+			"https://github.com/owner/repo.git",
+		),
+		Entry(
+			"https with .git unchanged",
+			"https://github.com/owner/repo.git",
+			"https://github.com/owner/repo.git",
+		),
+		Entry(
+			"https without .git unchanged",
+			"https://github.com/owner/repo",
+			"https://github.com/owner/repo",
+		),
+		Entry(
+			"unrecognized form unchanged",
+			"git://example.com/owner/repo.git",
+			"git://example.com/owner/repo.git",
+		),
 	)
 
 	Context("clone failure", func() {

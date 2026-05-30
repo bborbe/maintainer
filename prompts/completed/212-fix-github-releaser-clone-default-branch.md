@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Removed `git clone --branch <ref>` from Clone method; Clone now shells out `git clone --depth 1 <cloneURL> <workdir>` to fetch the remote default-branch HEAD; the `ref` parameter is retained on the signature and logged for traceability. Updated doc comment, nosec justification, and boundary test to assert default-branch content is cloned when ref is a non-branch string.
+container: maintainer-clone-https-exec-212-fix-github-releaser-clone-default-branch
+dark-factory-version: v0.173.0
 created: "2026-05-30T00:00:00Z"
 queued: "2026-05-30T07:57:48Z"
+started: "2026-05-30T07:58:09Z"
+completed: "2026-05-30T08:01:04Z"
 ---
 
 <summary>

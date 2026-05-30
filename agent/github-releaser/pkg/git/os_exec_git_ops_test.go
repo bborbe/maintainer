@@ -70,14 +70,15 @@ var _ = Describe("osExecGitOps boundary contracts", func() {
 		os.RemoveAll(workdir)
 	})
 
-	It("Clone fetches a known branch into an empty workdir via --branch <ref> --depth 1", func() {
-		// Build a real source repo with a known branch + a known file. Cloning
-		// it proves Clone shells out correctly and honors --branch <ref>.
+	It("Clone fetches the default-branch HEAD into an empty workdir via --depth 1", func() {
+		// Build a real source repo on the default branch (master) with a known
+		// file.  Passing a non-branch ref string proves Clone ignores it and clones
+		// the default-branch HEAD instead.
 		source, err := os.MkdirTemp("", "github-releaser-clone-source-*")
 		Expect(err).NotTo(HaveOccurred())
 		defer os.RemoveAll(source)
 
-		Expect(exec.Command("git", "-C", source, "init", "-b", "release-branch").Run()).
+		Expect(exec.Command("git", "-C", source, "init", "-b", "master").Run()).
 			To(Succeed())
 		Expect(
 			os.WriteFile(
@@ -98,23 +99,20 @@ var _ = Describe("osExecGitOps boundary contracts", func() {
 		).To(Succeed())
 
 		// Clone into a fresh, non-existent dir (git clone requires the target
-		// to be empty/absent).
+		// to be empty/absent).  Pass a ref that is NOT the branch name to prove
+		// it is ignored.
 		dest := filepath.Join(workdir, "cloned")
 		Expect(ops.Clone(ctx, source, "release-branch", dest)).To(Succeed())
 
-		// The known file landed.
+		// The default-branch file landed — proves default-branch HEAD was cloned.
 		got, readErr := os.ReadFile(filepath.Join(dest, "MARKER.txt"))
 		Expect(readErr).NotTo(HaveOccurred())
 		Expect(string(got)).To(Equal("clone-me\n"))
 
-		// HEAD resolves and the checked-out branch is the one we asked for.
+		// HEAD resolves (the clone is a valid repo).
 		headOut, headErr := exec.Command("git", "-C", dest, "rev-parse", "HEAD").CombinedOutput()
 		Expect(headErr).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(string(headOut))).NotTo(BeEmpty())
-		branchOut, branchErr := exec.Command("git", "-C", dest, "rev-parse", "--abbrev-ref", "HEAD").
-			CombinedOutput()
-		Expect(branchErr).NotTo(HaveOccurred())
-		Expect(strings.TrimSpace(string(branchOut))).To(Equal("release-branch"))
 	})
 
 	It("Commit attributes the commit to DefaultBotIdentity via -c flags", func() {

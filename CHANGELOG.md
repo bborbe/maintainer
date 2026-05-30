@@ -10,6 +10,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- fix(agent/github-releaser): Clone method clones remote default-branch HEAD instead of `--branch <ref>` — watcher emits a commit SHA as `ref`, but `git clone --branch` only accepts branch/tag names; a release always operates on the default branch so default-branch HEAD is the correct clone target; `ref` parameter kept on method signature and logged for traceability
+
 - fix(agent/github-releaser): normalize SSH clone_url forms (`git@github.com:` / `ssh://`) to token-authenticated HTTPS before clone — the agent authenticates with a GitHub App installation token (HTTPS only) and the runtime image has no ssh client, so an SSH clone_url failed in-cluster with `cannot run ssh: No such file or directory`; clone + push now always go over HTTPS
 - fix(agent/github-releaser): add missing `agent/.claude/CLAUDE.md` in-container guardrails — the Dockerfile `COPY agent/ /agent/` failed the image build (`/agent: not found`) because scaffolding never created the dir; mirrors pr-reviewer, scoped to the releaser's planning-phase (bump-classification) Claude invocation
 - feat(agent/github-releaser): add k8s deploy unit (`agent/github-releaser/k8s/`) mirroring pr-reviewer — Config CR (`assignee: github-releaser-agent`, `taskTypes: [github-release, healthcheck]`, `trigger.phases: [planning, execution]`, App-auth env from `AGENT_GITHUB_RELEASER_*`), Secret (dedicated releaser App PEM), PVC, PriorityClass, dev/prod ResourceQuota, Makefile. ai_review phase deliberately omitted until implemented
