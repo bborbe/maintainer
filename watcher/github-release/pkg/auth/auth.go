@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package auth resolves a GitHub HTTP client from the supplied credentials.
-// Encapsulates the GitHub App vs PAT decision so the watcher (long-running
+// Encapsulates the GitHub App decision so the watcher (long-running
 // poll loop) and run-once binaries share one implementation.
 //
 // I/O happens here (GitHub App JWT exchange + installation token fetch), so
@@ -17,29 +17,24 @@ import (
 
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
-	"golang.org/x/oauth2"
 
 	"github.com/bborbe/maintainer/lib/githubapp"
 )
 
-// Credentials carries the union of inputs needed to choose between GitHub
-// App auth and PAT fallback. Read from binary-specific argument structs by
-// the caller.
+// Credentials carries the inputs needed for GitHub App auth.
+// Read from binary-specific argument structs by the caller.
 type Credentials struct {
 	AppID          int64
 	InstallationID int64
 	PEMKey         []byte
-	Token          string
 }
 
-// ResolveGitHubClient chooses GitHub App auth (preferred) over PAT and
-// returns the authenticated *http.Client.
+// ResolveGitHubClient uses GitHub App auth and returns the authenticated *http.Client.
 //
 // Rules:
-//   - All three App fields set → App wins; Token (if also set) ignored with warning.
+//   - All three App fields set → App auth.
 //   - Any subset of App fields set without the other two → error (partial config).
-//   - Only Token set → PAT fallback (warning logged: prefer App).
-//   - Nothing set → error (neither auth path configured).
+//   - Nothing set → error (not configured).
 func ResolveGitHubClient(ctx context.Context, creds Credentials) (*http.Client, error) {
 	appPartial := (creds.AppID != 0) || (creds.InstallationID != 0) || (len(creds.PEMKey) != 0)
 	appComplete := (creds.AppID != 0) && (creds.InstallationID != 0) &&
@@ -63,11 +58,6 @@ func ResolveGitHubClient(ctx context.Context, creds Credentials) (*http.Client, 
 	}
 
 	if appComplete {
-		if creds.Token != "" {
-			glog.Warningf(
-				"watcher auth: both App credentials and GH_TOKEN are set — App wins; GH_TOKEN ignored",
-			)
-		}
 		glog.Infof(
 			"watcher auth mode=github-app app_id=%d installation_id=%d",
 			creds.AppID,
@@ -83,13 +73,8 @@ func ResolveGitHubClient(ctx context.Context, creds Credentials) (*http.Client, 
 		}
 		return client, nil
 	}
-	if creds.Token != "" {
-		glog.Warningf("watcher auth mode=pat-fallback (legacy GH_TOKEN — migrate to GitHub App)")
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: creds.Token})
-		return oauth2.NewClient(ctx, ts), nil
-	}
 	return nil, errors.Errorf(
 		ctx,
-		"watcher auth: neither App nor PAT configured — set APP_ID + INSTALLATION_ID + PEM_KEY, or set GH_TOKEN",
+		"watcher auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY",
 	)
 }

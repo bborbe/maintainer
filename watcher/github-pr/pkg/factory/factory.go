@@ -15,7 +15,6 @@ import (
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
 	libtime "github.com/bborbe/time"
-	"golang.org/x/oauth2"
 
 	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
@@ -36,12 +35,6 @@ func CreateGitHubAppClient(
 		PEM:            pemKey,
 	}
 	return githubapp.NewClient(ctx, cfg)
-}
-
-// CreateGitHubPATClient creates an HTTP client authenticated with a personal access token.
-func CreateGitHubPATClient(ctx context.Context, token string) *http.Client {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	return oauth2.NewClient(ctx, ts)
 }
 
 // CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.

@@ -6,6 +6,10 @@ package main_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"testing"
 	"time"
@@ -20,6 +24,18 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/mocks"
 )
+
+// generateTestPEM produces a fresh 2048-bit RSA PEM block for testing.
+func generateTestPEM() []byte {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+}
 
 var _ = Describe("Run", func() {
 	var (
@@ -38,7 +54,9 @@ var _ = Describe("Run", func() {
 			BuildAssignee:   "test-assignee",
 			BuildTaskStatus: "next",
 			MaxTitleLen:     200,
-			GHToken:         "fake-token",
+			AppID:           1,
+			InstallationID:  2,
+			PEMKey:          string(generateTestPEM()),
 		}
 	})
 

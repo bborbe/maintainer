@@ -10,8 +10,9 @@ import (
 	"net/http"
 
 	"github.com/bborbe/errors"
-	"github.com/bborbe/maintainer/lib/maintainerconfig"
 	gogithub "github.com/google/go-github/v84/github"
+
+	"github.com/bborbe/maintainer/lib/maintainerconfig"
 )
 
 // ErrRateLimited is returned when the GitHub API responds with a rate-limit

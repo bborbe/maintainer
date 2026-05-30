@@ -37,11 +37,12 @@ var _ = Describe("auth.ResolveGitHubClient", func() {
 		ctx = context.Background()
 	})
 
-	It("returns error when neither App nor PAT configured", func() {
+	It("returns error when App not configured", func() {
 		client, err := auth.ResolveGitHubClient(ctx, auth.Credentials{})
 		Expect(err).To(HaveOccurred())
 		Expect(client).To(BeNil())
-		Expect(err.Error()).To(ContainSubstring("neither App nor PAT configured"))
+		Expect(err.Error()).To(ContainSubstring("not configured"))
+		Expect(err.Error()).To(ContainSubstring("APP_ID"))
 	})
 
 	It("returns error on partial App config — missing PEM_KEY", func() {
@@ -82,25 +83,6 @@ var _ = Describe("auth.ResolveGitHubClient", func() {
 			AppID:          123,
 			InstallationID: 456,
 			PEMKey:         generateTestPEM(),
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(client).NotTo(BeNil())
-	})
-
-	It("returns PAT-backed client when only Token set", func() {
-		client, err := auth.ResolveGitHubClient(ctx, auth.Credentials{
-			Token: "test-value", // #nosec G101 -- test fixture, not a real credential
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(client).NotTo(BeNil())
-	})
-
-	It("App wins when both App credentials and Token set", func() {
-		client, err := auth.ResolveGitHubClient(ctx, auth.Credentials{
-			AppID:          123,
-			InstallationID: 456,
-			PEMKey:         generateTestPEM(),
-			Token:          "ignored-value", // #nosec G101 -- test fixture, not a real credential
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(client).NotTo(BeNil())
