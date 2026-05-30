@@ -193,16 +193,23 @@ func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
-			select {
-			case trigger <- struct{}{}:
-				glog.V(2).Infof("trigger fired via HTTP")
-			default:
-				glog.V(2).Infof("trigger already pending, skipped")
-			}
-			_, _ = resp.Write([]byte("trigger fired"))
-		})
+		router.Path("/trigger").HandlerFunc(newTriggerHandler(trigger))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
+	}
+}
+
+// newTriggerHandler returns the /trigger HTTP handler. The send is non-blocking:
+// while a poll runs the buffer is full, so additional triggers coalesce into the
+// single pending signal rather than queueing or blocking the request.
+func newTriggerHandler(trigger chan<- struct{}) http.HandlerFunc {
+	return func(resp http.ResponseWriter, _ *http.Request) {
+		select {
+		case trigger <- struct{}{}:
+			glog.V(2).Infof("trigger fired via HTTP")
+		default:
+			glog.V(2).Infof("trigger already pending, skipped")
+		}
+		_, _ = resp.Write([]byte("trigger fired"))
 	}
 }
