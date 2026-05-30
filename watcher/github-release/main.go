@@ -131,6 +131,10 @@ func (a *application) createHTTPServer(poll run.Func) run.Func {
 		router.Path("/readiness").Handler(libhttp.NewPrintHandler("OK"))
 		router.Path("/metrics").Handler(promhttp.Handler())
 		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/resetcursor/{repo:.+}").
+			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(a.CursorPath)))
+		router.Path("/setcursor/{repo:.+}").
+			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewSetCursorHandler(a.CursorPath)))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}

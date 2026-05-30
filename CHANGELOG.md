@@ -10,6 +10,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(watcher/github-release): add `/resetcursor/{repo}` and `/setcursor/{repo}?sha=` operator HTTP endpoints (wrapped in `DangerousHandlerWrapper`) — reset deletes a repo's cursor entry so the next poll re-emits a release task; set pins the last-seen master SHA to an arbitrary value. Lets an operator re-trigger a stuck release without editing the PVC. Mirrors `watcher/github-build`'s `/resetcursor`.
+
 - refactor(watcher/github-pr,watcher/github-release): rename `runHTTPServer` → `createHTTPServer` to match the canonical `createHTTPServer(...) run.Func` constructor pattern in watcher/github-build
 - fix(agent/pr-reviewer): remove unexported `resolvedToken` field from both `application` structs (Kafka `main.go` + `cmd/run-task`) — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. `resolveAuth` now returns the minted IAT; `Run` holds it as a local var and threads it to `dispatchAgent`/`RunConfig` (matches the github-releaser pattern). Same bug class as the github-build `triggerRunning` fix
 - fix(watcher/github-build): remove unexported `triggerRunning atomic.Int64` field from the `application` struct — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. Replace the ad-hoc `/trigger` single-flight (atomic guard + `NewBackgroundRunHandler` detached goroutine) with the canonical trigger-channel model: `/trigger` signals a buffered (size 1) channel via `pkg.NewTriggerHandler`, and the poll loop is the sole executor — polls never overlap, triggers coalesce, no detached goroutine. Rename `runHTTPServer` → `createHTTPServer` to match `agent/task/controller`
