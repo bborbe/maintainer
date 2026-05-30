@@ -19,7 +19,7 @@ require (
 	github.com/bborbe/sentry v1.9.17
 	github.com/bborbe/service v1.10.0
 	github.com/bborbe/time v1.27.0
-	github.com/bborbe/vault-cli v0.66.3
+	github.com/bborbe/vault-cli v0.67.5
 	github.com/golang/glog v1.2.5
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
@@ -28,8 +28,8 @@ require (
 
 require (
 	github.com/IBM/sarama v1.48.1 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
-	github.com/bborbe/argument/v2 v2.12.22 // indirect
+	github.com/Masterminds/semver/v3 v3.5.0 // indirect
+	github.com/bborbe/argument/v2 v2.12.26 // indirect
 	github.com/bborbe/collection v1.20.12 // indirect
 	github.com/bborbe/http v1.26.12 // indirect
 	github.com/bborbe/k8s v1.14.1 // indirect
@@ -38,7 +38,7 @@ require (
 	github.com/bborbe/math v1.3.10 // indirect
 	github.com/bborbe/metrics v0.5.3 // indirect
 	github.com/bborbe/parse v1.10.12 // indirect
-	github.com/bborbe/run v1.9.24 // indirect
+	github.com/bborbe/run v1.9.27 // indirect
 	github.com/bborbe/strimzi v1.8.3 // indirect
 	github.com/bborbe/validation v1.4.13 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -72,7 +72,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
+	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
@@ -90,7 +90,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
+	github.com/prometheus/common v0.68.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
@@ -100,7 +100,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
@@ -108,7 +108,7 @@ require (
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
