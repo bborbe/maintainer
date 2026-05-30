@@ -20,7 +20,12 @@ ARG BUILD_DATE=unknown
 COPY --from=build /main /main
 COPY agent/ /agent/
 ENV HOME=/home/claude
-RUN mkdir -p /home/claude/.claude
+ENV CLAUDE_CONFIG_DIR=/home/claude/.claude
+RUN set -eux \
+ && mkdir -p /home/claude/.claude \
+ && timeout 300 claude plugin marketplace add bborbe/coding \
+ && timeout 300 claude plugin install coding \
+ && claude plugin list | grep -q coding
 ENV ZONEINFO=/zoneinfo.zip
 COPY --from=build /usr/local/go/lib/time/zoneinfo.zip /
 ENV BUILD_GIT_COMMIT=${BUILD_GIT_COMMIT}

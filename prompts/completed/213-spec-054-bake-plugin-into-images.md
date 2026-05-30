@@ -1,8 +1,13 @@
 ---
-status: approved
-spec: ["054"]
+status: completed
+spec: [054-parallel-agent-reviews-bake-plugin-drop-pvc]
+summary: Baked bborbe/coding plugin into pr-reviewer and github-releaser Dockerfiles at build time with fail-fast verification gate
+container: maintainer-parallel-reviews-exec-213-spec-054-bake-plugin-into-images
+dark-factory-version: v0.173.0
 created: "2026-05-30T12:45:00Z"
 queued: "2026-05-30T18:56:57Z"
+started: "2026-05-30T19:02:17Z"
+completed: "2026-05-30T19:03:11Z"
 ---
 
 <summary>

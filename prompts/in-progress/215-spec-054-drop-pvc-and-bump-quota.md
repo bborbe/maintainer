@@ -1,6 +1,6 @@
 ---
 status: approved
-spec: ["054"]
+spec: [054-parallel-agent-reviews-bake-plugin-drop-pvc]
 created: "2026-05-30T12:45:00Z"
 queued: "2026-05-30T18:59:51Z"
 ---
