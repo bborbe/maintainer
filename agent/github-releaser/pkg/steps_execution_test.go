@@ -211,7 +211,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 		// trust model: a release commit must change ONLY CHANGELOG.md. These
 		// specs prove it fails closed — Tag and Push are NEVER reached when
 		// the committed file set is wrong or unobtainable.
-		runGuard := func(committed []string, committedErr error) (agentlib.AgentResult, *gitmocks.GitOps, *agentlib.Markdown) {
+		runGuard := func(committed []string, committedErr error) (*agentlib.Result, *gitmocks.GitOps, *agentlib.Markdown) {
 			fakeOps := &gitmocks.GitOps{}
 			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
 				writeChangelog(workdir)
