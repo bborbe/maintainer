@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
+spec: [053-migrate-pr-reviewer-to-maintainer-yaml]
 summary: 'Migrated pr-reviewer agent auto-approve config from .pr-reviewer.yaml to .maintainer.yaml: prReviewer.autoApprove via lib/maintainerconfig'
 container: maintainer-pr-reviewer-yaml-exec-209-spec-052-agent-maintainer-yaml
 dark-factory-version: v0.173.0

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [052-migrate-pr-reviewer-to-maintainer-yaml]
+spec: [053-migrate-pr-reviewer-to-maintainer-yaml]
 summary: Created shared lib/maintainerconfig package defining .maintainer.yaml schema with release and prReviewer namespaces and pure Parse function
 container: maintainer-pr-reviewer-yaml-exec-207-spec-052-maintainerconfig-lib
 dark-factory-version: v0.173.0

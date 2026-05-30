@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [052-github-releaser-app-auth]
+spec: [053-migrate-pr-reviewer-to-maintainer-yaml]
 summary: Migrated agent/github-releaser from PAT-only auth to GitHub App installation-token auth, mirroring pr-reviewer's resolution order
 container: maintainer-releaser-agent-exec-207-spec-052-github-releaser-app-auth
 dark-factory-version: v0.173.0
