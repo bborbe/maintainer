@@ -4,8 +4,8 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/bborbe/agent/lib v0.62.17 h1:Nk9Ry6uLx5+N6dmN67iCs5gEOPtoU7xL2B6JfdmZJVw=
 github.com/bborbe/agent/lib v0.62.17/go.mod h1:qr51YsT3JS0ZNKcT6ioGtQ0xRWHbMpK2NvPAPfuQico=
-github.com/bborbe/argument/v2 v2.12.22 h1:IqMsIPc1z7vrF1i+8mIOG8lYtkGOfoE/m5YGvDrS5R0=
-github.com/bborbe/argument/v2 v2.12.22/go.mod h1:IHCQo5vi4YJaXKIagtIqe+bGJzldmukF/TOFdwTK9gk=
+github.com/bborbe/argument/v2 v2.12.24 h1:WhN+347zHmOt+x0vJu5/5smzuGPd53MpyhUm0c/01lI=
+github.com/bborbe/argument/v2 v2.12.24/go.mod h1:49iVPt5ES2tohdcP1HDP3h6iNrI9kIzLATXZcTBAVSs=
 github.com/bborbe/boltkv v1.14.0 h1:iNi3xGIPx1lDtODxv9BiMJIJb+4Exd+F1KQZ22fKgkk=
 github.com/bborbe/boltkv v1.14.0/go.mod h1:HP9uLlbdRV2RaakC/VO+9uI2ZbUv5UilHoKkXoyWz3A=
 github.com/bborbe/collection v1.20.12 h1:FUiCMioYDmNlPidUQ26NbnN7D0JBsiZfHUVjvCdS+YU=
