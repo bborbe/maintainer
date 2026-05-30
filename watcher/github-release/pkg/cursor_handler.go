@@ -5,145 +5,107 @@
 package pkg
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
+	"github.com/bborbe/errors"
+	libhttp "github.com/bborbe/http"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 )
 
-// NewResetCursorHandler returns an http.Handler that deletes the cursor entry
-// for the {repo} path variable, forcing the next poll to treat the repo as
-// first-seen and re-emit a release task.
+// NewResetCursorHandler returns an HTTP handler that deletes the cursor entry
+// for the {repo} URL variable (e.g. "github.com/bborbe/maintainer"), so the
+// next poll treats the repo as first-seen and re-emits a release task.
 //
-// Route: /resetcursor/{repo:.+}  (`.+` captures slashes, e.g. github.com/bborbe/foo)
-// Method-agnostic — wrap with libhttp.NewDangerousHandlerWrapper for the
-// POST/confirm gate (it mutates persisted state). Mirrors
-// watcher/github-build/pkg/reset_handler.go.
+// Wrap with libhttp.NewDangerousHandlerWrapper at the call site to require a
+// passphrase — the bare handler does not enforce auth.
 //
-// Behavior:
-//   - repo present in cursor → delete entry, save, 200 {reset, existed:true}
-//   - repo absent → 200 {reset, existed:false} (idempotent)
-//   - cursor load/save error → 500 {error}
+// Mirrors watcher/github-build/pkg/reset_handler.go: absent repo → 404 (the
+// operator targeted a repo the watcher has not seen, almost always a typo).
+//
+// Race: a concurrent Poll may overwrite the reset; operator should retry if the
+// next poll log doesn't show a re-emit for the target repo.
 func NewResetCursorHandler(cursorPath string) http.Handler {
-	return &resetCursorHandler{cursorPath: cursorPath}
+	return libhttp.NewErrorHandler(
+		libhttp.WithErrorFunc(
+			func(ctx context.Context, resp http.ResponseWriter, req *http.Request) error {
+				repoKey := mux.Vars(req)["repo"]
+				if repoKey == "" {
+					return libhttp.WrapWithStatusCode(
+						errors.Errorf(ctx, "missing {repo} path variable"),
+						http.StatusBadRequest,
+					)
+				}
+				cursor, err := LoadCursor(ctx, cursorPath)
+				if err != nil {
+					return errors.Wrapf(ctx, err, "load cursor for reset")
+				}
+				if _, ok := cursor.Repos[repoKey]; !ok {
+					return libhttp.WrapWithStatusCode(
+						errors.Errorf(ctx, "repo not found in cursor: %s", repoKey),
+						http.StatusNotFound,
+					)
+				}
+				delete(cursor.Repos, repoKey)
+				if err := SaveCursor(ctx, cursorPath, cursor); err != nil {
+					return errors.Wrapf(ctx, err, "save cursor after reset")
+				}
+				glog.Warningf("cursor reset for repo=%s", repoKey)
+				_, _ = libhttp.WriteAndGlog(resp, "cursor reset for "+repoKey)
+				return nil
+			},
+		),
+	)
 }
 
-type resetCursorHandler struct {
-	cursorPath string
-}
-
-func (h *resetCursorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	repo := mux.Vars(r)["repo"]
-	if repo == "" {
-		writeCursorJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]any{"error": "repo path variable required"},
-		)
-		return
-	}
-	cursor, err := LoadCursor(ctx, h.cursorPath)
-	if err != nil {
-		glog.Warningf("resetcursor load failed repo=%s err=%v", repo, err)
-		writeCursorJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]any{"error": "load cursor failed"},
-		)
-		return
-	}
-	_, existed := cursor.Repos[repo]
-	delete(cursor.Repos, repo)
-	if err := SaveCursor(ctx, h.cursorPath, cursor); err != nil {
-		glog.Warningf("resetcursor save failed repo=%s err=%v", repo, err)
-		writeCursorJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]any{"error": "save cursor failed"},
-		)
-		return
-	}
-	glog.V(2).Infof("resetcursor ok repo=%s existed=%t", repo, existed)
-	writeCursorJSON(w, http.StatusOK, map[string]any{"reset": repo, "existed": existed})
-}
-
-// NewSetCursorHandler returns an http.Handler that sets the cursor's last-seen
-// master SHA for {repo} to the `sha` query value. Setting it to a SHA *older*
-// than current master HEAD makes the next poll see HEAD as advanced and re-emit;
-// setting it to the current HEAD suppresses re-emit. More precise than reset
-// when you want to pin a specific baseline.
+// NewSetCursorHandler returns an HTTP handler that sets the cursor's last-seen
+// master SHA for the {repo} URL variable to the `sha` query value. Setting it
+// to a SHA *older* than current master HEAD makes the next poll see HEAD as
+// advanced and re-emit a release task; setting it to the current HEAD
+// suppresses re-emit. More precise than reset when pinning a specific baseline.
 //
-// Route: /setcursor/{repo:.+}?sha=<value>
-// Method-agnostic — wrap with libhttp.NewDangerousHandlerWrapper.
+// Wrap with libhttp.NewDangerousHandlerWrapper at the call site to require a
+// passphrase — the bare handler does not enforce auth.
 //
-// Behavior:
-//   - missing/empty sha → 400 {error}
-//   - else → set entry, save, 200 {set, sha, previous}
-//   - cursor load/save error → 500 {error}
+// Route: /setcursor/{repo:.+}?sha=<value>. Creates the repo entry if absent.
 func NewSetCursorHandler(cursorPath string) http.Handler {
-	return &setCursorHandler{cursorPath: cursorPath}
-}
-
-type setCursorHandler struct {
-	cursorPath string
-}
-
-func (h *setCursorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	repo := mux.Vars(r)["repo"]
-	if repo == "" {
-		writeCursorJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]any{"error": "repo path variable required"},
-		)
-		return
-	}
-	sha := r.URL.Query().Get("sha")
-	if sha == "" {
-		writeCursorJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]any{"error": "sha query parameter required"},
-		)
-		return
-	}
-	cursor, err := LoadCursor(ctx, h.cursorPath)
-	if err != nil {
-		glog.Warningf("setcursor load failed repo=%s err=%v", repo, err)
-		writeCursorJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]any{"error": "load cursor failed"},
-		)
-		return
-	}
-	var previous string
-	if existing := cursor.Repos[repo]; existing != nil {
-		previous = existing.LastSeenMasterSHA
-	}
-	cursor.Repos[repo] = &RepoState{LastSeenMasterSHA: sha}
-	if err := SaveCursor(ctx, h.cursorPath, cursor); err != nil {
-		glog.Warningf("setcursor save failed repo=%s err=%v", repo, err)
-		writeCursorJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]any{"error": "save cursor failed"},
-		)
-		return
-	}
-	glog.V(2).Infof("setcursor ok repo=%s sha=%s previous=%s", repo, sha, previous)
-	writeCursorJSON(w, http.StatusOK, map[string]any{"set": repo, "sha": sha, "previous": previous})
-}
-
-// writeCursorJSON writes a JSON body with the given status. Encode errors are
-// best-effort (header already sent); logged at V(2).
-func writeCursorJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		glog.V(2).Infof("cursor handler: encode response failed: %v", err)
-	}
+	return libhttp.NewErrorHandler(
+		libhttp.WithErrorFunc(
+			func(ctx context.Context, resp http.ResponseWriter, req *http.Request) error {
+				repoKey := mux.Vars(req)["repo"]
+				if repoKey == "" {
+					return libhttp.WrapWithStatusCode(
+						errors.Errorf(ctx, "missing {repo} path variable"),
+						http.StatusBadRequest,
+					)
+				}
+				sha := req.URL.Query().Get("sha")
+				if sha == "" {
+					return libhttp.WrapWithStatusCode(
+						errors.Errorf(ctx, "missing sha query parameter"),
+						http.StatusBadRequest,
+					)
+				}
+				cursor, err := LoadCursor(ctx, cursorPath)
+				if err != nil {
+					return errors.Wrapf(ctx, err, "load cursor for set")
+				}
+				var previous string
+				if existing := cursor.Repos[repoKey]; existing != nil {
+					previous = existing.LastSeenMasterSHA
+				}
+				cursor.Repos[repoKey] = &RepoState{LastSeenMasterSHA: sha}
+				if err := SaveCursor(ctx, cursorPath, cursor); err != nil {
+					return errors.Wrapf(ctx, err, "save cursor after set")
+				}
+				glog.Warningf("cursor set for repo=%s sha=%s previous=%s", repoKey, sha, previous)
+				_, _ = libhttp.WriteAndGlog(
+					resp,
+					"cursor set for "+repoKey+" sha="+sha+" previous="+previous,
+				)
+				return nil
+			},
+		),
+	)
 }
