@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- fix(agent/pr-reviewer): anchor the verdict-block parser window on the block's CLOSING brace instead of the `"verdict"` key line — a well-formed `"verdict": "approve"` whose long `comments` array pushed the key >50 lines above the closing brace fell outside the old key-line window, so `ParseVerdict` returned "no verdict block", fail-closed to request-changes, and posted a false `CHANGES_REQUESTED` (observed: maintainer PR #29). The block may now span arbitrarily many lines; the verdict block must still end at the bottom of the review (per the execution output-format spec), so earlier in-prose JSON examples stay ignored. Fail-closed-to-request-changes for genuinely empty/ambiguous/unknown verdicts is preserved (spec-030). No change to the `Verdict` type or the verdict→event mapping
+
 ## v0.27.0
 
 - feat(watcher/github-release): add `/resetcursor/{repo}` and `/setcursor/{repo}?sha=` operator HTTP endpoints (wrapped in `DangerousHandlerWrapper`) — reset deletes a repo's cursor entry so the next poll re-emits a release task; set pins the last-seen master SHA to an arbitrary value. Lets an operator re-trigger a stuck release without editing the PVC. Mirrors `watcher/github-build`'s `/resetcursor`.

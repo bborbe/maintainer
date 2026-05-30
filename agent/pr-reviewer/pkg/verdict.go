@@ -32,72 +32,76 @@ type jsonVerdict struct {
 // findLastJSONVerdictBlock returns the LAST JSON object (string content) in
 // reviewText that contains a "verdict" field. Handles single-line objects and
 // multi-line fenced ```json blocks. Returns empty + false if none found.
-// Only the last 50 lines are scanned for the closing brace, to avoid matching
-// JSON examples quoted earlier in the review text.
+//
+// The block is anchored on its CLOSING brace: the last '}' within the trailing
+// 50-line window is treated as the end of the verdict block, and we walk back
+// (with no distance limit) to its matching '{'. Anchoring on the close — not on
+// the "verdict" key — fixes the false-negative where a long, well-formed block
+// (e.g. an "approve" with a multi-line "comments" array) put its "verdict" key
+// dozens of lines above the close, outside the old key-line window, and the
+// whole block was silently dropped → fail-closed to request-changes. The window
+// still keeps the verdict block anchored to the END of the review (per the
+// execution output-format spec: the JSON fence is last with no trailing prose),
+// so JSON examples quoted earlier in prose are still ignored.
+//
+// Limitation: brace matching is byte-level, not string-aware. Balanced braces
+// inside a JSON string value (e.g. "reason": "use {} here") net depth-zero and
+// match correctly; only UNbalanced braces inside a string (e.g. "see }") could
+// mis-match. That mis-match makes json.Unmarshal of the extracted block fail,
+// which fail-closes to request-changes — the safe direction, never a false
+// approve. This blind spot pre-dates this change; a string-aware tokenizer is
+// unwarranted in front of json.Unmarshal.
 func findLastJSONVerdictBlock(reviewText string) (string, bool) {
 	lines := strings.Split(reviewText, "\n")
 	startIdx := 0
 	if len(lines) > 50 {
 		startIdx = len(lines) - 50
 	}
-	// Search backwards for the last line containing "verdict" within the window.
-	verdictLine := -1
-	for i := len(lines) - 1; i >= startIdx; i-- {
-		if strings.Contains(lines[i], `"verdict"`) {
-			verdictLine = i
-			break
-		}
-	}
-	if verdictLine < 0 {
+	closeCh := lastCloseBraceInWindow(lines, startIdx)
+	if closeCh.line < 0 {
 		return "", false
 	}
-	// Find the enclosing {...} block by walking back to the nearest '{' and
-	// forward to its matching '}'. Single-line {"verdict":"..."} works too.
-	startCh := lastIndexOfBrace(lines, verdictLine, '{')
+	startCh := matchingOpenBrace(lines, closeCh)
 	if startCh.line < 0 {
 		return "", false
 	}
-	endCh := nextIndexOfMatchingClose(lines, startCh)
-	if endCh.line < 0 {
+	block := extractBlock(lines, startCh, closeCh)
+	if !strings.Contains(block, `"verdict"`) {
 		return "", false
 	}
-	return extractBlock(lines, startCh, endCh), true
+	return block, true
 }
 
 type charPos struct{ line, col int }
 
-func lastIndexOfBrace(lines []string, fromLine int, b byte) charPos {
-	for li := fromLine; li >= 0; li-- {
-		s := lines[li]
-		end := len(s)
-		if li == fromLine {
-			end = strings.Index(s, `"verdict"`)
-			if end < 0 {
-				end = len(s)
-			}
-		}
-		for ci := end - 1; ci >= 0; ci-- {
-			if s[ci] == b {
-				return charPos{li, ci}
-			}
+// lastCloseBraceInWindow returns the position of the last '}' on or after
+// startIdx (the trailing-window floor). Returns {-1,-1} if none.
+func lastCloseBraceInWindow(lines []string, startIdx int) charPos {
+	for li := len(lines) - 1; li >= startIdx; li-- {
+		if ci := strings.LastIndexByte(lines[li], '}'); ci >= 0 {
+			return charPos{li, ci}
 		}
 	}
 	return charPos{-1, -1}
 }
 
-func nextIndexOfMatchingClose(lines []string, start charPos) charPos {
+// matchingOpenBrace walks backward from a '}' position, tracking brace depth,
+// and returns the position of its matching '{'. No distance limit: the block
+// may span arbitrarily many lines above the closing brace. Returns {-1,-1} if
+// the braces are unbalanced.
+func matchingOpenBrace(lines []string, closePos charPos) charPos {
 	depth := 0
-	for li := start.line; li < len(lines); li++ {
+	for li := closePos.line; li >= 0; li-- {
 		s := lines[li]
-		ci := 0
-		if li == start.line {
-			ci = start.col
+		ci := len(s) - 1
+		if li == closePos.line {
+			ci = closePos.col
 		}
-		for ; ci < len(s); ci++ {
+		for ; ci >= 0; ci-- {
 			switch s[ci] {
-			case '{':
-				depth++
 			case '}':
+				depth++
+			case '{':
 				depth--
 				if depth == 0 {
 					return charPos{li, ci}
