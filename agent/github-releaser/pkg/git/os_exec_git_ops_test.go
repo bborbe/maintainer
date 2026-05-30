@@ -115,6 +115,47 @@ var _ = Describe("osExecGitOps boundary contracts", func() {
 		Expect(strings.TrimSpace(string(headOut))).NotTo(BeEmpty())
 	})
 
+	It("CommittedFiles returns only the paths changed by the HEAD commit", func() {
+		// Seed a parent commit so HEAD has a parent — `git diff-tree HEAD`
+		// reports nothing for a root commit (would need --root). Production
+		// always operates on a cloned repo with history, so HEAD always has
+		// a parent; the seed mirrors that.
+		Expect(exec.Command("git", "-C", workdir, "add", "CHANGELOG.md").Run()).To(Succeed())
+		Expect(exec.Command("git", "-C", workdir,
+			"-c", "user.name=Seed", "-c", "user.email=seed@example.com",
+			"commit", "-m", "seed").Run()).To(Succeed())
+
+		// Single file: rewrite + commit only CHANGELOG.md (the release shape).
+		Expect(os.WriteFile(
+			filepath.Join(workdir, "CHANGELOG.md"),
+			[]byte("# Changelog\n\n## v1.2.8\n\n- feat: stub\n"),
+			0o600,
+		)).To(Succeed())
+		_, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
+		Expect(err).NotTo(HaveOccurred())
+		files, err := ops.CommittedFiles(ctx, workdir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(Equal([]string{"CHANGELOG.md"}))
+
+		// Multiple files, one with a space — proves the line-split parser
+		// returns each path once and does NOT split on whitespace.
+		Expect(os.WriteFile(
+			filepath.Join(workdir, "CHANGELOG.md"),
+			[]byte("# Changelog\n\n## v1.2.9\n"),
+			0o600,
+		)).To(Succeed())
+		Expect(os.WriteFile(
+			filepath.Join(workdir, "with space.txt"),
+			[]byte("x\n"),
+			0o600,
+		)).To(Succeed())
+		_, err = ops.Commit(ctx, workdir, "release v1.2.9", "CHANGELOG.md", "with space.txt")
+		Expect(err).NotTo(HaveOccurred())
+		files, err = ops.CommittedFiles(ctx, workdir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).To(ConsistOf("CHANGELOG.md", "with space.txt"))
+	})
+
 	It("Commit attributes the commit to DefaultBotIdentity via -c flags", func() {
 		sha, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
 		Expect(err).NotTo(HaveOccurred())
