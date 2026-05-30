@@ -181,7 +181,7 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 		// NewBackgroundRunHandler already single-flights via run.ParallelSkipper,
 		// so concurrent /trigger calls during an in-flight poll are dropped safely.
 		router.Path("/trigger").
-			Handler(libhttp.NewBackgroundRunHandler(context.Background(), poll))
+			Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}
