@@ -10,7 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- fix(watcher/github-build): remove unexported `triggerRunning atomic.Int64` field from the `application` struct — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. The single-flight guard it backed is redundant: `libhttp.NewBackgroundRunHandler` already drops concurrent `/trigger` calls via `run.ParallelSkipper`. `/trigger` now passes `poll` directly, matching watcher/github-release
+- fix(watcher/github-build): remove unexported `triggerRunning atomic.Int64` field from the `application` struct — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. Replace the ad-hoc `/trigger` single-flight (atomic guard + `NewBackgroundRunHandler` detached goroutine) with the canonical trigger-channel model: `/trigger` is a plain handler signalling a buffered (size 1) channel, and the poll loop is the sole executor — polls never overlap, triggers coalesce, no detached goroutine. Rename `runHTTPServer` → `createHTTPServer` to match `agent/task/controller`
 - feat(agent/pr-reviewer): `cmd/run-task` now accepts `PEM_KEY` env content (not just `PEM_KEY_FILE`), matching the pod binary — unblocks local-dev App auth via inline PEM env var (PR #23 review)
 - test(agent/pr-reviewer,watcher/github-pr): add partial-App-config `resolveAuth` coverage (App-incomplete → error, never GH_TOKEN fallback) (PR #23 review)
 - chore(spec 052 review): drop now-indirect `golang.org/x/oauth2` from `watcher/github-pr` go.mod (go mod tidy after PAT client removal); fix stale "App vs PAT" / "static-PAT via oauth2" doc comments in `watcher/github-build/pkg/auth` + `watcher/github-pr/pkg/githubclient.go`; correct `cmd/run-task` IAT comment

@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"time"
 
@@ -133,9 +134,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	pollOnce := a.pollOnce(w)
 
+	// trigger is buffered (size 1) so an HTTP /trigger never blocks: while a poll
+	// runs, further triggers coalesce into a single pending signal. The poll loop
+	// is the sole executor, so polls never overlap (natural single-flight).
+	trigger := make(chan struct{}, 1)
+
 	tasks := []run.Func{
-		a.runPollLoop(pollOnce, pollInterval),
-		a.runHTTPServer(pollOnce),
+		a.runPollLoop(pollOnce, pollInterval, trigger),
+		a.createHTTPServer(trigger),
 	}
 	if refreshTask != nil {
 		tasks = append(tasks, refreshTask)
@@ -150,7 +156,11 @@ func (a *application) pollOnce(w pkg.Watcher) run.Func {
 	}
 }
 
-func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Func {
+func (a *application) runPollLoop(
+	poll run.Func,
+	interval time.Duration,
+	trigger <-chan struct{},
+) run.Func {
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -163,12 +173,17 @@ func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Fun
 				if err := poll(ctx); err != nil {
 					glog.Errorf("poll cycle error: %v", err)
 				}
+			case <-trigger:
+				glog.V(2).Infof("poll loop: triggered via HTTP")
+				if err := poll(ctx); err != nil {
+					glog.Errorf("poll cycle error: %v", err)
+				}
 			}
 		}
 	}
 }
 
-func (a *application) runHTTPServer(poll run.Func) run.Func {
+func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
@@ -178,10 +193,15 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		// NewBackgroundRunHandler already single-flights via run.ParallelSkipper,
-		// so concurrent /trigger calls during an in-flight poll are dropped safely.
-		router.Path("/trigger").
-			Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/trigger").HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
+			select {
+			case trigger <- struct{}{}:
+				glog.V(2).Infof("trigger fired via HTTP")
+			default:
+				glog.V(2).Infof("trigger already pending, skipped")
+			}
+			_, _ = resp.Write([]byte("trigger fired"))
+		})
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}
