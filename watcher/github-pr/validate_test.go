@@ -24,7 +24,7 @@ var _ = Describe("resolveAuth", func() {
 
 		app := &application{}
 		client, err := app.resolveAuth(ctx)
-		Expect(err).NotTo(BeNil())
+		Expect(err).To(HaveOccurred())
 		Expect(client).To(BeNil())
 		Expect(err.Error()).To(ContainSubstring("APP_ID"))
 		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
@@ -37,7 +37,7 @@ var _ = Describe("resolveAuth", func() {
 
 		app := &application{}
 		client, err := app.resolveAuth(ctx)
-		Expect(err).NotTo(BeNil())
+		Expect(err).To(HaveOccurred())
 		Expect(client).To(BeNil())
 		Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
 		Expect(err.Error()).To(ContainSubstring("INSTALLATION_ID"))
@@ -54,7 +54,7 @@ var _ = Describe("resolveAuth", func() {
 
 			app := &application{}
 			client, err := app.resolveAuth(ctx)
-			Expect(err).NotTo(BeNil())
+			Expect(err).To(HaveOccurred())
 			Expect(client).To(BeNil())
 			Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
 			Expect(err.Error()).To(ContainSubstring("PEM_KEY"))

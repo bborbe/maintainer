@@ -6,31 +6,41 @@ package main
 
 import (
 	"context"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-func TestResolveAuthAbsentCredentials(t *testing.T) {
-	g := NewGomegaWithT(t)
-	app := &application{}
-	err := app.resolveAuth(context.Background())
-	g.Expect(err).NotTo(BeNil())
-	g.Expect(err.Error()).To(ContainSubstring("APP_ID"))
-	g.Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
-}
+// White-box (package main) specs for the unexported resolveAuth. They run under
+// the Ginkgo suite bootstrapped in main_test.go. Both cases are hermetic —
+// useGitHubApp is false, so githubapp.MintIAT (a live HTTP mint) is never
+// reached. The App-mode *success* path is covered by lib/githubapp's own
+// httptest-backed MintIAT tests.
+var _ = Describe("application.resolveAuth", func() {
+	var ctx context.Context
 
-// TestResolveAuthPartialAppConfig ensures incomplete App credentials (App ID +
-// Installation ID set, but no PEM file or PEM content) error out before any
-// mint and never fall back to a PAT path. Hermetic — useGitHubApp is false, so
-// githubapp.MintIAT (a live HTTP call) is never reached. The App-mode *success*
-// path is covered by lib/githubapp's own httptest-backed MintIAT tests.
-func TestResolveAuthPartialAppConfig(t *testing.T) {
-	g := NewGomegaWithT(t)
-	app := &application{AppID: 1, InstallationID: 2}
-	err := app.resolveAuth(context.Background())
-	g.Expect(err).NotTo(BeNil())
-	g.Expect(err.Error()).To(ContainSubstring("APP_ID"))
-	g.Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
-	g.Expect(app.resolvedToken).To(BeEmpty())
-}
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	It("errors naming APP_ID (and not GH_TOKEN) when no App credentials are configured", func() {
+		app := &application{}
+		err := app.resolveAuth(ctx)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("APP_ID"))
+		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+		Expect(app.resolvedToken).To(BeEmpty())
+	})
+
+	It(
+		"errors before minting when App ID + Installation ID are set but no PEM is provided",
+		func() {
+			app := &application{AppID: 1, InstallationID: 2}
+			err := app.resolveAuth(ctx)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("APP_ID"))
+			Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+			Expect(app.resolvedToken).To(BeEmpty())
+		},
+	)
+})
