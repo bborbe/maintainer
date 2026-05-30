@@ -11,7 +11,6 @@ package main
 import (
 	"context"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/bborbe/errors"
@@ -63,8 +62,6 @@ type application struct {
 	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
 	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                                          default:"200"`
 	TaskSuffix      string `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"   usage:"Optional suffix appended to build-failure task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
-
-	triggerRunning atomic.Int64
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -153,10 +150,6 @@ func (a *application) pollOnce(w pkg.Watcher) run.Func {
 	}
 }
 
-func (a *application) tryAcquireTrigger() bool {
-	return a.triggerRunning.CompareAndSwap(0, 1)
-}
-
 func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Func {
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
@@ -185,17 +178,10 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
+		// NewBackgroundRunHandler already single-flights via run.ParallelSkipper,
+		// so concurrent /trigger calls during an in-flight poll are dropped safely.
 		router.Path("/trigger").
-			Handler(libhttp.NewBackgroundRunHandler(context.Background(), func(ctx context.Context) error {
-				if !a.tryAcquireTrigger() {
-					return errors.Errorf(
-						ctx,
-						"trigger already running, wait for current poll to complete",
-					)
-				}
-				defer a.triggerRunning.Store(0)
-				return poll(ctx)
-			}))
+			Handler(libhttp.NewBackgroundRunHandler(context.Background(), poll))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}
