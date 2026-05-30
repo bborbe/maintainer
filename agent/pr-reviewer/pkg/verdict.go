@@ -43,6 +43,14 @@ type jsonVerdict struct {
 // still keeps the verdict block anchored to the END of the review (per the
 // execution output-format spec: the JSON fence is last with no trailing prose),
 // so JSON examples quoted earlier in prose are still ignored.
+//
+// Limitation: brace matching is byte-level, not string-aware. Balanced braces
+// inside a JSON string value (e.g. "reason": "use {} here") net depth-zero and
+// match correctly; only UNbalanced braces inside a string (e.g. "see }") could
+// mis-match. That mis-match makes json.Unmarshal of the extracted block fail,
+// which fail-closes to request-changes — the safe direction, never a false
+// approve. This blind spot pre-dates this change; a string-aware tokenizer is
+// unwarranted in front of json.Unmarshal.
 func findLastJSONVerdictBlock(reviewText string) (string, bool) {
 	lines := strings.Split(reviewText, "\n")
 	startIdx := 0

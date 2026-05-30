@@ -866,15 +866,38 @@ var _ = Describe("ParseVerdict end-anchored window regression (long verdict bloc
 				verdictLine = i
 			}
 		}
+		Expect(verdictLine).NotTo(Equal(-1), "generated block must contain a verdict key")
 		Expect(len(lines)-verdictLine).To(BeNumerically(">", 50),
 			"test setup must push the verdict key beyond the 50-line window")
 
 		result := pkg.ParseVerdict(reviewText)
 		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+		// Pin the exact regression symptom: the block was FOUND and parsed, not
+		// silently dropped and fail-closed (which would read "no verdict block").
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
 	})
 
-	It("still maps a long request-changes block to RequestChanges", func() {
+	It("finds a verdict block sitting just past the 50-line boundary", func() {
+		// commentCount=11 → ~55 comment lines: closing brace within the window,
+		// verdict key just outside the old 50-line cap.
+		result := pkg.ParseVerdict(longVerdictBlock("approve", 11))
+		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
+	})
+
+	It("still maps a long request-changes block to RequestChanges via the block", func() {
 		result := pkg.ParseVerdict(longVerdictBlock("request-changes", 20))
 		Expect(result.Verdict).To(Equal(pkg.VerdictRequestChanges))
+		// Must come from the parsed block, not from fail-closed "no verdict block".
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
+	})
+
+	It("matches the outer brace despite balanced braces inside a string value", func() {
+		reviewText := "# Review\n\nProse line.\n\n```json\n{\n" +
+			`  "verdict": "approve",` + "\n" +
+			`  "reason": "use map[string]struct{}{} and {} sparingly"` + "\n" +
+			"}\n```"
+		result := pkg.ParseVerdict(reviewText)
+		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
 	})
 })
