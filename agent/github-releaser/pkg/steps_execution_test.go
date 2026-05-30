@@ -276,6 +276,7 @@ task_identifier: gh-release-bborbe-example-master-ssh
 				return nil
 			}
 			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
 			fakeOps.PushReturns(nil)
 
