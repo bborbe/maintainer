@@ -79,11 +79,6 @@ type application struct {
 	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
 	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL"                                  display:"length"`
 	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name; also exposed to the claude subprocess as ANTHROPIC_MODEL"                  default:"sonnet"`
-
-	// resolvedToken holds the GitHub App installation token minted in Run.
-	// It is NOT a config input (no env tag) — it is the value forwarded to the
-	// agent subprocess (gh CLI, git credential helper, repo manager, and agent provider).
-	resolvedToken string
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -130,11 +125,10 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	} else {
 		appCfg.PEM = []byte(a.PEMKey)
 	}
-	iat, err := githubapp.MintIAT(ctx, appCfg)
+	resolvedToken, err := githubapp.MintIAT(ctx, appCfg)
 	if err != nil {
 		return errors.Wrap(ctx, err, "mint github app iat")
 	}
-	a.resolvedToken = iat
 	glog.V(2).Infof(
 		"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
 		a.AppID, a.InstallationID,
@@ -145,7 +139,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		ClaudeConfigDir:    a.ClaudeConfigDir,
 		AgentDir:           a.AgentDir,
 		Model:              a.AnthropicModel,
-		GHToken:            a.resolvedToken,
+		GHToken:            resolvedToken,
 		AnthropicBaseURL:   a.AnthropicBaseURL,
 		AnthropicAuthToken: a.AnthropicAuthToken,
 		ReposPath:          reposPath,
