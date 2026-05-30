@@ -306,7 +306,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	return run.CancelOnFirstFinish(ctx,
 		a.runPollLoop(pollOnce, pollInterval),
-		a.runHTTPServer(pollOnce),
+		a.createHTTPServer(pollOnce),
 	)
 }
 
@@ -335,7 +335,7 @@ func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Fun
 	}
 }
 
-func (a *application) runHTTPServer(poll run.Func) run.Func {
+func (a *application) createHTTPServer(poll run.Func) run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))

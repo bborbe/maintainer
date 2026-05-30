@@ -116,15 +116,15 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	return run.CancelOnFirstFinish(ctx,
 		a.pollLoop(poll, pollInterval),
-		a.runHTTPServer(poll),
+		a.createHTTPServer(poll),
 	)
 }
 
-// runHTTPServer serves the mandatory triple (/healthz, /readiness, /metrics)
+// createHTTPServer serves the mandatory triple (/healthz, /readiness, /metrics)
 // per coding-guidelines/go-k8s-binary-conventions.md plus /trigger, which runs
 // one poll cycle on demand (mirrors watcher/github-pr /check) so operators can
 // force a scan without waiting for the poll interval.
-func (a *application) runHTTPServer(poll run.Func) run.Func {
+func (a *application) createHTTPServer(poll run.Func) run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
