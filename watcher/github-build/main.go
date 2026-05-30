@@ -10,7 +10,6 @@ package main
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"time"
 
@@ -31,6 +30,11 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
+
+// triggerBufferSize coalesces redundant /trigger calls into one pending poll;
+// the poll loop is the single executor, so a larger buffer would not run them
+// any sooner.
+const triggerBufferSize = 1
 
 func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
 	if maxTitleLen <= 0 {
@@ -134,10 +138,10 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	pollOnce := a.pollOnce(w)
 
-	// trigger is buffered (size 1) so an HTTP /trigger never blocks: while a poll
-	// runs, further triggers coalesce into a single pending signal. The poll loop
-	// is the sole executor, so polls never overlap (natural single-flight).
-	trigger := make(chan struct{}, 1)
+	// trigger is buffered (triggerBufferSize) so an HTTP /trigger never blocks:
+	// while a poll runs, further triggers coalesce into a single pending signal.
+	// The poll loop is the sole executor, so polls never overlap (single-flight).
+	trigger := make(chan struct{}, triggerBufferSize)
 
 	tasks := []run.Func{
 		a.runPollLoop(pollOnce, pollInterval, trigger),
@@ -193,23 +197,8 @@ func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").HandlerFunc(newTriggerHandler(trigger))
+		router.Path("/trigger").Handler(pkg.NewTriggerHandler(trigger))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
-	}
-}
-
-// newTriggerHandler returns the /trigger HTTP handler. The send is non-blocking:
-// while a poll runs the buffer is full, so additional triggers coalesce into the
-// single pending signal rather than queueing or blocking the request.
-func newTriggerHandler(trigger chan<- struct{}) http.HandlerFunc {
-	return func(resp http.ResponseWriter, _ *http.Request) {
-		select {
-		case trigger <- struct{}{}:
-			glog.V(2).Infof("trigger fired via HTTP")
-		default:
-			glog.V(2).Infof("trigger already pending, skipped")
-		}
-		_, _ = resp.Write([]byte("trigger fired"))
 	}
 }
