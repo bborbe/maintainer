@@ -30,7 +30,7 @@ require (
 require (
 	github.com/IBM/sarama v1.48.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
-	github.com/bborbe/argument/v2 v2.12.22 // indirect
+	github.com/bborbe/argument/v2 v2.12.24 // indirect
 	github.com/bborbe/boltkv v1.14.0 // indirect
 	github.com/bborbe/collection v1.20.12 // indirect
 	github.com/bborbe/k8s v1.14.1 // indirect

@@ -29,7 +29,7 @@ var _ = Describe("runPollLoop", func() {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		loopFunc := app.runPollLoop(pollFunc, 10*time.Millisecond)
+		loopFunc := app.runPollLoop(pollFunc, 10*time.Millisecond, make(chan struct{}))
 
 		done := make(chan error, 1)
 		go func() {
@@ -41,6 +41,37 @@ var _ = Describe("runPollLoop", func() {
 			"500ms",
 			"10ms",
 		).Should(BeNumerically(">=", 2))
+
+		cancel()
+		<-done
+	})
+
+	It("runs a poll when signalled via the trigger channel", func() {
+		app := &application{}
+		var pollCount atomic.Int64
+		pollFunc := func(_ context.Context) error {
+			pollCount.Add(1)
+			return nil
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		// Long interval so the ticker never fires within the test window;
+		// any poll must come from the trigger.
+		trigger := make(chan struct{}, 1)
+		loopFunc := app.runPollLoop(pollFunc, time.Hour, trigger)
+
+		done := make(chan error, 1)
+		go func() {
+			done <- loopFunc(ctx)
+		}()
+
+		trigger <- struct{}{}
+
+		Eventually(
+			func() int64 { return pollCount.Load() },
+			"500ms",
+			"10ms",
+		).Should(BeNumerically(">=", 1))
 
 		cancel()
 		<-done
