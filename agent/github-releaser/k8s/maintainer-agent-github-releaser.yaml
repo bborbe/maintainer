@@ -16,10 +16,9 @@ spec:
   image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-github-releaser'
   heartbeat: 5m
   secretName: maintainer-agent-github-releaser
-  volumeClaim: agent-github-releaser
-  volumeMountPath: /home/claude/.claude
   env:
-    # Tell Claude Code where config + plugins live (matches volumeMountPath). The
+    # Tell Claude Code where the image-resident config + plugins live (the /coding
+    # plugin is baked into the image at this path; no volume is mounted). The
     # planning phase invokes Claude with an embedded bump-classification prompt
     # (pkg/prompts), so it does not depend on a /coding slash command, but the
     # config dir is still where the claude CLI resolves its settings.

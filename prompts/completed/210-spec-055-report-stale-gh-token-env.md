@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [052-fleet-app-only-auth]
+spec: [055-github-releaser-app-auth]
 summary: Audit complete — no live GH_TOKEN env declarations found in four services; one accurate historical comment in pr-reviewer k8s manifest left unchanged
 container: maintainer-fleet-app-auth-exec-210-spec-052-report-stale-gh-token-env
 dark-factory-version: v0.173.0

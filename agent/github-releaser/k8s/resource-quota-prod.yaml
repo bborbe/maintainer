@@ -5,7 +5,7 @@ metadata:
   namespace: prod
 spec:
   hard:
-    pods: "1"
+    pods: "3"
   scopeSelector:
     matchExpressions:
       - scopeName: PriorityClass

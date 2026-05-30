@@ -65,7 +65,7 @@ make buca BRANCH=prod    # same for prod
 - Teamvault entries:
   - `SENTRY_DSN_KEY` — Sentry DSN (URL field)
   - `AGENT_PR_REVIEWER_GH_TOKEN_KEY` — GitHub PAT (Password field) with `repo` + `read:org` scopes
-- PVC `agent-pr-reviewer` seeded with a valid `.claude/` config (copy from `agent-claude` PVC or run one-time `claude login` in a temp pod; see [claude-oauth-setup.md](https://github.com/bborbe/agent/blob/master/agent/claude/docs/claude-oauth-setup.md)). PVC name preserved across the `code-reviewer` → `maintainer` rename to avoid OAuth re-seed.
+- The `/coding` plugin is baked into the image at build time (no PVC seed, no `claude login` required).
 - Config CR registered with the task controller (handled by `k8s/maintainer-agent-pr-reviewer.yaml`)
 
 ### Trigger a review
@@ -112,7 +112,7 @@ maintainer/
 │   │   ├── review/             claude-yolo Docker reviewer (CLI only)
 │   │   ├── verdict/            JSON verdict parser
 │   │   └── version/            build-time version injection
-│   ├── k8s/                    Config CRD, Secret, PVC, PriorityClass, ResourceQuota, Makefile
+│   ├── k8s/                    Config CRD, Secret, PriorityClass, ResourceQuota, Makefile
 │   ├── Dockerfile              multi-stage build (Go + claude-code + gh + git)
 │   └── agent/.claude/CLAUDE.md headless-review guardrails
 ├── watcher/github-pr/          GitHub PR watcher service (own go.mod)
