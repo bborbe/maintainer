@@ -10,6 +10,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/pr-reviewer): `cmd/run-task` now accepts `PEM_KEY` env content (not just `PEM_KEY_FILE`), matching the pod binary — unblocks local-dev App auth via inline PEM env var (PR #23 review)
+- test(agent/pr-reviewer,watcher/github-pr): add partial-App-config `resolveAuth` coverage (App-incomplete → error, never GH_TOKEN fallback) (PR #23 review)
 - chore(spec 052 review): drop now-indirect `golang.org/x/oauth2` from `watcher/github-pr` go.mod (go mod tidy after PAT client removal); fix stale "App vs PAT" / "static-PAT via oauth2" doc comments in `watcher/github-build/pkg/auth` + `watcher/github-pr/pkg/githubclient.go`; correct `cmd/run-task` IAT comment
 - refactor(watcher/github-build,watcher/github-release): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch from shared `pkg/auth` resolver in both services; drop `tokenTransport` type and `golang.org/x/oauth2` import from github-release; remove PAT-fallback test specs; add App-mode success spec to github-build; reword `AppID` field usage strings that incorrectly reference GH_TOKEN
 - refactor(watcher/github-pr): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch in `resolveAuth`; remove `CreateGitHubPATClient` from factory; remove PAT-client test; add absent-App-credentials startup error test

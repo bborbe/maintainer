@@ -66,7 +66,8 @@ type application struct {
 	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); required for App auth"`
 	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
 	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
-	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])" default:"ben-s-pull-request-reviewer[bot]"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"          usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
+	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])"                              default:"ben-s-pull-request-reviewer[bot]"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
@@ -114,18 +115,22 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	deliverer := factory.CreateFileResultDeliverer(a.TaskFilePath)
 
 	// Resolve auth: mint the GitHub App IAT before factory.RunAgent reads the resolved token.
-	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && a.PEMKeyFile != ""
+	hasPEMFile := a.PEMKeyFile != ""
+	hasPEMContent := a.PEMKey != ""
+	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && (hasPEMFile || hasPEMContent)
 	if !useGitHubApp {
 		return errors.Errorf(
 			ctx,
-			"pr-reviewer auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY_FILE",
+			"pr-reviewer auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY_FILE (or PEM_KEY)",
 		)
 	}
-	iat, err := githubapp.MintIAT(ctx, githubapp.Config{
-		AppID:          a.AppID,
-		InstallationID: a.InstallationID,
-		PEMPath:        a.PEMKeyFile,
-	})
+	appCfg := githubapp.Config{AppID: a.AppID, InstallationID: a.InstallationID}
+	if hasPEMFile {
+		appCfg.PEMPath = a.PEMKeyFile
+	} else {
+		appCfg.PEM = []byte(a.PEMKey)
+	}
+	iat, err := githubapp.MintIAT(ctx, appCfg)
 	if err != nil {
 		return errors.Wrap(ctx, err, "mint github app iat")
 	}

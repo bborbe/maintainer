@@ -29,6 +29,38 @@ var _ = Describe("resolveAuth", func() {
 		Expect(err.Error()).To(ContainSubstring("APP_ID"))
 		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
 	})
+
+	It("returns partial-config error when only APP_ID is set", func() {
+		GinkgoT().Setenv("APP_ID", "123")
+		GinkgoT().Setenv("INSTALLATION_ID", "")
+		GinkgoT().Setenv("PEM_KEY", "")
+
+		app := &application{}
+		client, err := app.resolveAuth(ctx)
+		Expect(err).NotTo(BeNil())
+		Expect(client).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
+		Expect(err.Error()).To(ContainSubstring("INSTALLATION_ID"))
+		Expect(err.Error()).To(ContainSubstring("PEM_KEY"))
+		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+	})
+
+	It(
+		"returns partial-config error when APP_ID + INSTALLATION_ID are set but PEM_KEY is missing",
+		func() {
+			GinkgoT().Setenv("APP_ID", "123")
+			GinkgoT().Setenv("INSTALLATION_ID", "456")
+			GinkgoT().Setenv("PEM_KEY", "")
+
+			app := &application{}
+			client, err := app.resolveAuth(ctx)
+			Expect(err).NotTo(BeNil())
+			Expect(client).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
+			Expect(err.Error()).To(ContainSubstring("PEM_KEY"))
+			Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+		},
+	)
 })
 
 var _ = DescribeTable("parseMaxPRAge",
