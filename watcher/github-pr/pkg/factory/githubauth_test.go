@@ -27,4 +27,13 @@ var _ = Describe("CreateGitHubAppClient", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(client).To(BeNil())
 	})
+
+	It("returns error when App IDs are valid but the PEM is malformed", func() {
+		// Valid AppID + InstallationID so resolution passes the ID guards and
+		// reaches the ghinstallation transport construction, which fails to
+		// parse the bogus PEM bytes.
+		client, err := factory.CreateGitHubAppClient(ctx, 1, 2, []byte("not-a-valid-pem"))
+		Expect(err).To(HaveOccurred())
+		Expect(client).To(BeNil())
+	})
 })
