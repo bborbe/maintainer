@@ -161,6 +161,25 @@ func (g *osExecGitOps) Push(ctx context.Context, workdir string, refs ...string)
 	return nil
 }
 
+// CommittedFiles returns the repo-relative paths changed by the HEAD commit.
+func (g *osExecGitOps) CommittedFiles(ctx context.Context, workdir string) ([]string, error) {
+	// git -C <workdir> diff-tree --no-commit-id --name-only -r HEAD
+	// #nosec G204 -- workdir is os.TempDir-rooted; all other args are constants
+	out, err := exec.CommandContext(
+		ctx, "git", "-C", workdir, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD",
+	).Output()
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "git diff-tree HEAD")
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			files = append(files, trimmed)
+		}
+	}
+	return files, nil
+}
+
 // redactToken strips x-access-token:<TOK>@ patterns from stderr to prevent
 // GH_TOKEN from landing in error logs. Git can echo the URL with embedded
 // credentials on auth/clone failures (e.g.

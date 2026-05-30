@@ -110,6 +110,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 					Expect(string(content)).NotTo(ContainSubstring("## Unreleased"))
 					return "abc1234", nil
 				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 				fakeOps.TagReturns(nil)
 				fakeOps.PushReturns(nil)
 

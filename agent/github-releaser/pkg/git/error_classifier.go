@@ -35,6 +35,11 @@ const (
 	// ErrorCategoryProtectedBranchRejected — branch protection rejected the push.
 	// Consumed by the PR-fallback spec (separate).
 	ErrorCategoryProtectedBranchRejected ErrorCategory = "protected_branch_rejected"
+	// ErrorCategoryUnexpectedDiff — the release commit touched files other than
+	// CHANGELOG.md. Pre-push guard fails closed: nothing is tagged or pushed.
+	// Defense-in-depth on the direct-push (a release must only rewrite the
+	// changelog header). Set by the execution step, not by ClassifyError.
+	ErrorCategoryUnexpectedDiff ErrorCategory = "unexpected_diff"
 	// ErrorCategoryPushNonFastForward — remote moved between clone and push;
 	// controller retry will re-fetch.
 	ErrorCategoryPushNonFastForward ErrorCategory = "push_non_fast_forward"
