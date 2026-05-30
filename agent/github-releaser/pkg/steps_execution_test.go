@@ -110,6 +110,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 					Expect(string(content)).NotTo(ContainSubstring("## Unreleased"))
 					return "abc1234", nil
 				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 				fakeOps.TagReturns(nil)
 				fakeOps.PushReturns(nil)
 
@@ -122,9 +123,13 @@ task_identifier: gh-release-bborbe-example-master-049a
 				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 				Expect(result.NextPhase).To(Equal("ai_review"))
 
-				// All 4 GitOps methods called exactly once.
+				// All GitOps methods called exactly once. CommittedFiles in
+				// particular proves the pre-push guard is invoked on the happy
+				// path — if guardCommittedFiles were dropped from
+				// executeDirectPush this assertion (not Tag/Push) would catch it.
 				Expect(fakeOps.CloneCallCount()).To(Equal(1))
 				Expect(fakeOps.CommitCallCount()).To(Equal(1))
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
 				Expect(fakeOps.TagCallCount()).To(Equal(1))
 				Expect(fakeOps.PushCallCount()).To(Equal(1))
 
@@ -171,6 +176,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
 					return "def5678", nil
 				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 				fakeOps.TagReturns(nil)
 				// Realistic GH006 protected-branch error from `git push`.
 				fakeOps.PushReturns(errors.Errorf(
@@ -202,6 +208,83 @@ task_identifier: gh-release-bborbe-example-master-049a
 				Expect(got.Tag).To(BeEmpty())
 			},
 		)
+	})
+
+	Context("pre-push guard (CommittedFiles)", func() {
+		// The guard is the primary security assertion of the direct-push
+		// trust model: a release commit must change ONLY CHANGELOG.md. These
+		// specs prove it fails closed — Tag and Push are NEVER reached when
+		// the committed file set is wrong or unobtainable.
+		runGuard := func(committed []string, committedErr error) (*agentlib.Result, *gitmocks.GitOps, *agentlib.Markdown) {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
+				return "def5678", nil
+			}
+			fakeOps.CommittedFilesReturns(committed, committedErr)
+			fakeOps.TagReturns(nil)
+			fakeOps.PushReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "")
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			result, err := step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+			return result, fakeOps, md
+		}
+
+		assertFailClosed := func(fakeOps *gitmocks.GitOps, md *agentlib.Markdown, wantCategory string) {
+			// The guard ran exactly once — proves it is actually invoked on
+			// this path (not silently skipped).
+			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
+			// Fail closed: nothing tagged, nothing pushed.
+			Expect(fakeOps.TagCallCount()).To(Equal(0))
+			Expect(fakeOps.PushCallCount()).To(Equal(0))
+			got, err := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md,
+				"## Result",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Outcome).To(Equal("failed"))
+			Expect(string(got.ErrorCategory)).To(Equal(wantCategory))
+			Expect(got.Tag).To(BeEmpty())
+		}
+
+		It("extra files → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+			result, fakeOps, md := runGuard([]string{"CHANGELOG.md", "config.yml"}, nil)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unexpected_diff")
+		})
+
+		It("empty file list → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+			// git diff-tree can legitimately return no files (e.g. a root
+			// commit); len(files)!=1 must still fail closed, not push blindly.
+			result, fakeOps, md := runGuard([]string{}, nil)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unexpected_diff")
+		})
+
+		It(
+			"wrong single file → Status=Failed, error_category=unexpected_diff, no tag/push",
+			func() {
+				result, fakeOps, md := runGuard([]string{"main.go"}, nil)
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				assertFailClosed(fakeOps, md, "unexpected_diff")
+			},
+		)
+
+		It("CommittedFiles error → Status=Failed, error_category=unknown, no tag/push", func() {
+			result, fakeOps, md := runGuard(
+				nil,
+				errors.Errorf(context.Background(), "git diff-tree boom"),
+			)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unknown")
+		})
 	})
 
 	Context("workdir cleanup observability", func() {
@@ -274,6 +357,7 @@ task_identifier: gh-release-bborbe-example-master-ssh
 				return nil
 			}
 			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
 			fakeOps.PushReturns(nil)
 
@@ -316,6 +400,7 @@ ref: master
 				return nil
 			}
 			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
 			fakeOps.PushReturns(nil)
 
@@ -366,6 +451,8 @@ ref: master
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 			Expect(fakeOps.CommitCallCount()).To(Equal(0))
+			// Guard never reached — failure surfaced before Commit.
+			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 			got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 				context.Background(),
@@ -395,6 +482,8 @@ ref: master
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 				Expect(fakeOps.CommitCallCount()).To(Equal(0))
+				// Guard never reached — failure surfaced before Commit.
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 					context.Background(),
@@ -434,6 +523,8 @@ ref: master
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 				Expect(fakeOps.CloneCallCount()).To(Equal(0))
+				// Guard never reached — failure surfaced before Clone.
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 					context.Background(),

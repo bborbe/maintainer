@@ -203,6 +203,12 @@ func (s *executionStep) executeDirectPush(
 		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
 		return "", "", result
 	}
+	// Pre-push guard: the release commit must touch CHANGELOG.md and nothing
+	// else. Fail closed BEFORE tag/push if anything else slipped in — the
+	// direct-push trust model depends on this commit being changelog-only.
+	if failResult := s.guardCommittedFiles(ctx, md, workdir); failResult != nil {
+		return "", "", failResult
+	}
 	if err := s.ops.Tag(ctx, workdir, tagName, "release "+tagName); err != nil {
 		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
 		return "", "", result
@@ -212,6 +218,30 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 	return sha, tagName, nil
+}
+
+// guardCommittedFiles asserts the HEAD (release) commit changed exactly
+// CHANGELOG.md. On any deviation it writes a ## Result with
+// error_category=unexpected_diff and returns a failed Result — the caller
+// must abort before tag/push. Returns nil when the commit is changelog-only.
+func (s *executionStep) guardCommittedFiles(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	workdir string,
+) *agentlib.Result {
+	files, err := s.ops.CommittedFiles(ctx, workdir)
+	if err != nil {
+		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
+			errors.Wrap(ctx, err, "inspect committed files"))
+		return result
+	}
+	if len(files) != 1 || files[0] != changelogFileName {
+		result, _ := s.fail(ctx, md, git.ErrorCategoryUnexpectedDiff,
+			errors.Errorf(ctx,
+				"release commit must change only %s, got %v", changelogFileName, files))
+		return result
+	}
+	return nil
 }
 
 // normalizeCloneURLToHTTPS converts the common GitHub clone-URL forms to

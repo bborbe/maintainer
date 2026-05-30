@@ -48,4 +48,10 @@ type GitOps interface {
 	// Returns the underlying stderr-wrapped error on failure — callers
 	// pass this to error_classifier to map onto the error_category enum.
 	Push(ctx context.Context, workdir string, refs ...string) error
+
+	// CommittedFiles returns the repo-relative paths changed by the HEAD
+	// commit (git diff-tree --no-commit-id --name-only -r HEAD). The
+	// execution step uses it as a pre-push guard: a release commit must
+	// touch CHANGELOG.md and nothing else.
+	CommittedFiles(ctx context.Context, workdir string) ([]string, error)
 }

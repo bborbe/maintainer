@@ -42,6 +42,20 @@ type GitOps struct {
 		result1 string
 		result2 error
 	}
+	CommittedFilesStub        func(context.Context, string) ([]string, error)
+	committedFilesMutex       sync.RWMutex
+	committedFilesArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+	}
+	committedFilesReturns struct {
+		result1 []string
+		result2 error
+	}
+	committedFilesReturnsOnCall map[int]struct {
+		result1 []string
+		result2 error
+	}
 	PushStub        func(context.Context, string, ...string) error
 	pushMutex       sync.RWMutex
 	pushArgsForCall []struct {
@@ -200,6 +214,71 @@ func (fake *GitOps) CommitReturnsOnCall(i int, result1 string, result2 error) {
 	}
 	fake.commitReturnsOnCall[i] = struct {
 		result1 string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitOps) CommittedFiles(arg1 context.Context, arg2 string) ([]string, error) {
+	fake.committedFilesMutex.Lock()
+	ret, specificReturn := fake.committedFilesReturnsOnCall[len(fake.committedFilesArgsForCall)]
+	fake.committedFilesArgsForCall = append(fake.committedFilesArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+	}{arg1, arg2})
+	stub := fake.CommittedFilesStub
+	fakeReturns := fake.committedFilesReturns
+	fake.recordInvocation("CommittedFiles", []interface{}{arg1, arg2})
+	fake.committedFilesMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *GitOps) CommittedFilesCallCount() int {
+	fake.committedFilesMutex.RLock()
+	defer fake.committedFilesMutex.RUnlock()
+	return len(fake.committedFilesArgsForCall)
+}
+
+func (fake *GitOps) CommittedFilesCalls(stub func(context.Context, string) ([]string, error)) {
+	fake.committedFilesMutex.Lock()
+	defer fake.committedFilesMutex.Unlock()
+	fake.CommittedFilesStub = stub
+}
+
+func (fake *GitOps) CommittedFilesArgsForCall(i int) (context.Context, string) {
+	fake.committedFilesMutex.RLock()
+	defer fake.committedFilesMutex.RUnlock()
+	argsForCall := fake.committedFilesArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *GitOps) CommittedFilesReturns(result1 []string, result2 error) {
+	fake.committedFilesMutex.Lock()
+	defer fake.committedFilesMutex.Unlock()
+	fake.CommittedFilesStub = nil
+	fake.committedFilesReturns = struct {
+		result1 []string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitOps) CommittedFilesReturnsOnCall(i int, result1 []string, result2 error) {
+	fake.committedFilesMutex.Lock()
+	defer fake.committedFilesMutex.Unlock()
+	fake.CommittedFilesStub = nil
+	if fake.committedFilesReturnsOnCall == nil {
+		fake.committedFilesReturnsOnCall = make(map[int]struct {
+			result1 []string
+			result2 error
+		})
+	}
+	fake.committedFilesReturnsOnCall[i] = struct {
+		result1 []string
 		result2 error
 	}{result1, result2}
 }
