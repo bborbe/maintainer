@@ -25,22 +25,22 @@ var _ = Describe("application.resolveAuth", func() {
 
 	It("errors naming APP_ID (and not GH_TOKEN) when no App credentials are configured", func() {
 		app := &application{}
-		err := app.resolveAuth(ctx)
+		token, err := app.resolveAuth(ctx)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("APP_ID"))
 		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
-		Expect(app.resolvedToken).To(BeEmpty())
+		Expect(token).To(BeEmpty())
 	})
 
 	It(
 		"errors before minting when App ID + Installation ID are set but no PEM is provided",
 		func() {
 			app := &application{AppID: 1, InstallationID: 2}
-			err := app.resolveAuth(ctx)
+			token, err := app.resolveAuth(ctx)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("APP_ID"))
 			Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
-			Expect(app.resolvedToken).To(BeEmpty())
+			Expect(token).To(BeEmpty())
 		},
 	)
 })

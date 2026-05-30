@@ -95,11 +95,6 @@ type application struct {
 
 	PushgatewayURL string `required:"false" arg:"pushgateway-url" env:"PUSHGATEWAY_URL" usage:"Prometheus PushGateway URL"          default:"http://pushgateway:9090"`
 	TaskType       string `required:"false" arg:"task-type"       env:"TASK_TYPE"       usage:"Task type label for metric grouping" default:"unknown"`
-
-	// resolvedToken holds the GitHub App installation token minted in resolveAuth.
-	// It is NOT a config input (no env tag) — it is the value forwarded to the
-	// agent subprocess (gh CLI, git credential helper, repo manager, and agent provider).
-	resolvedToken string
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -119,7 +114,8 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	start := libtime.NewCurrentDateTime().Now().Time()
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
 
-	if err := a.resolveAuth(ctx); err != nil {
+	resolvedToken, err := a.resolveAuth(ctx)
+	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
 		return err
@@ -148,7 +144,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer cleanup()
 
-	agent, err := a.dispatchAgent(ctx, repoAllowlist)
+	agent, err := a.dispatchAgent(ctx, repoAllowlist, resolvedToken)
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
@@ -158,14 +154,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		ClaudeConfigDir:    a.ClaudeConfigDir,
 		AgentDir:           a.AgentDir,
 		Model:              a.AnthropicModel,
-		GHToken:            a.resolvedToken,
+		GHToken:            resolvedToken,
 		AnthropicBaseURL:   a.AnthropicBaseURL,
 		AnthropicAuthToken: a.AnthropicAuthToken,
 		ReposPath:          a.ReposPath,
 		WorkPath:           a.WorkPath,
 		ReviewMode:         a.ReviewMode,
 		RepoAllowlist:      repoAllowlist,
-		AuthSetup:          githubauth.NewGhAuthSetupGit(a.resolvedToken),
+		AuthSetup:          githubauth.NewGhAuthSetupGit(resolvedToken),
 		Phase:              a.Phase,
 		BotLogin:           a.BotLogin,
 		TaskContent:        a.TaskContent,
@@ -184,13 +180,17 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 }
 
 // dispatchAgent builds the correct agent for the configured task type.
+// resolvedToken is the GitHub App installation token minted in resolveAuth; it
+// is forwarded to the agent subprocess (gh CLI, git credential helper, repo
+// manager, and agent provider) — never read from a config input.
 func (a *application) dispatchAgent(
 	ctx context.Context,
 	repoAllowlist []string,
+	resolvedToken string,
 ) (*agentlib.Agent, error) {
 	env := map[string]string{}
-	if a.resolvedToken != "" {
-		env["GH_TOKEN"] = a.resolvedToken
+	if resolvedToken != "" {
+		env["GH_TOKEN"] = resolvedToken
 	}
 	if a.AnthropicBaseURL != "" {
 		env["ANTHROPIC_BASE_URL"] = a.AnthropicBaseURL
@@ -207,12 +207,12 @@ func (a *application) dispatchAgent(
 	repoManager := git.NewRepoManager(git.WorkdirConfig{
 		ReposPath: a.ReposPath,
 		WorkPath:  a.WorkPath,
-	}, a.resolvedToken)
+	}, resolvedToken)
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,
 		a.AnthropicModel,
-		a.resolvedToken,
+		resolvedToken,
 		env,
 		repoManager,
 		a.ReviewMode,
@@ -226,13 +226,16 @@ func (a *application) dispatchAgent(
 	return agent, nil
 }
 
-// resolveAuth mints a GitHub App installation token and stores it in resolvedToken.
-func (a *application) resolveAuth(ctx context.Context) error {
+// resolveAuth mints a GitHub App installation token and returns it. The token
+// is a runtime value (not a config input), so it is returned to the caller
+// rather than stored on the argument-parsed application struct — argument/v2
+// panics when reflecting over unexported struct fields at startup.
+func (a *application) resolveAuth(ctx context.Context) (string, error) {
 	hasPEMFile := a.PEMKeyFile != ""
 	hasPEMContent := a.PEMKey != ""
 	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && (hasPEMFile || hasPEMContent)
 	if !useGitHubApp {
-		return errors.Errorf(
+		return "", errors.Errorf(
 			ctx,
 			"pr-reviewer auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY_FILE (or PEM_KEY)",
 		)
@@ -253,14 +256,13 @@ func (a *application) resolveAuth(ctx context.Context) error {
 		})
 	}
 	if err != nil {
-		return errors.Wrap(ctx, err, "mint github app iat")
+		return "", errors.Wrap(ctx, err, "mint github app iat")
 	}
-	a.resolvedToken = iat
 	glog.V(2).Infof(
 		"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
 		a.AppID, a.InstallationID,
 	)
-	return nil
+	return iat, nil
 }
 
 // createDeliverer builds the Kafka result deliverer when TASK_ID is set,
