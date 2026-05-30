@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.27.0
 
 - feat(watcher/github-release): add `/resetcursor/{repo}` and `/setcursor/{repo}?sha=` operator HTTP endpoints (wrapped in `DangerousHandlerWrapper`) — reset deletes a repo's cursor entry so the next poll re-emits a release task; set pins the last-seen master SHA to an arbitrary value. Lets an operator re-trigger a stuck release without editing the PVC. Mirrors `watcher/github-build`'s `/resetcursor`.
 
