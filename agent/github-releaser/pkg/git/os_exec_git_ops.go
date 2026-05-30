@@ -181,6 +181,7 @@ func (g *osExecGitOps) CommittedFiles(ctx context.Context, workdir string) ([]st
 			files = append(files, trimmed)
 		}
 	}
+	glog.V(2).Infof("git diff-tree HEAD: files=%v", files)
 	return files, nil
 }
 

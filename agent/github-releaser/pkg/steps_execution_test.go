@@ -260,6 +260,14 @@ task_identifier: gh-release-bborbe-example-master-049a
 			assertFailClosed(fakeOps, md, "unexpected_diff")
 		})
 
+		It("empty file list → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+			// git diff-tree can legitimately return no files (e.g. a root
+			// commit); len(files)!=1 must still fail closed, not push blindly.
+			result, fakeOps, md := runGuard([]string{}, nil)
+			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+			assertFailClosed(fakeOps, md, "unexpected_diff")
+		})
+
 		It(
 			"wrong single file → Status=Failed, error_category=unexpected_diff, no tag/push",
 			func() {
@@ -443,6 +451,8 @@ ref: master
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 			Expect(fakeOps.CommitCallCount()).To(Equal(0))
+			// Guard never reached — failure surfaced before Commit.
+			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 			got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 				context.Background(),
@@ -472,6 +482,8 @@ ref: master
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 				Expect(fakeOps.CommitCallCount()).To(Equal(0))
+				// Guard never reached — failure surfaced before Commit.
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 					context.Background(),
@@ -511,6 +523,8 @@ ref: master
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 				Expect(fakeOps.CloneCallCount()).To(Equal(0))
+				// Guard never reached — failure surfaced before Clone.
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
 
 				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 					context.Background(),
