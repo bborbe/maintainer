@@ -1,7 +1,7 @@
 ---
-kind: bug
-status: draft
+status: approved
 created: "2026-05-30T00:00:00Z"
+queued: "2026-05-30T07:57:48Z"
 ---
 
 <summary>
