@@ -59,16 +59,19 @@ func (g *osExecGitOps) cmdEnv() []string {
 }
 
 func (g *osExecGitOps) Clone(ctx context.Context, cloneURL, ref, workdir string) error {
-	// git clone --branch <ref> --depth 1 <cloneURL> <workdir>
+	// git clone --depth 1 <cloneURL> <workdir>
+	// Clones the remote's default-branch HEAD (not the trigger ref).  This is
+	// correct because a release operates on the default branch: the agent rewrites
+	// ## Unreleased, commits on top, and pushes a fast-forward to the default
+	// branch.  The trigger ref (a SHA or branch name) is used only for
+	// traceability in the success log and is never passed to git clone.
 	// --depth 1 is acceptable because we only rewrite CHANGELOG and push a single
 	// commit + tag; we don't need history beyond HEAD.
-	// #nosec G204 -- cloneURL constructed in caller from validated frontmatter; workdir is os.TempDir-rooted; ref validated by caller
+	// #nosec G204 -- cloneURL constructed in caller from validated frontmatter; workdir is os.TempDir-rooted; ref is logged only, not passed to git
 	cmd := exec.CommandContext(
 		ctx,
 		"git",
 		"clone",
-		"--branch",
-		ref,
 		"--depth",
 		"1",
 		cloneURL,
