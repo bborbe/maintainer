@@ -172,6 +172,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
 					return "def5678", nil
 				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 				fakeOps.TagReturns(nil)
 				// Realistic GH006 protected-branch error from `git push`.
 				fakeOps.PushReturns(errors.Errorf(
