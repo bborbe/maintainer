@@ -38,7 +38,17 @@ const (
 	// ErrorCategoryUnexpectedDiff — the release commit touched files other than
 	// CHANGELOG.md. Pre-push guard fails closed: nothing is tagged or pushed.
 	// Defense-in-depth on the direct-push (a release must only rewrite the
-	// changelog header). Set by the execution step, not by ClassifyError.
+	// changelog header).
+	//
+	// TWO-LAYER CLASSIFICATION: this category is set DIRECTLY by the execution
+	// step (steps_execution.go guardCommittedFiles), NOT by ClassifyError.
+	// ClassifyError maps git *stderr* onto categories; unexpected_diff is a
+	// *semantic* assertion on the committed file set (git diff-tree succeeded,
+	// the output was just wrong), so there is no stderr fragment to match. Same
+	// split as changelog_missing / unreleased_not_found, which are set at the
+	// filesystem / changelog-package layer. Do NOT add a classifierTable entry
+	// for it — it would never fire (no matching stderr) and would imply the
+	// wrong layer owns the check.
 	ErrorCategoryUnexpectedDiff ErrorCategory = "unexpected_diff"
 	// ErrorCategoryPushNonFastForward — remote moved between clone and push;
 	// controller retry will re-fetch.

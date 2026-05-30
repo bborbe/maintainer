@@ -102,10 +102,11 @@ func (g *osExecGitOps) Commit(
 	}
 
 	// git -C <workdir> -c user.name=<name> -c user.email=<email> commit -m <message>
+	id := DefaultBotIdentity()
 	commitArgs := []string{
 		"-C", workdir,
-		"-c", "user.name=" + DefaultBotIdentity().Name,
-		"-c", "user.email=" + DefaultBotIdentity().Email,
+		"-c", "user.name=" + id.Name,
+		"-c", "user.email=" + id.Email,
 		"commit",
 		"-m", message,
 	}
@@ -126,10 +127,11 @@ func (g *osExecGitOps) Commit(
 
 func (g *osExecGitOps) Tag(ctx context.Context, workdir, tag, message string) error {
 	// git -C <workdir> -c user.name=<name> -c user.email=<email> tag -a <tag> -m <message>
+	id := DefaultBotIdentity()
 	args := []string{
 		"-C", workdir,
-		"-c", "user.name=" + DefaultBotIdentity().Name,
-		"-c", "user.email=" + DefaultBotIdentity().Email,
+		"-c", "user.name=" + id.Name,
+		"-c", "user.email=" + id.Email,
 		"tag", "-a", tag, "-m", message,
 	}
 	// #nosec G204 -- workdir is os.TempDir-rooted; identity is the bot constant; tag and message come from execution step
@@ -173,6 +175,8 @@ func (g *osExecGitOps) CommittedFiles(ctx context.Context, workdir string) ([]st
 	}
 	var files []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		// strings.TrimSpace also strips a trailing CR, so \r\n / core.autocrlf
+		// repos do not leave a "name\r" that would mis-compare in the guard.
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			files = append(files, trimmed)
 		}
@@ -190,4 +194,6 @@ func redactToken(s string) string {
 	return tokenURLRegexp.ReplaceAllString(s, "x-access-token:[REDACTED]@")
 }
 
+// tokenURLRegexp is compiled once at package init (intentionally package-level,
+// not inside redactToken) so the hot path does not recompile per call.
 var tokenURLRegexp = regexp.MustCompile(`x-access-token:[^@\s]+@`)

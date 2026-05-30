@@ -156,6 +156,25 @@ var _ = Describe("osExecGitOps boundary contracts", func() {
 		Expect(files).To(ConsistOf("CHANGELOG.md", "with space.txt"))
 	})
 
+	It(
+		"CommittedFiles returns empty for a root commit (documents the diff-tree HEAD limitation)",
+		func() {
+			// `git diff-tree HEAD` (without --root) emits NOTHING for a parentless
+			// root commit. Production never hits this — releases operate on a cloned
+			// repo with history, so HEAD always has a parent — but if it did, the
+			// guard would see an empty file set (len != 1) and fail closed with
+			// unexpected_diff rather than push. Asserted here so the edge case is
+			// documented and intentional, not a surprise.
+			Expect(exec.Command("git", "-C", workdir, "add", "CHANGELOG.md").Run()).To(Succeed())
+			Expect(exec.Command("git", "-C", workdir,
+				"-c", "user.name=Seed", "-c", "user.email=seed@example.com",
+				"commit", "-m", "root").Run()).To(Succeed())
+			files, err := ops.CommittedFiles(ctx, workdir)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(files).To(BeEmpty())
+		},
+	)
+
 	It("Commit attributes the commit to DefaultBotIdentity via -c flags", func() {
 		sha, err := ops.Commit(ctx, workdir, "release v1.2.8", "CHANGELOG.md")
 		Expect(err).NotTo(HaveOccurred())

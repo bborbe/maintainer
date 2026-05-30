@@ -123,9 +123,13 @@ task_identifier: gh-release-bborbe-example-master-049a
 				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 				Expect(result.NextPhase).To(Equal("ai_review"))
 
-				// All 4 GitOps methods called exactly once.
+				// All GitOps methods called exactly once. CommittedFiles in
+				// particular proves the pre-push guard is invoked on the happy
+				// path — if guardCommittedFiles were dropped from
+				// executeDirectPush this assertion (not Tag/Push) would catch it.
 				Expect(fakeOps.CloneCallCount()).To(Equal(1))
 				Expect(fakeOps.CommitCallCount()).To(Equal(1))
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
 				Expect(fakeOps.TagCallCount()).To(Equal(1))
 				Expect(fakeOps.PushCallCount()).To(Equal(1))
 
@@ -233,6 +237,9 @@ task_identifier: gh-release-bborbe-example-master-049a
 		}
 
 		assertFailClosed := func(fakeOps *gitmocks.GitOps, md *agentlib.Markdown, wantCategory string) {
+			// The guard ran exactly once — proves it is actually invoked on
+			// this path (not silently skipped).
+			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
 			// Fail closed: nothing tagged, nothing pushed.
 			Expect(fakeOps.TagCallCount()).To(Equal(0))
 			Expect(fakeOps.PushCallCount()).To(Equal(0))
@@ -385,6 +392,7 @@ ref: master
 				return nil
 			}
 			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
 			fakeOps.PushReturns(nil)
 
