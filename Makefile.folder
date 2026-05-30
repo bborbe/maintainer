@@ -104,7 +104,9 @@ fix:
 		cd $${dir}; \
 		echo "fix $${dir}"; \
 		go get \
-		github.com/bborbe/argument@latest \
+		github.com/IBM/sarama@latest \
+		github.com/bborbe/agent/lib@latest \
+		github.com/bborbe/argument/v2@latest \
 		github.com/bborbe/badgerkv@latest \
 		github.com/bborbe/boltkv@latest \
 		github.com/bborbe/kv@latest \
