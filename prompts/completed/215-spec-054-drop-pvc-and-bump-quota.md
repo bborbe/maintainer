@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [054-parallel-agent-reviews-bake-plugin-drop-pvc]
+summary: Removed ReadWriteOnce PVC from pr-reviewer and github-releaser agents, bumped per-agent pod quota from 1 to 3 in all four ResourceQuota files, updated storage-tiers table in architecture.md and Prerequisites in README.md
+container: maintainer-parallel-reviews-exec-215-spec-054-drop-pvc-and-bump-quota
+dark-factory-version: v0.173.0
 created: "2026-05-30T12:45:00Z"
 queued: "2026-05-30T18:59:51Z"
+started: "2026-05-30T19:03:12Z"
+completed: "2026-05-30T19:05:01Z"
 ---
 
 <summary>
