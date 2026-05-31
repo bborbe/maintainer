@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.28.0
 
 - feat(agent/github-releaser): pre-push guard — release fails closed if the commit changed anything other than `CHANGELOG.md` (defense-in-depth on the direct-push trust model)
 
