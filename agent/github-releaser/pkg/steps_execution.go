@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/changelog"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/plugin"
 )
 
 // changelogFileName is the only file the execution step rewrites in the
@@ -172,6 +174,14 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 
+	// Detect plugin manifests BEFORE any writes.
+	detectedManifests, err := plugin.DetectManifests(ctx, workdir)
+	if err != nil {
+		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
+			errors.Wrapf(ctx, err, "detect plugin manifests in %s", workdir))
+		return "", "", result
+	}
+
 	changelogPath := filepath.Join(workdir, changelogFileName)
 	content, err := os.ReadFile(
 		changelogPath,
@@ -197,16 +207,50 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 
+	// Bump and write detected plugin manifests.
+	unprefixedVersion := deriveUnprefixedVersion(plan.NextVersionHeader)
+	for _, manifestPath := range detectedManifests {
+		manifestAbsPath := filepath.Join(workdir, manifestPath)
+		manifestContent, err := os.ReadFile(manifestAbsPath) // #nosec G304 -- workdir is os.TempDir-rooted
+		if err != nil {
+			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
+				errors.Wrapf(ctx, err, "read %s", manifestAbsPath))
+			return "", "", result
+		}
+
+		var rewrittenManifest []byte
+		if strings.HasSuffix(manifestPath, "plugin.json") {
+			rewrittenManifest, err = plugin.BumpPluginJson(ctx, manifestContent, unprefixedVersion)
+		} else if strings.HasSuffix(manifestPath, "marketplace.json") {
+			rewrittenManifest, err = plugin.BumpMarketplaceJson(ctx, manifestContent, unprefixedVersion)
+		}
+		if err != nil {
+			result, _ := s.fail(ctx, md, git.ErrorCategoryPluginManifestInvalid,
+				errors.Wrapf(ctx, err, "bump %s", manifestPath))
+			return "", "", result
+		}
+
+		if err := os.WriteFile(manifestAbsPath, rewrittenManifest, 0o644); err != nil { // #nosec G306,G703 -- standard perms; workdir is os.TempDir-rooted
+			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
+				errors.Wrapf(ctx, err, "write %s", manifestAbsPath))
+			return "", "", result
+		}
+	}
+
 	tagName = strings.TrimPrefix(plan.NextVersionHeader, "## ")
-	sha, err = s.ops.Commit(ctx, workdir, "release "+tagName, changelogFileName)
+	// Build the full commit path list: changelog + detected manifests (in that order).
+	commitPaths := append([]string{changelogFileName}, detectedManifests...)
+	sha, err = s.ops.Commit(ctx, workdir, "release "+tagName, commitPaths...)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
 		return "", "", result
 	}
-	// Pre-push guard: the release commit must touch CHANGELOG.md and nothing
-	// else. Fail closed BEFORE tag/push if anything else slipped in — the
-	// direct-push trust model depends on this commit being changelog-only.
-	if failResult := s.guardCommittedFiles(ctx, md, workdir); failResult != nil {
+	// Pre-push guard: the release commit must touch exactly the files we
+	// rewrote (changelog + detected manifests). Fail closed BEFORE tag/push
+	// if anything else slipped in — the direct-push trust model depends on
+	// this commit being changelog+manifests-only.
+	expectedFiles := append([]string{changelogFileName}, detectedManifests...)
+	if failResult := s.guardCommittedFiles(ctx, md, workdir, expectedFiles); failResult != nil {
 		return "", "", failResult
 	}
 	if err := s.ops.Tag(ctx, workdir, tagName, "release "+tagName); err != nil {
@@ -221,13 +265,15 @@ func (s *executionStep) executeDirectPush(
 }
 
 // guardCommittedFiles asserts the HEAD (release) commit changed exactly
-// CHANGELOG.md. On any deviation it writes a ## Result with
+// the expected files. On any deviation it writes a ## Result with
 // error_category=unexpected_diff and returns a failed Result — the caller
-// must abort before tag/push. Returns nil when the commit is changelog-only.
+// must abort before tag/push. Returns nil when the commit changed only
+// the expected files.
 func (s *executionStep) guardCommittedFiles(
 	ctx context.Context,
 	md *agentlib.Markdown,
 	workdir string,
+	expectedFiles []string,
 ) *agentlib.Result {
 	files, err := s.ops.CommittedFiles(ctx, workdir)
 	if err != nil {
@@ -235,10 +281,10 @@ func (s *executionStep) guardCommittedFiles(
 			errors.Wrap(ctx, err, "inspect committed files"))
 		return result
 	}
-	if len(files) != 1 || files[0] != changelogFileName {
+	if !sameStringSet(files, expectedFiles) {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnexpectedDiff,
 			errors.Errorf(ctx,
-				"release commit must change only %s, got %v", changelogFileName, files))
+				"release commit must change only %v, got %v", expectedFiles, files))
 		return result
 	}
 	return nil
@@ -320,4 +366,29 @@ func (s *executionStep) fail(
 		Status:  agentlib.AgentStatusFailed,
 		Message: msg,
 	}, nil
+}
+
+// deriveUnprefixedVersion strips "## " prefix and "v" prefix from
+// a version header to produce the unprefixed semver string.
+// "## v0.10.0" → "0.10.0"
+// "## 0.10.0" → "0.10.0"
+// "0.10.0" → "0.10.0"
+func deriveUnprefixedVersion(header string) string {
+	header = strings.TrimPrefix(header, "## ")
+	header = strings.TrimPrefix(header, "v")
+	return header
+}
+
+// sameStringSet reports whether a and b contain the same elements,
+// ignoring order. It never mutates its inputs (callers reuse them
+// — e.g. expectedFiles is rendered into the failure message).
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	ac := slices.Clone(a)
+	bc := slices.Clone(b)
+	slices.Sort(ac)
+	slices.Sort(bc)
+	return slices.Equal(ac, bc)
 }

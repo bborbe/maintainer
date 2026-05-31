@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
@@ -534,6 +535,39 @@ ref: master
 				Expect(got.Outcome).To(Equal("failed"))
 				Expect(string(got.ErrorCategory)).To(Equal("unknown"))
 			},
+		)
+	})
+
+	Describe("sameStringSet", func() {
+		DescribeTable(
+			"order-independent set equality",
+			func(a, b []string, want bool) {
+				originalA := slices.Clone(a)
+				originalB := slices.Clone(b)
+				Expect(pkg.SameStringSetForTest(a, b)).To(Equal(want))
+				// Assert inputs are NOT mutated.
+				Expect(a).To(Equal(originalA))
+				Expect(b).To(Equal(originalB))
+			},
+			Entry("equal same order", []string{"a", "b"}, []string{"a", "b"}, true),
+			Entry("equal different order", []string{"a", "b"}, []string{"b", "a"}, true),
+			Entry("different length", []string{"a", "b"}, []string{"a", "b", "c"}, false),
+			Entry("element mismatch", []string{"a", "b"}, []string{"a", "c"}, false),
+			Entry("nil vs nil", nil, nil, true),
+			Entry("empty vs empty", []string{}, []string{}, true),
+			Entry("one empty", []string{"a"}, []string{}, false),
+		)
+	})
+
+	Describe("deriveUnprefixedVersion", func() {
+		DescribeTable(
+			"strips ## prefix and v prefix",
+			func(header, want string) {
+				Expect(pkg.DeriveUnprefixedVersionForTest(header)).To(Equal(want))
+			},
+			Entry("## v0.10.0", "## v0.10.0", "0.10.0"),
+			Entry("## 0.10.0", "## 0.10.0", "0.10.0"),
+			Entry("0.10.0", "0.10.0", "0.10.0"),
 		)
 	})
 })

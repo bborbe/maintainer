@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [056-plugin-version-bump]
+summary: Integrated plugin manifest detection and bumping into executeDirectPush; modified guardCommittedFiles to accept expectedFiles parameter; added sameStringSet and deriveUnprefixedVersion helpers with unit tests
+container: maintainer-plugin-version-bump-exec-221-spec-056-execute-direct-push-integration
+dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"
 queued: "2026-05-31T22:32:08Z"
+started: "2026-05-31T23:16:03Z"
+completed: "2026-05-31T23:19:03Z"
 branch: feature/plugin-version-bump
 ---
 
