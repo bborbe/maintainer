@@ -75,7 +75,7 @@ type refObject struct {
 }
 
 type tagResponse struct {
-	SHA   string    `json:"sha"`
+	SHA    string    `json:"sha"`
 	Object tagObject `json:"object"`
 }
 
@@ -138,7 +138,10 @@ func (c *httpClient) TagExists(ctx context.Context, owner, repo, tag string) (st
 
 // ResolveTagCommit calls GET /repos/{owner}/{repo}/git/tags/{sha} and
 // follows annotated tags to their underlying commit SHA.
-func (c *httpClient) ResolveTagCommit(ctx context.Context, owner, repo, tagSHA string) (string, error) {
+func (c *httpClient) ResolveTagCommit(
+	ctx context.Context,
+	owner, repo, tagSHA string,
+) (string, error) {
 	if owner == "" || repo == "" || tagSHA == "" {
 		return "", errors.Errorf(ctx, "ResolveTagCommit: owner/repo/tagSHA must be non-empty")
 	}
@@ -172,7 +175,8 @@ func (c *httpClient) ResolveTagCommit(ctx context.Context, owner, repo, tagSHA s
 		return "", errors.Errorf(ctx, "ResolveTagCommit: status %d: %s", resp.StatusCode, preview)
 	}
 
-	glog.V(2).Infof("ResolveTagCommit: GET %s status=%d bytes=%d", endpoint, resp.StatusCode, len(body))
+	glog.V(2).
+		Infof("ResolveTagCommit: GET %s status=%d bytes=%d", endpoint, resp.StatusCode, len(body))
 
 	var tagResp tagResponse
 	if err := json.Unmarshal(body, &tagResp); err != nil {
@@ -185,7 +189,12 @@ func (c *httpClient) ResolveTagCommit(ctx context.Context, owner, repo, tagSHA s
 	case "commit":
 		return tagResp.Object.SHA, nil
 	default:
-		return "", errors.Errorf(ctx, "ResolveTagCommit: unknown tag object type %q for tag %s", tagResp.Object.Type, tagSHA)
+		return "", errors.Errorf(
+			ctx,
+			"ResolveTagCommit: unknown tag object type %q for tag %s",
+			tagResp.Object.Type,
+			tagSHA,
+		)
 	}
 }
 
@@ -225,14 +234,19 @@ func (c *httpClient) FetchChangelog(ctx context.Context, owner, repo string) ([]
 		return nil, errors.Errorf(ctx, "FetchChangelog: status %d: %s", resp.StatusCode, preview)
 	}
 
-	glog.V(2).Infof("FetchChangelog: GET %s status=%d bytes=%d", endpoint, resp.StatusCode, len(body))
+	glog.V(2).
+		Infof("FetchChangelog: GET %s status=%d bytes=%d", endpoint, resp.StatusCode, len(body))
 
 	var cr contentResponse
 	if err := json.Unmarshal(body, &cr); err != nil {
 		return nil, errors.Wrapf(ctx, err, "FetchChangelog: decode json")
 	}
 	if cr.Encoding != "base64" {
-		return nil, errors.Errorf(ctx, "FetchChangelog: unsupported encoding %q (want base64)", cr.Encoding)
+		return nil, errors.Errorf(
+			ctx,
+			"FetchChangelog: unsupported encoding %q (want base64)",
+			cr.Encoding,
+		)
 	}
 	cleaned := strings.NewReplacer("\n", "", "\r", "").Replace(cr.Content)
 	decoded, err := base64.StdEncoding.DecodeString(cleaned)

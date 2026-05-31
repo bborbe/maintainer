@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -24,16 +23,18 @@ var _ = Describe("httpClient", func() {
 
 	Describe("TagExists", func() {
 		It("returns tag SHA on 200", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"ref": "refs/tags/v1.0.0",
-					"object": map[string]string{
-						"sha":  "abc123def456",
-						"type": "commit",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"ref": "refs/tags/v1.0.0",
+						"object": map[string]string{
+							"sha":  "abc123def456",
+							"type": "commit",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -44,10 +45,12 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns ErrTagNotFound on 404", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusNotFound)
-				_ = json.NewEncoder(w).Encode(map[string]string{"message": "Not Found"})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+					_ = json.NewEncoder(w).Encode(map[string]string{"message": "Not Found"})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -58,9 +61,11 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns wrapped error on 5xx", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -100,17 +105,19 @@ var _ = Describe("httpClient", func() {
 
 		It("sets Authorization header", func() {
 			var capturedAuth string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				capturedAuth = r.Header.Get("Authorization")
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"ref": "refs/tags/v1.0.0",
-					"object": map[string]string{
-						"sha":  "abc123",
-						"type": "commit",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAuth = r.Header.Get("Authorization")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"ref": "refs/tags/v1.0.0",
+						"object": map[string]string{
+							"sha":  "abc123",
+							"type": "commit",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("my-secret-token", server.URL)
@@ -122,18 +129,20 @@ var _ = Describe("httpClient", func() {
 
 		It("sets Accept and X-GitHub-Api-Version headers", func() {
 			var capturedAccept, capturedVersion string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				capturedAccept = r.Header.Get("Accept")
-				capturedVersion = r.Header.Get("X-GitHub-Api-Version")
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"ref": "refs/tags/v1.0.0",
-					"object": map[string]string{
-						"sha":  "abc123",
-						"type": "commit",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAccept = r.Header.Get("Accept")
+					capturedVersion = r.Header.Get("X-GitHub-Api-Version")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"ref": "refs/tags/v1.0.0",
+						"object": map[string]string{
+							"sha":  "abc123",
+							"type": "commit",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -145,10 +154,12 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error on malformed JSON", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte("not-json"))
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte("not-json"))
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -162,16 +173,18 @@ var _ = Describe("httpClient", func() {
 
 	Describe("ResolveTagCommit", func() {
 		It("returns commit SHA for lightweight tag (type=commit)", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"sha": "tag-sha-123",
-					"object": map[string]string{
-						"sha":  "commit-sha-456",
-						"type": "commit",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "tag-sha-123",
+						"object": map[string]string{
+							"sha":  "commit-sha-456",
+							"type": "commit",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -182,16 +195,18 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns tag SHA for annotated tag (type=tag)", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"sha": "tag-sha-123",
-					"object": map[string]string{
-						"sha":  "wrapped-tag-sha-789",
-						"type": "tag",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "tag-sha-123",
+						"object": map[string]string{
+							"sha":  "wrapped-tag-sha-789",
+							"type": "tag",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -202,16 +217,18 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error for unknown type", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]interface{}{
-					"sha": "tag-sha-123",
-					"object": map[string]string{
-						"sha":  "some-sha",
-						"type": "blob",
-					},
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "tag-sha-123",
+						"object": map[string]string{
+							"sha":  "some-sha",
+							"type": "blob",
+						},
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -223,9 +240,11 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns wrapped error on 5xx", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -264,10 +283,12 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error on malformed JSON", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte("not-json"))
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte("not-json"))
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -281,13 +302,15 @@ var _ = Describe("httpClient", func() {
 
 	Describe("FetchChangelog", func() {
 		It("returns decoded base64 content", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "base64",
-					"content":  "IyMgVW5yZWxlYXNlZAo=",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5yZWxlYXNlZAo=",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -298,13 +321,15 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("strips newlines from base64 content", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "base64",
-					"content":  "IyMgVW5y\nZWxlYXNlZAo=",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5y\nZWxlYXNlZAo=",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -315,13 +340,15 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error for non-base64 encoding", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "utf-8",
-					"content":  "some content",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "utf-8",
+						"content":  "some content",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -333,13 +360,15 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error on bad base64", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "base64",
-					"content":  "!!!not-base64!!!",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "!!!not-base64!!!",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -351,9 +380,11 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns wrapped error on 5xx", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusServiceUnavailable)
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -383,10 +414,12 @@ var _ = Describe("httpClient", func() {
 		})
 
 		It("returns error on malformed JSON", func() {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write([]byte("not-json"))
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte("not-json"))
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -399,14 +432,16 @@ var _ = Describe("httpClient", func() {
 
 		It("does not include ?ref= in URL", func() {
 			var capturedURL string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				capturedURL = r.URL.String()
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "base64",
-					"content":  "IyMgVW5yZWxlYXNlZAo=",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedURL = r.URL.String()
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5yZWxlYXNlZAo=",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
@@ -419,14 +454,16 @@ var _ = Describe("httpClient", func() {
 
 		It("sets Authorization header", func() {
 			var capturedAuth string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				capturedAuth = r.Header.Get("Authorization")
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]string{
-					"encoding": "base64",
-					"content":  "IyMgVW5yZWxlYXNlZAo=",
-				})
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAuth = r.Header.Get("Authorization")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5yZWxlYXNlZAo=",
+					})
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("my-secret-token", server.URL)
@@ -439,13 +476,15 @@ var _ = Describe("httpClient", func() {
 		It("strips carriage returns from base64 content", func() {
 			// Use raw JSON to include actual CR+LF bytes (not escape sequences)
 			// since json.Encode would double-encode them.
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				// Base64 of "## Unreleased\n" is "IyMgVW5yZWxlYXNlZAo=\n"
-				// We embed literal CR (0x0d) and LF (0x0a) bytes in the content.
-				rawJSON := fmt.Sprintf(`{"encoding":"base64","content":"IyMgVW5yZWxlYXNlZAo=\r\n"}`)
-				_, _ = w.Write([]byte(rawJSON))
-			}))
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					// Base64 of "## Unreleased\n" is "IyMgVW5yZWxlYXNlZAo=\n"
+					// We embed literal CR (0x0d) and LF (0x0a) bytes in the content.
+					rawJSON := "{\"encoding\":\"base64\",\"content\":\"IyMgVW5yZWxlYXNlZAo=\\r\\n\"}"
+					_, _ = w.Write([]byte(rawJSON))
+				}),
+			)
 			defer server.Close()
 
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)

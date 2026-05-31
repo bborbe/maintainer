@@ -1,11 +1,13 @@
 ---
-status: executing
+status: completed
 spec: [056-github-releaser-ai-review-phase]
+summary: 'Added comprehensive unit tests for ai_review step in agent/github-releaser/pkg/steps_ai_review_test.go covering all 13 acceptance criteria (happy path, tag-missing/404, annotated/lightweight tag SHA mismatch, CHANGELOG ## Unreleased header, Result.outcome short-circuit, malformed/missing Result section, missing frontmatter repo, token-in-error guard, no-##-Failure assertion, Name/ShouldRun). Refactored steps_ai_review.go to extract helper methods (writeReviewSection, verifyTagExists, verifyTagAtExpectedCommit, verifyChangelogHeaderRewritten) to address pre-existing funlen lint violation. Also fixed pre-existing S1039 lint issue in githubreview/client_test.go.'
 container: maintainer-releaser-ai-review-exec-223-spec-056-unit-tests
 dark-factory-version: v0.173.0
 created: "2026-05-31T20:35:00Z"
 queued: "2026-05-31T20:54:57Z"
 started: "2026-05-31T21:05:42Z"
+completed: "2026-05-31T21:26:06Z"
 branch: dark-factory/github-releaser-ai-review-phase
 ---
 

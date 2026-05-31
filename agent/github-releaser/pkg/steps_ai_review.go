@@ -6,10 +6,11 @@ package pkg
 
 import (
 	"context"
+	stderrors "errors"
+	"fmt"
 	"regexp"
 	"strings"
 
-	stderrors "errors"
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
@@ -33,7 +34,7 @@ type ReviewOutput struct {
 
 // ErrTagNotFound is returned by AIReviewClient.TagExists on a 404 response.
 // The step uses errors.Is(err, ErrTagNotFound) to distinguish 404 (verification
-// failure → write ## Review approved:false, return Status: failed) from
+// failure → write ## Review approved:false, return Status:Failed) from
 // 5xx / transport errors (wrap and return; controller retries).
 var ErrTagNotFound = stderrors.New("ai_review: tag not found")
 
@@ -92,7 +93,7 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	}
 
 	if result.Outcome != ResultOutcomeReleased {
-		output := ReviewOutput{
+		return s.writeReviewSection(ctx, md, ReviewOutput{
 			Approved: true,
 			Checks: ReviewChecks{
 				TagExists:                true,
@@ -100,16 +101,7 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 				ChangelogHeaderRewritten: true,
 			},
 			Notes: "execution step recorded failure; nothing to verify",
-		}
-		section, err := agentlib.MarshalSectionTyped(ctx, "## Review", output)
-		if err != nil {
-			return nil, errors.Wrapf(ctx, err, "ai_review: marshal ## Review section")
-		}
-		md.ReplaceSection(section)
-		return &agentlib.Result{
-			Status:    agentlib.AgentStatusDone,
-			NextPhase: "done",
-		}, nil
+		})
 	}
 
 	repo, _ := md.Frontmatter.String("repo")
@@ -118,87 +110,134 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		return nil, errors.Errorf(ctx, "ai_review: read frontmatter repo")
 	}
 
-	glog.V(2).Infof("ai_review: starting checks for repo=%s/%s tag=%s commit=%s", owner, name, result.Tag, result.CommitSHA)
+	glog.V(2).
+		Infof("ai_review: starting checks for repo=%s/%s tag=%s commit=%s", owner, name, result.Tag, result.CommitSHA)
 
-	checks := ReviewChecks{
-		TagExists:                true,
-		TagAtExpectedSHA:         true,
-		ChangelogHeaderRewritten: true,
-	}
+	checks := ReviewChecks{TagExists: true, TagAtExpectedSHA: true, ChangelogHeaderRewritten: true}
 
-	failVerdict := func(notes string) (*agentlib.Result, error) {
-		output := ReviewOutput{
-			Approved: false,
-			Checks:   checks,
-			Notes:    notes,
-		}
-		section, err := agentlib.MarshalSectionTyped(ctx, "## Review", output)
-		if err != nil {
-			return nil, errors.Wrapf(ctx, err, "ai_review: marshal ## Review section")
-		}
-		md.ReplaceSection(section)
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: notes,
-		}, nil
-	}
-
-	// Check 1: tag exists
-	tagSHA, err := s.client.TagExists(ctx, owner, name, result.Tag)
-	if err != nil {
+	var tagSHA string
+	if tagSHA, err = s.verifyTagExists(ctx, owner, name, result.Tag, &checks); err != nil {
 		if errors.Is(err, ErrTagNotFound) {
-			checks.TagExists = false
-			glog.V(2).Infof("ai_review: check=TagExists result=false: %v", err)
-			return failVerdict("tag " + result.Tag + " not found on remote")
+			return s.writeReviewSection(
+				ctx,
+				md,
+				ReviewOutput{
+					Approved: false,
+					Checks:   checks,
+					Notes:    "tag " + result.Tag + " not found on remote",
+				},
+			)
 		}
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
 		return nil, errors.Wrapf(ctx, err, "ai_review: TagExists")
 	}
-	glog.V(2).Infof("ai_review: check=TagExists result=true")
 
-	// Check 2: tag points to expected commit
-	commitSHA, err := s.client.ResolveTagCommit(ctx, owner, name, tagSHA)
-	if err != nil {
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
-		return nil, errors.Wrapf(ctx, err, "ai_review: ResolveTagCommit")
+	if err := s.verifyTagAtExpectedCommit(ctx, owner, name, tagSHA, result.CommitSHA, &checks); err != nil {
+		return s.writeReviewSection(
+			ctx,
+			md,
+			ReviewOutput{Approved: false, Checks: checks, Notes: err.Error()},
+		)
 	}
-	if commitSHA != result.CommitSHA {
-		checks.TagAtExpectedSHA = false
-		glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=false: tag points to %s, expected %s", commitSHA, result.CommitSHA)
-		return failVerdict("tag points to " + commitSHA + ", expected " + result.CommitSHA)
-	}
-	glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=true")
 
-	// Check 3: CHANGELOG.md top section rewritten
-	changelogBytes, err := s.client.FetchChangelog(ctx, owner, name)
-	if err != nil {
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
-		return nil, errors.Wrapf(ctx, err, "ai_review: FetchChangelog")
+	if err := s.verifyChangelogHeaderRewritten(ctx, owner, name, &checks); err != nil {
+		return s.writeReviewSection(
+			ctx,
+			md,
+			ReviewOutput{Approved: false, Checks: checks, Notes: err.Error()},
+		)
 	}
-	if !s.changelogHeaderRewritten(changelogBytes) {
-		checks.ChangelogHeaderRewritten = false
-		glog.V(2).Infof("ai_review: check=ChangelogHeaderRewritten result=false")
-		return failVerdict("CHANGELOG.md top section is still ## Unreleased on default branch")
-	}
-	glog.V(2).Infof("ai_review: check=ChangelogHeaderRewritten result=true")
 
-	// All checks passed
-	output := ReviewOutput{
+	return s.writeReviewSection(ctx, md, ReviewOutput{
 		Approved: true,
 		Checks:   checks,
 		Notes:    "all checks passed",
-	}
+	})
+}
+
+// writeReviewSection marshals output as a ## Review section and replaces it in md.
+func (s *aiReviewStep) writeReviewSection(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	output ReviewOutput,
+) (*agentlib.Result, error) {
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Review", output)
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "ai_review: marshal ## Review section")
 	}
 	md.ReplaceSection(section)
+	if output.Approved {
+		return &agentlib.Result{Status: agentlib.AgentStatusDone, NextPhase: "done"}, nil
+	}
+	return &agentlib.Result{Status: agentlib.AgentStatusFailed, Message: output.Notes}, nil
+}
 
-	glog.V(2).Infof("ai_review: all checks passed")
-	return &agentlib.Result{
-		Status:    agentlib.AgentStatusDone,
-		NextPhase: "done",
-	}, nil
+// verifyTagExists calls TagExists API and records the result in checks.
+// Returns the tagSHA on success, ErrTagNotFound if the tag is missing (caller
+// handles the verdict), or a wrapped error for transient failures.
+func (s *aiReviewStep) verifyTagExists(
+	ctx context.Context,
+	owner, repo, tag string,
+	checks *ReviewChecks,
+) (string, error) {
+	tagSHA, err := s.client.TagExists(ctx, owner, repo, tag)
+	if err != nil {
+		if errors.Is(err, ErrTagNotFound) {
+			checks.TagExists = false
+			glog.V(2).Infof("ai_review: check=TagExists result=false: %v", err)
+			return "", ErrTagNotFound
+		}
+		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
+		return "", errors.Wrapf(ctx, err, "ai_review: TagExists")
+	}
+	glog.V(2).Infof("ai_review: check=TagExists result=true")
+	return tagSHA, nil
+}
+
+// verifyTagAtExpectedCommit calls ResolveTagCommit and checks the returned SHA
+// matches expectedCommit. Records the result in checks. Returns an error with a
+// descriptive message if the SHA mismatch cannot be retried.
+func (s *aiReviewStep) verifyTagAtExpectedCommit(
+	ctx context.Context,
+	owner, name, tagSHA, expectedCommit string,
+	checks *ReviewChecks,
+) error {
+	commitSHA, err := s.client.ResolveTagCommit(ctx, owner, name, tagSHA)
+	if err != nil {
+		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
+		return errors.Wrapf(ctx, err, "ai_review: ResolveTagCommit")
+	}
+	if commitSHA != expectedCommit {
+		checks.TagAtExpectedSHA = false
+		msg := "tag points to " + commitSHA + ", expected " + expectedCommit
+		glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=false: %s", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=true")
+	return nil
+}
+
+// verifyChangelogHeaderRewritten calls FetchChangelog and checks that the top
+// heading is NOT "## Unreleased". Records the result in checks.
+func (s *aiReviewStep) verifyChangelogHeaderRewritten(
+	ctx context.Context,
+	owner, repo string,
+	checks *ReviewChecks,
+) error {
+	changelogBytes, err := s.client.FetchChangelog(ctx, owner, repo)
+	if err != nil {
+		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
+		return errors.Wrapf(ctx, err, "ai_review: FetchChangelog")
+	}
+	if !s.changelogHeaderRewritten(changelogBytes) {
+		checks.ChangelogHeaderRewritten = false
+		glog.V(2).Infof("ai_review: check=ChangelogHeaderRewritten result=false")
+		return errors.Errorf(
+			ctx,
+			"CHANGELOG.md top section is still ## Unreleased on default branch",
+		)
+	}
+	glog.V(2).Infof("ai_review: check=ChangelogHeaderRewritten result=true")
+	return nil
 }
 
 // changelogHeaderRewritten returns true if the first ## heading in content
@@ -213,6 +252,5 @@ func (s *aiReviewStep) changelogHeaderRewritten(content []byte) bool {
 			return trimmed != "## Unreleased"
 		}
 	}
-	// No ## heading found — treat as not rewritten
 	return false
 }
