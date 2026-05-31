@@ -1,8 +1,11 @@
 ---
-status: approved
+status: executing
 spec: [056-github-releaser-ai-review-phase]
+container: maintainer-releaser-ai-review-exec-223-spec-056-unit-tests
+dark-factory-version: v0.173.0
 created: "2026-05-31T20:35:00Z"
 queued: "2026-05-31T20:54:57Z"
+started: "2026-05-31T21:05:42Z"
 branch: dark-factory/github-releaser-ai-review-phase
 ---
 
