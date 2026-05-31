@@ -8,59 +8,30 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/github-releaser): pre-push guard — release fails closed if the commit changed anything other than `CHANGELOG.md` (defense-in-depth on the direct-push trust model)
+
 ## v0.27.1
 
-- fix(agent/pr-reviewer): anchor the verdict-block parser window on the block's CLOSING brace instead of the `"verdict"` key line — a well-formed `"verdict": "approve"` whose long `comments` array pushed the key >50 lines above the closing brace fell outside the old key-line window, so `ParseVerdict` returned "no verdict block", fail-closed to request-changes, and posted a false `CHANGES_REQUESTED` (observed: maintainer PR #29). The block may now span arbitrarily many lines; the verdict block must still end at the bottom of the review (per the execution output-format spec), so earlier in-prose JSON examples stay ignored. Fail-closed-to-request-changes for genuinely empty/ambiguous/unknown verdicts is preserved (spec-030). No change to the `Verdict` type or the verdict→event mapping
+- fix(agent/pr-reviewer): no longer posts a false CHANGES_REQUESTED on approved PRs whose review carries a long `comments` array
 
 ## v0.27.0
 
-- feat(watcher/github-release): add `/resetcursor/{repo}` and `/setcursor/{repo}?sha=` operator HTTP endpoints (wrapped in `DangerousHandlerWrapper`) — reset deletes a repo's cursor entry so the next poll re-emits a release task; set pins the last-seen master SHA to an arbitrary value. Lets an operator re-trigger a stuck release without editing the PVC. Mirrors `watcher/github-build`'s `/resetcursor`.
-
-- feat(agent/pr-reviewer,agent/github-releaser): bake `bborbe/coding` plugin into container images at build time — `claude plugin install coding` now runs in the Dockerfile final stage so the `/coding:pr-review` command is available in every pod without requiring a mounted volume; build fails fast if marketplace is unreachable
-- refactor(watcher/github-pr,watcher/github-release): rename `runHTTPServer` → `createHTTPServer` to match the canonical `createHTTPServer(...) run.Func` constructor pattern in watcher/github-build
-- fix(agent/pr-reviewer): remove unexported `resolvedToken` field from both `application` structs (Kafka `main.go` + `cmd/run-task`) — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. `resolveAuth` now returns the minted IAT; `Run` holds it as a local var and threads it to `dispatchAgent`/`RunConfig` (matches the github-releaser pattern). Same bug class as the github-build `triggerRunning` fix
-- fix(watcher/github-build): remove unexported `triggerRunning atomic.Int64` field from the `application` struct — `argument/v2.Print` panics on unexported fields at startup, crash-looping the pod. Replace the ad-hoc `/trigger` single-flight (atomic guard + `NewBackgroundRunHandler` detached goroutine) with the canonical trigger-channel model: `/trigger` signals a buffered (size 1) channel via `pkg.NewTriggerHandler`, and the poll loop is the sole executor — polls never overlap, triggers coalesce, no detached goroutine. Rename `runHTTPServer` → `createHTTPServer` to match `agent/task/controller`
-- chore(watcher/github-build): bump `github.com/bborbe/argument/v2` v2.12.22 → v2.12.24 — defense-in-depth: v2.12.23+ makes `Print` skip unexported fields, so this class of startup panic cannot recur if a future unexported field is added
-- fix(agent/github-releaser): Clone method clones remote default-branch HEAD instead of `--branch <ref>` — watcher emits a commit SHA as `ref`, but `git clone --branch` only accepts branch/tag names; a release always operates on the default branch so default-branch HEAD is the correct clone target; `ref` parameter kept on method signature and logged for traceability
-- fix(agent/github-releaser): normalize SSH clone_url forms (`git@github.com:` / `ssh://`) to token-authenticated HTTPS before clone — the agent authenticates with a GitHub App installation token (HTTPS only) and the runtime image has no ssh client, so an SSH clone_url failed in-cluster with `cannot run ssh: No such file or directory`; clone + push now always go over HTTPS
-- feat(agent/pr-reviewer): `cmd/run-task` now accepts `PEM_KEY` env content (not just `PEM_KEY_FILE`), matching the pod binary — unblocks local-dev App auth via inline PEM env var (PR #23 review)
-- refactor(agent/pr-reviewer, agent/github-releaser): remove ReadWriteOnce PVC mount from both agents (no longer needed — `/coding` plugin is baked into image at prompt 1) and raise per-agent pod quota from 1 to 3 in dev and prod ResourceQuota; update architecture.md Storage tiers table and README.md Prerequisites to reflect image-resident config
-- test(agent/pr-reviewer,watcher/github-pr): add partial-App-config `resolveAuth` coverage (App-incomplete → error, never GH_TOKEN fallback) (PR #23 review)
-- chore(spec 052 review): drop now-indirect `golang.org/x/oauth2` from `watcher/github-pr` go.mod (go mod tidy after PAT client removal); fix stale "App vs PAT" / "static-PAT via oauth2" doc comments in `watcher/github-build/pkg/auth` + `watcher/github-pr/pkg/githubclient.go`; correct `cmd/run-task` IAT comment
-- refactor(watcher/github-build,watcher/github-release): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch from shared `pkg/auth` resolver in both services; drop `tokenTransport` type and `golang.org/x/oauth2` import from github-release; remove PAT-fallback test specs; add App-mode success spec to github-build; reword `AppID` field usage strings that incorrectly reference GH_TOKEN
-- refactor(watcher/github-pr): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token; remove `GHToken` config field and PAT-fallback branch in `resolveAuth`; remove `CreateGitHubPATClient` from factory; remove PAT-client test; add absent-App-credentials startup error test
-- refactor(agent/pr-reviewer): remove `GH_TOKEN` PAT input; authenticate exclusively via GitHub App installation token minted at startup; forward minted token to agent subprocess (gh CLI, git credential helper, repo manager, agent provider); delete `ResolveAuthMode` / `AuthMode` enum and PAT-fallback tests; add absent-App-credentials test
-- fix(agent/github-releaser): add missing `agent/.claude/CLAUDE.md` in-container guardrails — the Dockerfile `COPY agent/ /agent/` failed the image build (`/agent: not found`) because scaffolding never created the dir; mirrors pr-reviewer, scoped to the releaser's planning-phase (bump-classification) Claude invocation
-- feat(agent/github-releaser): add k8s deploy unit (`agent/github-releaser/k8s/`) mirroring pr-reviewer — Config CR (`assignee: github-releaser-agent`, `taskTypes: [github-release, healthcheck]`, `trigger.phases: [planning, execution]`, App-auth env from `AGENT_GITHUB_RELEASER_*`), Secret (dedicated releaser App PEM), PVC, PriorityClass, dev/prod ResourceQuota, Makefile. ai_review phase deliberately omitted until implemented
-- feat(agent/github-releaser): migrate to GitHub App installation-token auth (App-only, no PAT fallback) — mints an IAT at startup from APP_ID + INSTALLATION_ID + PEM_KEY_FILE/PEM_KEY (via lib/githubapp.MintIAT), errors before any clone when App creds are absent; the minted token flows to both the changelog fetch and the release push (and is forwarded to the subprocess as GH_TOKEN). PAT input fallback dropped — tightens the auth surface on a push-capable agent (spec 052)
-- refactor(agent/pr-reviewer): migrate auto-approve config from `.pr-reviewer.yaml` to `.maintainer.yaml: prReviewer.autoApprove`; delete `AutoApproveConfig` type; delegate parsing to `github.com/bborbe/maintainer/lib/maintainerconfig`; update all per-repo filepath references in source, tests, and godoc
-- refactor(watcher/github-release): delegate MaintainerConfig parsing to `github.com/bborbe/maintainer/lib/maintainerconfig`; delete local `MaintainerConfig`/`MaintainerReleaseConfig`/`parseMaintainerConfig` definitions; counterfeiter mock regenerated
-- feat(lib/maintainerconfig): add shared package defining `.maintainer.yaml` schema with `release` and `prReviewer` namespaces and pure Parse function
-- feat(watcher/github-release): add `/trigger` HTTP endpoint that runs one poll cycle on demand (mirrors watcher/github-pr `/check`); lets operators force a scan without waiting for the poll interval
-- fix(agent/github-releaser): PR #16 review (3rd pass) — thread ctx through ParseBumpVerdict (drop context.Background()); Wrapf→Wrap for static messages; success-path glog in fetcher; add empty-newHeader / empty-version / direct Clone tests
-- fix(agent/github-releaser): URL-escape owner/repo (path) + ref (query) in githubchangelog fetcher — prevents a crafted owner/repo/ref from corrupting the contents-API URL (PR #16 review)
-- refactor(watcher/github-release): use shared `REPO_ALLOWLIST` env var instead of dedicated `WATCHER_GITHUB_RELEASE_REPO_ALLOWLIST`; aligns release watcher with pr/build watchers (single allowlist per stage)
-- fix(agent/github-releaser): address PR #16 review — thread ctx through RewriteUnreleasedHeader / BumpVersion / extractFrontmatter (drop context.Background() in pure + business logic); add agent/github-releaser/LICENSE; add parseOwnerRepo + classifyValidationFailure unit tests + happy-path FetchCallCount assertion; add success-path glog to planning fetch + git clone
-- feat(agent/github-releaser): wire execution phase direct-push path — adds pkg/git GitOps interface + osExecGitOps shell-out impl + 8-category error classifier; extends pkg/changelog with RewriteUnreleasedHeader; adds pkg/steps_execution ExecutionStep that clones target repo, rewrites ## Unreleased → next version header, commits + annotated tags + pushes via GitOps; factory wires planning + execution phases together (spec 049)
-- feat(agent/github-releaser): add RewriteUnreleasedHeader to pkg/changelog — pure function that locates ## Unreleased (whitespace-tolerant) and replaces it with a caller-supplied header; used by execution step to rewrite the cloned repo's CHANGELOG before commit (spec 049)
-- feat(agent/github-releaser): add pkg/git package — thin GitOps interface wrapping git clone/commit/tag/push shell-outs with 8-category error_classifier for execution step consumption (spec 049)
-- fix(agent/github-releaser): planning escalation now returns `AgentStatusNeedsInput` (not `AgentStatusDone`) at the three escalation sites (missing frontmatter, P1 unreleased-not-first, P2 unreleased-empty) so the framework deliverer leaves `status: in_progress` + `phase: planning` unchanged instead of auto-advancing to terminal `completed` / `done`; existing escalation unit tests re-pointed; new offline integration test via FileResultDeliverer guards the regression (spec 048)
-- feat(agent/github-releaser): wire planning phase end-to-end — adds pkg/factory wiring, main.go dispatch via AgentProvider, and cmd/run-task local CLI entry point (spec 047)
-- feat(agent/github-releaser): add pkg/githubchangelog Fetcher interface + httpFetcher implementation backed by GitHub REST contents API; add pkg/plan_output typed PlanOutput struct with Outcome/PreconditionFailed constants for planning step JSON contract (spec 047)
-- feat(agent/github-releaser): add pkg/prompts with embedded bump-classification prompt and ParseBumpVerdict parser for the planning step (spec 046)
-- feat(agent/github-releaser): add pkg/semver with BumpVersion(current, bump) for Phase 1 → Phase 2 version arithmetic (spec 045)
-- feat(agent/github-releaser): add pkg/changelog parser library — pure-Go ValidateUnreleased/ExtractUnreleasedBullets/InferHeaderPrefixStyle for planning step (spec 044)
-- feat(agent/github-releaser): scaffold Pattern B Job skeleton — Milestone 1 of Phase 2 graduation of the github-releaser agent
+- feat(agent/github-releaser): new agent that cuts a release directly on master — rewrites `## Unreleased` → next version, commits, tags, pushes; semver bump classified from the CHANGELOG content
+- feat(watcher/github-release): scans repos for non-empty `## Unreleased` and triggers the github-releaser agent
+- feat: opt repos into auto-release via `.maintainer.yaml: release.autoRelease: true` (also where `prReviewer.autoApprove` now lives — replaces `.pr-reviewer.yaml`)
+- feat(watcher/github-release): operator endpoints — `/trigger` forces a poll, `/resetcursor/{repo}` re-emits a stuck release, `/setcursor/{repo}?sha=` pins the last-seen master SHA (no PVC editing required)
+- feat: App-only GitHub auth across all agents + watchers — drops `GH_TOKEN` PAT input fleet-wide; tightens the auth surface on push-capable agents
+- feat: `/coding:pr-review` available in every pod (plugin baked into the image — no PVC mount)
+- fix(agent/pr-reviewer, watcher/github-build): pods no longer crash-loop at startup (regression in `argument/v2.Print` on unexported struct fields)
+- fix(agent/github-releaser): handle SSH-form `clone_url` (rewritten to HTTPS — runtime image has no ssh client) and clone the target's default branch instead of the trigger ref
+- fix(agent/github-releaser): planning escalation keeps task in `planning` instead of auto-completing
 
 ## v0.26.39
 
-- refactor(watcher/github-release): rewire AutoReleaseFilter gate from `.dark-factory/config.yml` to `.maintainer.yaml` — flip filter semantics from "skip when true" to "pass only when true" (positive opt-in); remove `GetAutoReleaseConfig`, `parseAutoReleaseConfig`, `darkFactoryConfig` from GitHubClient; update watcher gatherer to call `GetMaintainerConfig`; migrate four watcher Ginkgo tests to new mock surface; counterfeiter mock regenerated without old method; update README, decision-chains doc, and godoc to reflect new config source
-- feat(watcher/github-release): add `.maintainer.yaml` fetch+parse surface to GitHubClient — `MaintainerConfig` type, `GetMaintainerConfig` method, `parseMaintainerConfig` parser; mirrors `GetChangelogContent` control flow (404 → zero-value, rate-limit → `ErrRateLimited`, 1 MiB cap); 10 Ginkgo tests covering all acceptance criteria branches
-- feat(watcher/github-release): add cmd/run-once smoke-test binary for rung-1 verification against real GitHub + dev Kafka; mirrors watcher/github-build/cmd/run-once structure with Poll-once semantics and Ginkgo test suite
-- feat(watcher/github-release): implement Watcher.Poll cycle (load cursor → ListRepos → per-repo gather/filter/publish → save cursor); cycle-abort on rate-limit or github_error skips cursor save; per-repo transient errors prune without aborting; add six Ginkgo tests covering all named acceptance criteria
-- feat(watcher/github-release): implement resolveAuth in main.go mirroring watcher/github-pr (App auth wins over PAT, partial-config rejected); frontmatter emits frozen Phase 1 contract (task_type: github-release, phase: planning, status: in_progress, stage, task_identifier, title, repo, clone_url, ref, current_version); body is operator-readable markdown header without bullet content
-- feat(watcher/github-release): implement GitHub client with ListRepos, GetMasterSHA, GetChangelogContent, GetAutoReleaseConfig using google/go-github/v84; add httptest-based unit tests with coverage ≥80% for all four interface methods
-- feat(watcher/github-release): implement LoadCursor and SaveCursor with atomic temp-file + rename pattern; add Ginkgo unit tests covering round-trip, cold-start, corrupt JSON, and atomic-write semantics
+- feat(watcher/github-release): initial Phase 1 build — scans configured repos on a cursor-tracked poll loop and emits one release task per repo whose `## Unreleased` is non-empty
+- feat: opt repos into auto-release via `.maintainer.yaml: release.autoRelease: true` (replaces `.dark-factory/config.yml`; semantics flipped to positive opt-in)
 
 ## v0.26.38
 
@@ -211,14 +182,6 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## v0.26.5
 
 - chore(agent/pr-reviewer): add `glog.V(2)` logging to every planning-step return site so routing decisions (LGTM short-circuit, execution advance, human_review escalation, POST failures) are visible in pod logs; mirrors the existing `steps_review.go` pattern
-
-All notable changes to this project will be documented in this file.
-
-Please choose versions by [Semantic Versioning](http://semver.org/).
-
-* MAJOR version when you make incompatible API changes,
-* MINOR version when you add functionality in a backwards-compatible manner, and
-* PATCH version when you make backwards-compatible bug fixes.
 
 ## v0.26.4
 
