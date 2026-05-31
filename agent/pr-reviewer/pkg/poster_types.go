@@ -13,6 +13,15 @@ import (
 //counterfeiter:generate -o ../mocks/pr-poster.go --fake-name PrPoster . PrPoster
 //counterfeiter:generate -o ../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
 
+// Hallucination represents a single hallucination entry from the
+// ai_review verdict payload. Rendered verbatim in the dismissal
+// COMMENT body and in the Parked-Because section spawned downstream.
+type Hallucination struct {
+	File  string `json:"file"`
+	Line  int    `json:"line"`
+	Issue string `json:"issue"`
+}
+
 // PrPoster posts a completed review verdict to GitHub as a pull-request review event.
 // The concrete implementation lives in pkg/githubposter and is wired by the factory.
 // Defining the interface in pkg (rather than pkg/githubposter) breaks the import cycle:
@@ -25,6 +34,19 @@ type PrPoster interface {
 	// On success, returns a PostResult with Outcome="success" and PostedEvent="COMMENT".
 	// On failure, returns a PostResult with Outcome="failed" and ErrorClass/ErrorMessage set.
 	PostLGTM(ctx context.Context, pr prurl.PRInfo, headSHA, workDir, botLogin string) PostResult
+	// DismissCurrentReview dismisses the bot's APPROVED or CHANGES_REQUESTED
+	// review at the current head SHA, then posts a follow-up COMMENT review
+	// citing each hallucination. A no-matching-review case is a non-error
+	// no-op (returns success with FailureStep="dismiss-current-noop"). A
+	// dismissal failure returns a failed PostResult; a COMMENT-post failure
+	// after a successful dismissal still returns success — the merge gate
+	// is already cleared.
+	DismissCurrentReview(
+		ctx context.Context,
+		pr prurl.PRInfo,
+		headSHA, botLogin string,
+		hallucinations []Hallucination,
+	) PostResult
 }
 
 // PostRequest carries all inputs needed for a single posting sequence.

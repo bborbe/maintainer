@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [056-github-releaser-ai-review-phase]
+spec: [057-github-releaser-ai-review-phase]
 summary: Enabled ai_review phase in trigger.phases by removing the omission comment and adding ai_review to the phase list
 container: maintainer-releaser-ai-review-exec-222-spec-056-k8s-manifest
 dark-factory-version: v0.173.0

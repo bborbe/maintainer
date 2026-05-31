@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	errors "github.com/bborbe/errors"
@@ -220,6 +221,158 @@ func (p *prPoster) dismissOne(
 		return buildFailedResult(step, cr), false
 	}
 	return prpkg.PostResult{}, true
+}
+
+// listBotReviewsAtHead returns bot reviews at the exact head SHA with state
+// APPROVED or CHANGES_REQUESTED. Unlike listBotReviews (which intentionally
+// excludes head-SHA reviews for the dismissPriorReviews path), this targets
+// only the current-head review for the hallucination-dismissal path.
+func (p *prPoster) listBotReviewsAtHead(
+	ctx context.Context,
+	pr prurl.PRInfo,
+	headSHA string,
+) ([]reviewEntry, prpkg.PostResult, bool) {
+	step := "GET /pulls/N/reviews (dismiss-current)"
+	url := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",
+		pr.Owner,
+		pr.Repo,
+		pr.Number,
+	)
+	cr := retryCall(ctx, step, func(ctx context.Context) ([]reviewEntry, int, string, error) {
+		status, body, err := doRequest(ctx, p.httpClient, p.ghToken, "GET", url, nil)
+		if err != nil {
+			return nil, status, truncateBody(body), err
+		}
+		if status != 200 {
+			return nil, status, truncateBody(
+					body,
+				), errors.Errorf(
+					ctx,
+					"unexpected status %d",
+					status,
+				)
+		}
+		var all []reviewEntry
+		if err := json.Unmarshal(body, &all); err != nil {
+			return nil, status, truncateBody(body), errors.Wrapf(ctx, err, "parse reviews")
+		}
+		var filtered []reviewEntry
+		for _, r := range all {
+			if r.User.Login == p.botLogin && r.CommitID == headSHA &&
+				(r.State == "APPROVED" || r.State == "CHANGES_REQUESTED") {
+				filtered = append(filtered, r)
+			}
+		}
+		return filtered, status, truncateBody(body), nil
+	})
+	if cr.Err != nil {
+		return nil, buildFailedResult(step, cr), false
+	}
+	return cr.Value, prpkg.PostResult{}, true
+}
+
+// buildHallucinationCommentBody builds the COMMENT review body for the
+// follow-up comment after dismissing a hallucinated review.
+func buildHallucinationCommentBody(hallucinations []prpkg.Hallucination) string {
+	if len(hallucinations) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("hallucinated review — see follow-up COMMENT for evidence\n\n")
+	for _, h := range hallucinations {
+		sb.WriteString(fmt.Sprintf("- %s:%d — %s\n", h.File, h.Line, h.Issue))
+	}
+	return sb.String()
+}
+
+func (p *prPoster) DismissCurrentReview(
+	ctx context.Context,
+	pr prurl.PRInfo,
+	headSHA, botLogin string,
+	hallucinations []prpkg.Hallucination,
+) prpkg.PostResult {
+	// No-op when headSHA is empty
+	if headSHA == "" {
+		return prpkg.PostResult{
+			Outcome:     "success",
+			FailureStep: "dismiss-current-noop",
+			HTTPStatus:  0,
+		}
+	}
+
+	// Find the bot's review at the current head SHA
+	reviews, result, ok := p.listBotReviewsAtHead(ctx, pr, headSHA)
+	if !ok {
+		return result
+	}
+	if len(reviews) == 0 {
+		return prpkg.PostResult{
+			Outcome:     "success",
+			FailureStep: "dismiss-current-noop",
+			HTTPStatus:  0,
+		}
+	}
+
+	// Dismiss the first matching review
+	review := reviews[0]
+	dismissStep := fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, review.ID)
+	url := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/pulls/%d/reviews/%d/dismissals",
+		pr.Owner, pr.Repo, pr.Number, review.ID,
+	)
+	dismissPayload := []byte(`{"message":"hallucinated review — see follow-up COMMENT for evidence"}`)
+	cr := retryCall(ctx, dismissStep, func(ctx context.Context) (struct{}, int, string, error) {
+		status, body, err := doRequest(
+			ctx,
+			p.httpClient,
+			p.ghToken,
+			"PUT",
+			url,
+			bytes.NewReader(dismissPayload),
+		)
+		if err != nil {
+			return struct{}{}, status, truncateBody(body), err
+		}
+		if status < 200 || status >= 300 {
+			return struct{}{}, status, truncateBody(
+					body,
+				), errors.Errorf(
+					ctx,
+					"unexpected status %d",
+					status,
+				)
+		}
+		return struct{}{}, status, truncateBody(body), nil
+	})
+	if cr.Err != nil {
+		return buildFailedResult(dismissStep, cr)
+	}
+
+	// Dismissal succeeded — post follow-up COMMENT
+	body := buildHallucinationCommentBody(hallucinations)
+	if len(body) > maxGitHubCommentBody {
+		keep := maxGitHubCommentBody - len(maxGitHubCommentBodyNotice)
+		if keep < 0 {
+			keep = 0
+		}
+		body = body[:keep] + maxGitHubCommentBodyNotice
+	}
+	commentStep := fmt.Sprintf("POST /pulls/%d/reviews (comment-after-dismiss)", pr.Number)
+	_, commentResult, proceed := p.postReview(ctx, pr, headSHA, "COMMENT", body)
+	if !proceed {
+		return prpkg.PostResult{
+			Outcome:      "success",
+			FailureStep:  commentStep,
+			HTTPStatus:   commentResult.HTTPStatus,
+			ErrorMessage: commentResult.ErrorMessage,
+		}
+	}
+	return prpkg.PostResult{
+		Outcome:     "success",
+		FailureStep: "",
+		HTTPStatus:  200,
+	}
 }
 
 func (p *prPoster) postAndVerify(

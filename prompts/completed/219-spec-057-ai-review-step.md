@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [056-github-releaser-ai-review-phase]
+spec: [057-github-releaser-ai-review-phase]
 summary: Implemented ai_review step for github-releaser agent with ReviewChecks/ReviewOutput types, AIReviewClient interface, ErrTagNotFound sentinel, and three verification checks (tag exists, tag at expected SHA, CHANGELOG header rewritten)
 container: maintainer-releaser-ai-review-exec-219-spec-056-ai-review-step
 dark-factory-version: v0.173.0

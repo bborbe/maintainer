@@ -191,6 +191,7 @@ func CreateAgent(
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
+		prPoster,
 		prompts.BuildReviewInstructions(),
 		verifier,
 		ghToken,
