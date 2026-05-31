@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [056-github-releaser-ai-review-phase]
+summary: Implemented githubreview HTTP client with TagExists, ResolveTagCommit, and FetchChangelog methods; generated ReviewClient mock; 28 tests passing
+container: maintainer-releaser-ai-review-exec-220-spec-056-http-client
+dark-factory-version: v0.173.0
 created: "2026-05-31T20:35:00Z"
 queued: "2026-05-31T20:54:57Z"
+started: "2026-05-31T20:58:13Z"
+completed: "2026-05-31T21:02:56Z"
 branch: dark-factory/github-releaser-ai-review-phase
 ---
 
