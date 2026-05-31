@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/github-releaser): Add ai_review step with three verification checks (tag exists, tag at expected SHA, CHANGELOG header rewritten) and ReviewOutput section
+
 ## v0.28.1
 
 - refactor(mocks): consolidate every module's counterfeiter mocks into a single `<module>/mocks/` directory next to its `go.mod`, matching `go-mocking-guide.md` and the existing `agent/pr-reviewer/mocks/` reference. Removes five stray nested `pkg/mocks/` dirs in `agent/github-releaser`, `watcher/github-build`, `watcher/github-pr`, and `watcher/github-release` (21 files moved). Rewrites every `//counterfeiter:generate -o` directive to `../mocks/` (from `pkg/`) or `../../mocks/` (from `pkg/<sub>/`). Adds missing `//go:generate counterfeiter -generate` to `watcher/github-build/pkg/maintenance/suite_test.go` and `watcher/github-pr/pkg/handler/suite_test.go` (without those, `make generate`'s `rm -rf mocks` wiped subpkg mocks with no regen step). All four affected modules' `make precommit` green.

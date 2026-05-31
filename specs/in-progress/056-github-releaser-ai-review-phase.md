@@ -1,8 +1,12 @@
 ---
+status: prompted
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-05-31T20:33:16Z"
+generating: "2026-05-31T20:33:56Z"
+prompted: "2026-05-31T20:41:42Z"
+branch: dark-factory/github-releaser-ai-review-phase
 ---
 
 ## Summary
@@ -42,7 +46,7 @@ After this work, a fresh `github-release` task drives all three phases to termin
 5. When the task's `## Result` reports `outcome != "released"` (i.e. the execution step recorded a failure), the agent performs zero GitHub API calls and returns a result that drives the task to terminal-completed. The failure was already recorded upstream; there is nothing for `ai_review` to verify and nothing to escalate that the execution step did not already record.
 6. When the `## Plan` or `## Result` section is missing or its JSON is malformed, the agent returns an error from the step (not a `## Review` verdict) so the controller's standard failure path runs. A malformed contract is not the same as a verification failure.
 7. The agent's Kubernetes `Config` lists all three phases under `trigger.phases` so the controller dispatches `ai_review` events to this agent. The previously-present omission comment is gone.
-8. The local CLI entry point used for manual smoke runs (`cmd/run-task` with a `--phase ai_review` invocation, or its current equivalent — whatever the existing planning/execution local runs use) drives the new step the same way the Kafka entry point does. A single binary, one set of dependencies, two entry points.
+8. The local CLI entry point `cmd/run-task` (the only `cmd/*` binary in `agent/github-releaser/`) invoked with `--phase ai_review` drives the new step the same way the Kafka entry point does. A single binary, one set of dependencies, two entry points.
 
 ## Constraints
 
@@ -50,6 +54,7 @@ After this work, a fresh `github-release` task drives all three phases to termin
 - The phase identifier registered in the factory MUST be the typed constant `domain.TaskPhaseAIReview` from `github.com/bborbe/vault-cli/pkg/domain`, never a raw string literal. The Kubernetes `trigger.phases` value is matched literal-against the agent's registered phase set; a string-vs-constant mismatch silently drops tasks.
 - The factory function (`CreateAgent` in `agent/github-releaser/pkg/factory/factory.go`) stays pure: no error return, no `switch` on configuration, no conditional registration of phases. Adding the third phase is a single additional `agentlib.NewPhase(...)` argument and one additional constructor call.
 - The existing release App's permissions (Contents: read, plus the write needed by the execution step) are the upper bound — the new step uses Contents: read only and adds no scope requirement.
+- The CHANGELOG fetch MUST NOT hardcode `main` as the default branch. The target repo's actual default branch is resolved at runtime (the `repos/{repo}/contents/CHANGELOG.md` GitHub API endpoint already defaults to the repo's default branch when no `?ref=` is passed — relying on that behavior is correct and idiomatic). Tag-resolution (`git/refs/tags/{tag}`, `git/tags/{sha}`) is branch-independent.
 - The step MUST NOT return a result that mutates `assignee`, `previous_assignee`, `status`, or writes a `## Failure` section directly. Those mutations are the **controller's** responsibility on `Status: failed` paths per the platform doctrine ([[Controller Stop Setting human_review on Agent Failure]] / spec 039). The step's only outputs are: (a) the `## Review` section, (b) the returned `agentlib.Step` result with `Status: done | failed` and (on success) the terminal-completed phase signal.
 - The step MUST NOT return `next_phase: human_review` on verification failure. Per the same doctrine, `human_review` is reserved for "pipeline completed, human verifies result" (an explicit verdict-from-success path), not for "step failed." `Status: failed` is the correct signal; the controller does the rest.
 - Token handling uses the same env-derived bearer-token pattern the planning step's `githubchangelog.NewHTTPFetcher` already uses. No new secret name, no new env var, no new Kubernetes manifest field for credentials.
@@ -88,9 +93,9 @@ After this work, a fresh `github-release` task drives all three phases to termin
 ## Acceptance Criteria
 
 - [ ] `cd agent/github-releaser && make precommit` exits 0 — evidence: exit code.
-- [ ] `agent/github-releaser/pkg/factory/factory.go` `CreateAgent` registers exactly three phases (`planning`, `execution`, `ai_review`) — evidence: a factory test asserts the registered phase count is 3 and the names include `string(domain.TaskPhaseAIReview)`; `grep -nE 'agentlib\.NewPhase\(' agent/github-releaser/pkg/factory/factory.go | wc -l` returns 3.
+- [ ] `agent/github-releaser/pkg/factory/factory.go` `CreateAgent` registers exactly three phases (`planning`, `execution`, `ai_review`). NOTE: `agent/lib` v0.63.11 does NOT expose `Agent.Phases()` — `findPhase` is unexported (`agent_agent.go:126`). Direct phase-name assertion in a Go test is therefore not possible without modifying agent-lib (out of scope). Evidence: (1) **primary** — `grep -nE 'agentlib\.NewPhase\(' agent/github-releaser/pkg/factory/factory.go | wc -l` returns `3` AND `grep -E 'domain\.TaskPhaseAIReview' agent/github-releaser/pkg/factory/factory.go` returns at least one match (proves the typed constant is in source); (2) **corroborating** — the existing factory test (`CreateAgent` returns non-nil `*agentlib.Agent` and the three-phase construction does not panic) continues to pass, since `NewAgent` and `NewPhase` would panic on any miswiring.
+- [ ] A unit test exercises the happy path (all three checks pass) and asserts the returned result drives the task to terminal-completed — evidence: `result.Status == agentlib.AgentStatusDone` AND `result.NextPhase == "done"` (per `agent/lib v0.63.x` agent_agent.go:91 — the literal `"done"` string is the terminal-completed signal).
 - [ ] The agent's Kubernetes `Config` lists all three phases under `trigger.phases` with no omission comment — evidence: `grep -A4 'phases:' agent/github-releaser/k8s/maintainer-agent-github-releaser.yaml` shows `planning`, `execution`, `ai_review` and `grep -n 'intentionally omitted' agent/github-releaser/k8s/maintainer-agent-github-releaser.yaml` returns no match.
-- [ ] A unit test exercises the happy path (all three checks pass) and asserts the returned result drives the task to terminal-completed (phase out of `ai_review`, status completed) — evidence: test passes; specific assertions on returned `agentlib.Result.Status` and `NextPhase` (or whatever the agent-lib equivalent for "phase advance to completed" is in v0.63.x).
 - [ ] A unit test verifies the tag-missing case (mock returns 404 on `git/refs/tags/{tag}`) produces `approved: false`, `checks.tag_exists: false` in the written `## Review` section AND the step returns `Status: failed` (no `next_phase` transition) — evidence: test asserts the `## Review` JSON contents in the returned markdown AND asserts `result.Status == agentlib.AgentStatusFailed` AND asserts the result does NOT carry a `next_phase` of `human_review` (or any other phase). The step explicitly does NOT mutate `assignee` / `previous_assignee` / `status` / write a `## Failure` section — those are the controller's responsibility on the `failed` path per spec 039.
 - [ ] A unit test verifies the commit-SHA-mismatch case for an annotated tag (`object.type == "tag"` → follow-up `git/tags/{sha}` returns a different commit SHA than `## Result.commit_sha`) produces `approved: false`, `checks.tag_at_expected_sha: false`, and `Status: failed` — evidence: test assertions on `## Review` JSON contents AND on the returned step result's `Status` field.
 - [ ] A unit test verifies the commit-SHA-mismatch case for a lightweight tag (`object.type == "commit"`, SHA mismatch) produces the same `approved: false` / `tag_at_expected_sha: false` / `Status: failed` — evidence: test assertion on `## Review` JSON contents AND on `result.Status`.
@@ -100,6 +105,7 @@ After this work, a fresh `github-release` task drives all three phases to termin
 - [ ] A unit test verifies malformed-`## Plan` or malformed-`## Result` JSON produces a wrapped error (not a `## Review` verdict) — evidence: test asserts the error chain contains the wrap message and that no `## Review` section was added to the markdown.
 - [ ] A unit test verifies the bearer token never appears in returned error strings (mock the HTTP transport to fail and assert the resulting wrapped error does not contain the token value) — evidence: test asserts `strings.Contains(err.Error(), token) == false`.
 - [ ] A manual smoke run via the local CLI entry point against the parked `Release bborbe-claude-yolo af4000c.md` task (or an equivalent test-task file with the same shape) produces a `## Review` section in the task file with `approved: true`, all three `checks` keys set to `true`, and a terminal-completed result printed by the CLI — evidence: file diff on the task file showing the new `## Review` section + CLI stdout line indicating completion.
+- [ ] A manual smoke run on a tampered task file (same starting state but `commit_sha` in `## Result` altered to a non-existent SHA) produces a `## Review` section with `approved: false`, `tag_at_expected_sha: false`, and the CLI's printed agent result shows `Status: failed` — evidence: file diff showing the `## Review` JSON contents + CLI stdout line showing `Status: failed`. (The local-CLI path does NOT exercise the controller's unassign / `## Failure` / `previous_assignee` mutation; that's platform behavior tested separately.)
 
 **Scenario coverage:** NO new dark-factory scenario. The behavior is reachable by (a) unit tests against the new step with a stubbed GitHub HTTP client (counterfeiter mock on the API seam) and (b) the local-CLI smoke run against a real parked task file. A scenario would require a real release cycle (real tag push, real CHANGELOG rewrite, real CRD dispatch) for which the manual smoke run already provides operator-level verification at lower cost.
 
