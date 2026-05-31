@@ -11,6 +11,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## Unreleased
 
 - feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing semver version field)
+- test(agent/github-releaser): add integration tests for manifest bumping in executeDirectPush covering both manifests present, one manifest only, no manifests (backward compatibility), unexpected_diff guard, and malformed plugin.json guard
 
 ## v0.29.0
 

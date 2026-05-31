@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [056-plugin-version-bump]
+summary: Added 6 integration tests for manifest bumping in executeDirectPush with 4 golden fixture files
+container: maintainer-plugin-version-bump-exec-222-spec-056-integration-tests
+dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"
 queued: "2026-05-31T22:32:08Z"
+started: "2026-05-31T23:19:04Z"
+completed: "2026-05-31T23:22:07Z"
 branch: feature/plugin-version-bump
 ---
 
