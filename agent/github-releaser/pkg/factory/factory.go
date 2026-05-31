@@ -22,6 +22,7 @@ import (
 	releaserpkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
 )
 
 const serviceName = "maintainer-agent-github-releaser"
@@ -91,11 +92,13 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
-// CreateAgent assembles the planning + execution agent.
+// CreateAgent assembles the planning + execution + ai_review agent.
 //
-// The two phases advance in order: planning writes ## Plan(outcome=ready),
-// then execution reads it, clones the target repo, rewrites ## Unreleased,
-// commits + tags + pushes, and writes ## Result(outcome=released).
+// The three phases advance in order: planning writes ## Plan(outcome=ready),
+// execution reads it, clones the target repo, rewrites ## Unreleased,
+// commits + tags + pushes, and writes ## Result(outcome=released),
+// then ai_review verifies the tag and CHANGELOG.md header and drives
+// terminal completion or escalation via ## Review.
 func CreateAgent(
 	claudeConfigDir claudelib.ClaudeConfigDir,
 	agentDir claudelib.AgentDir,
@@ -110,9 +113,13 @@ func CreateAgent(
 	executionOps := CreateGitOps()
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
 
+	reviewClient := githubreview.NewHTTPClient(ghToken)
+	reviewStep := releaserpkg.NewAIReviewStep(reviewClient, ghToken)
+
 	return agentlib.NewAgent(
 		agentlib.NewPhase(domain.TaskPhasePlanning, planningStep),
 		agentlib.NewPhase(domain.TaskPhaseExecution, executionStep),
+		agentlib.NewPhase(domain.TaskPhaseAIReview, reviewStep),
 	)
 }
 

@@ -45,11 +45,9 @@ spec:
     statuses:
       - in_progress
     phases:
-      # ai_review intentionally omitted until the ## Review step is implemented
-      # (a separate spec). The execution step returns NextPhase=ai_review, but
-      # the controller will not trigger a phase the agent does not yet handle.
       - planning
       - execution
+      - ai_review
   resources:
     requests:
       cpu: 500m

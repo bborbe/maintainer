@@ -1,8 +1,10 @@
 ---
+status: rejected
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+rejected: "2026-05-31T21:07:38Z"
+rejected_reason: Superseded by spec 052 which shipped App-auth wiring in agent/pr-reviewer/main.go:236-263 (MintIAT + App-vs-PAT selection). Canary trading#133 confirmed working in prod. Multiple "spec 052 review" commits (Ginkgo auth specs, run-task PEM_KEY parity, go.mod cleanup) plus follow-up fix 56d2471 are all post-fix evidence.
 ---
 
 ## Summary
