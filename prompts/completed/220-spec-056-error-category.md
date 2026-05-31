@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [056-plugin-version-bump]
+summary: Added ErrorCategoryPluginManifestInvalid constant to pkg/git/error_classifier.go with two-layer-classification comment, plus corresponding test assertions in error_classifier_test.go
+container: maintainer-plugin-version-bump-exec-220-spec-056-error-category
+dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"
 queued: "2026-05-31T22:32:08Z"
+started: "2026-05-31T23:14:16Z"
+completed: "2026-05-31T23:16:02Z"
 branch: feature/plugin-version-bump
 ---
 
