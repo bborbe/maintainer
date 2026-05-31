@@ -194,15 +194,21 @@ func (c *httpClient) ResolveTagCommit(
 		return "", errors.Wrapf(ctx, err, "ResolveTagCommit: decode json")
 	}
 
-	// Both annotated ("tag") and lightweight ("commit") tags return the
-	// underlying commit SHA in Object.SHA for the github-releaser pipeline:
-	// the execution step creates non-chained annotated tags via `git tag -a`
-	// (or pushes lightweight tags), neither of which points at another tag.
-	// Chained annotated tags (tag-of-tag) are theoretically possible via
-	// GitHub but never produced by this release path, so we do NOT recurse.
+	// Object.Type == "commit": annotated tag wraps a commit (normal case for
+	// github-releaser, which creates non-chained annotated tags via `git tag -a`).
+	// Object.Type == "tag": chained annotated tag (tag-of-tag) — theoretically
+	// valid in Git but not produced by this release path. Returning Object.SHA
+	// in that case would silently hand back another tag SHA mislabeled as a
+	// commit SHA, so reject explicitly rather than recurse.
 	switch tagResp.Object.Type {
-	case "tag", "commit":
+	case "commit":
 		return tagResp.Object.SHA, nil
+	case "tag":
+		return "", errors.Errorf(
+			ctx,
+			"ResolveTagCommit: chained annotated tag (tag-of-tag) not supported for tag %s",
+			tagSHA,
+		)
 	default:
 		return "", errors.Errorf(
 			ctx,

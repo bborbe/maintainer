@@ -193,7 +193,7 @@ var _ = Describe("httpClient", func() {
 			Expect(sha).To(Equal("commit-sha-456"))
 		})
 
-		It("returns tag SHA for annotated tag (type=tag)", func() {
+		It("returns error for chained annotated tag (type=tag, tag-of-tag)", func() {
 			server := httptest.NewServer(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
@@ -211,8 +211,10 @@ var _ = Describe("httpClient", func() {
 			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
 			sha, err := client.ResolveTagCommit(ctx, "bborbe", "maintainer", "tag-sha-123")
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sha).To(Equal("wrapped-tag-sha-789"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("chained annotated tag"))
+			Expect(err.Error()).To(ContainSubstring("tag-sha-123"))
+			Expect(sha).To(BeEmpty())
 		})
 
 		It("returns error for unknown type", func() {
