@@ -16,7 +16,7 @@ package git
 
 import "context"
 
-//counterfeiter:generate -o mocks/git_ops.go --fake-name GitOps . GitOps
+//counterfeiter:generate -o ../../mocks/git_ops.go --fake-name GitOps . GitOps
 
 // GitOps is the seam between the execution step and the git binary. Four
 // methods cover the entire direct-push happy path: clone target repo,

@@ -14,8 +14,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	gitmocks "github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
-	gitmocks "github.com/bborbe/maintainer/agent/github-releaser/pkg/git/mocks"
 )
 
 var _ = Describe("ExecutionStep", func() {

@@ -22,7 +22,7 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 )
 
-//counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
+//counterfeiter:generate -o ../mocks/watcher.go --fake-name Watcher . Watcher
 
 // DependabotGraphUpdatePrefixes are workflow-name prefixes used by Dependabot for
 // internal graph-maintenance jobs. These are NOT real CI failures — their HTTP 503s

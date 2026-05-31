@@ -14,7 +14,7 @@
 //  4. SHAUnchangedFilter — skip if cursor already recorded this master HEAD
 package filter
 
-//counterfeiter:generate -o ../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
+//counterfeiter:generate -o ../../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
 
 // Release is the filter-evaluation input.
 // Mirrors pkg.Release as a local type to avoid an import cycle (pkg imports

@@ -14,7 +14,7 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
 )
 
-//counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
+//counterfeiter:generate -o ../mocks/watcher.go --fake-name Watcher . Watcher
 
 // Watcher polls GitHub for repos with non-empty ## Unreleased and publishes
 // CreateTaskCommands to Kafka for github-releaser-agent to consume.

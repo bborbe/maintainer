@@ -42,7 +42,7 @@ func (r *result) Success() bool { return r.success }
 
 func (r *result) Description() string { return r.description }
 
-//counterfeiter:generate -o ../mocks/trust.go --fake-name Trust . Trust
+//counterfeiter:generate -o ../../mocks/trust.go --fake-name Trust . Trust
 
 // Trust is the single-method trust-decision interface.
 // Each implementation returns both an outcome (trusted/denied) and a

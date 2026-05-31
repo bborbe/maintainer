@@ -11,9 +11,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/watcher/github-build/mocks"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
-	"github.com/bborbe/maintainer/watcher/github-build/pkg/mocks"
 )
 
 var _ = Describe("Loader", func() {

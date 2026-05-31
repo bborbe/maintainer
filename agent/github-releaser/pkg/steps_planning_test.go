@@ -17,23 +17,22 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	agentmocks "github.com/bborbe/maintainer/agent/github-releaser/mocks"
+	"github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
-	githubchangelogmocks "github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog/mocks"
 )
 
 var _ = Describe("steps_planning", func() {
 	Describe("PlanningStep", func() {
 		Context("happy path", func() {
 			It("ready path: emits ## Plan with outcome=ready and NextPhase=execution", func() {
-				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher := &mocks.Fetcher{}
 				fakeFetcher.FetchReturns(
 					[]byte("## Unreleased\n\n- feat: add foo\n- fix: bar\n\n## v1.7.7\n\n- old\n"),
 					nil,
 				)
 
-				fakeRunner := &agentmocks.ClaudeRunnerMock{}
+				fakeRunner := &mocks.ClaudeRunnerMock{}
 				fakeRunner.RunReturns(&claudelib.ClaudeResult{
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
@@ -74,9 +73,9 @@ var _ = Describe("steps_planning", func() {
 					badChangelog := []byte(
 						"# Changelog\n\nIntro text.\n\n## v1.2.6\n\n- old release\n\n## Unreleased\n\n- new bullet\n",
 					)
-					fakeFetcher := &githubchangelogmocks.Fetcher{}
+					fakeFetcher := &mocks.Fetcher{}
 					fakeFetcher.FetchReturns(badChangelog, nil)
-					fakeRunner := &agentmocks.ClaudeRunnerMock{} // not called on escalation
+					fakeRunner := &mocks.ClaudeRunnerMock{} // not called on escalation
 
 					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
 
@@ -121,8 +120,8 @@ var _ = Describe("steps_planning", func() {
 			It(
 				"missing clone_url → outcome=needs_input + precondition_failed=missing_frontmatter_clone_url",
 				func() {
-					fakeFetcher := &githubchangelogmocks.Fetcher{}
-					fakeRunner := &agentmocks.ClaudeRunnerMock{}
+					fakeFetcher := &mocks.Fetcher{}
+					fakeRunner := &mocks.ClaudeRunnerMock{}
 					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
 
 					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-001\n---\n"
@@ -147,9 +146,9 @@ var _ = Describe("steps_planning", func() {
 
 		Context("fetch error", func() {
 			It("fetcher transport error → Status=Failed", func() {
-				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher := &mocks.Fetcher{}
 				fakeFetcher.FetchReturns(nil, errors.New("dial tcp: connection refused"))
-				fakeRunner := &agentmocks.ClaudeRunnerMock{}
+				fakeRunner := &mocks.ClaudeRunnerMock{}
 
 				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
 
@@ -165,9 +164,9 @@ var _ = Describe("steps_planning", func() {
 
 		Context("claude parse error", func() {
 			It("claude returns malformed JSON → Status=Failed", func() {
-				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher := &mocks.Fetcher{}
 				fakeFetcher.FetchReturns([]byte("## Unreleased\n\n- feat: x\n"), nil)
-				fakeRunner := &agentmocks.ClaudeRunnerMock{}
+				fakeRunner := &mocks.ClaudeRunnerMock{}
 				fakeRunner.RunReturns(&claudelib.ClaudeResult{Result: "not-json-at-all"}, nil)
 
 				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
@@ -186,9 +185,9 @@ var _ = Describe("steps_planning", func() {
 			It(
 				"malformed current_version → outcome=needs_input + precondition_failed=bad_current_version",
 				func() {
-					fakeFetcher := &githubchangelogmocks.Fetcher{}
+					fakeFetcher := &mocks.Fetcher{}
 					fakeFetcher.FetchReturns([]byte("## Unreleased\n\n- feat: x\n"), nil)
-					fakeRunner := &agentmocks.ClaudeRunnerMock{}
+					fakeRunner := &mocks.ClaudeRunnerMock{}
 					fakeRunner.RunReturns(
 						&claudelib.ClaudeResult{Result: `{"bump":"minor","reasoning":"x"}`},
 						nil,
@@ -217,9 +216,9 @@ var _ = Describe("steps_planning", func() {
 			It(
 				"empty Unreleased bullets → outcome=needs_input + precondition_failed=P2_unreleased_empty",
 				func() {
-					fakeFetcher := &githubchangelogmocks.Fetcher{}
+					fakeFetcher := &mocks.Fetcher{}
 					fakeFetcher.FetchReturns([]byte("## Unreleased\n\n## v1.0.0\n\n- old\n"), nil)
-					fakeRunner := &agentmocks.ClaudeRunnerMock{}
+					fakeRunner := &mocks.ClaudeRunnerMock{}
 
 					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
 
@@ -242,12 +241,12 @@ var _ = Describe("steps_planning", func() {
 
 		Context("idempotency", func() {
 			It("idempotent: re-running with existing ## Plan replaces it", func() {
-				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher := &mocks.Fetcher{}
 				fakeFetcher.FetchReturns(
 					[]byte("## Unreleased\n\n- feat: add foo\n- fix: bar\n\n## v1.7.7\n\n- old\n"),
 					nil,
 				)
-				fakeRunner := &agentmocks.ClaudeRunnerMock{}
+				fakeRunner := &mocks.ClaudeRunnerMock{}
 				fakeRunner.RunReturns(&claudelib.ClaudeResult{
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
@@ -384,9 +383,9 @@ task_identifier: gh-release-bborbe-maintainer-master-spec048
 				badChangelog := []byte(
 					"# Changelog\n\nIntro.\n\n## v1.2.6\n\n- old release\n\n## Unreleased\n\n- new bullet\n",
 				)
-				fakeFetcher := &githubchangelogmocks.Fetcher{}
+				fakeFetcher := &mocks.Fetcher{}
 				fakeFetcher.FetchReturns(badChangelog, nil)
-				fakeRunner := &agentmocks.ClaudeRunnerMock{} // never called on P1
+				fakeRunner := &mocks.ClaudeRunnerMock{} // never called on P1
 
 				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
 				agent := agentlib.NewAgent(agentlib.NewPhase(domain.TaskPhasePlanning, step))

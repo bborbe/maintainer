@@ -18,7 +18,7 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-//counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
+//counterfeiter:generate -o ../mocks/watcher.go --fake-name Watcher . Watcher
 
 // Watcher polls GitHub and publishes task commands to Kafka.
 type Watcher interface {
@@ -33,7 +33,7 @@ type TaskConfig struct {
 	TaskSuffix  string
 }
 
-//counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
+//counterfeiter:generate -o ../mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
 
 // TaskPublisher publishes create-task commands for a given PR + details pair.
 // Returns true on successful publish, false on trust check failure or send failure.

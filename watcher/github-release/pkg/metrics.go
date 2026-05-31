@@ -6,7 +6,7 @@ package pkg
 
 import "github.com/prometheus/client_golang/prometheus"
 
-//counterfeiter:generate -o mocks/metrics.go --fake-name Metrics . Metrics
+//counterfeiter:generate -o ../mocks/metrics.go --fake-name Metrics . Metrics
 
 // Metrics is the four observable counters required by [[Watcher Writing Guide]] §
 // Required observability.

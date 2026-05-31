@@ -19,7 +19,7 @@ import (
 // or abuse-rate-limit error.
 var ErrRateLimited = stderrors.New("github rate limited")
 
-//counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
+//counterfeiter:generate -o ../mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient is the upstream-source surface for the release watcher.
 // All methods are scoped to a single owner; the watcher iterates per-owner.

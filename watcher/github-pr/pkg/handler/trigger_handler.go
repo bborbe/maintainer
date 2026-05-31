@@ -21,7 +21,7 @@ import (
 )
 
 // SinglePRTriggerHandler handles POST /trigger?url=<pr_url>
-//counterfeiter:generate -o ../mocks/single_pr_trigger_handler.go --fake-name SinglePRTriggerHandler . SinglePRTriggerHandler
+//counterfeiter:generate -o ../../mocks/single_pr_trigger_handler.go --fake-name SinglePRTriggerHandler . SinglePRTriggerHandler
 
 type SinglePRTriggerHandler = libhttp.WithError
 

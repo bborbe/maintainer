@@ -16,7 +16,7 @@ type TaskConfig struct {
 	Stage string // "dev" or "prod" — frontmatter `stage`
 }
 
-//counterfeiter:generate -o mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
+//counterfeiter:generate -o ../mocks/task_publisher.go --fake-name TaskPublisher . TaskPublisher
 
 // TaskPublisher builds the CreateTaskCommand per [[Agent Task File Contract]] and
 // sends it via the supplied CreateCommandSender. Returns true on successful send.

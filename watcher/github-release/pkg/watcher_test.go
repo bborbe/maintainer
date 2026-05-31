@@ -14,9 +14,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/lib/maintainerconfig"
+	"github.com/bborbe/maintainer/watcher/github-release/mocks"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
 )
 
 var _ = Describe("pkg.Watcher.Poll", func() {

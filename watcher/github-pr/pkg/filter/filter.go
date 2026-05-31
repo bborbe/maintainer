@@ -27,7 +27,7 @@ type PR struct {
 	RepoKey     string
 }
 
-//counterfeiter:generate -o ../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
+//counterfeiter:generate -o ../../mocks/task_creation_filter.go --fake-name TaskCreationFilter . TaskCreationFilter
 
 // TaskCreationFilter decides whether a single PR should be skipped
 // (no vault task created). Implementations return true to skip.

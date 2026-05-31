@@ -13,8 +13,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/watcher/github-release/mocks"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
-	"github.com/bborbe/maintainer/watcher/github-release/pkg/mocks"
 )
 
 type fakeCreateCommandSender struct {

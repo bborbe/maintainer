@@ -69,7 +69,7 @@ type PRDetails struct {
 	UpdatedAt libtime.DateTime
 }
 
-//counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
+//counterfeiter:generate -o ../mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub API calls.
 type GitHubClient interface {

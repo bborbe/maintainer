@@ -14,7 +14,7 @@ import (
 // FileContentFetcher fetches raw file bytes from a GitHub repository.
 // Matches the GetFileContent method signature on pkg.GitHubClient.
 //
-//counterfeiter:generate -o ../mocks/file_content_fetcher.go --fake-name FileContentFetcher . FileContentFetcher
+//counterfeiter:generate -o ../../mocks/file_content_fetcher.go --fake-name FileContentFetcher . FileContentFetcher
 type FileContentFetcher interface {
 	GetFileContent(ctx context.Context, owner, repo, path, ref string) ([]byte, error)
 }
@@ -30,7 +30,7 @@ type GithubBuildConfig struct {
 
 // Loader fetches per-repo override config for the build watcher.
 //
-//counterfeiter:generate -o ../mocks/maintenance_loader.go --fake-name MaintenanceLoader . Loader
+//counterfeiter:generate -o ../../mocks/maintenance_loader.go --fake-name MaintenanceLoader . Loader
 type Loader interface {
 	// LoadOverrides fetches .maintenance.yaml from the repo's default branch and
 	// returns the watcher.github-build subtree. Never returns an error — all

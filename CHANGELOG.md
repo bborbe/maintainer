@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- refactor(mocks): consolidate every module's counterfeiter mocks into a single `<module>/mocks/` directory next to its `go.mod`, matching `go-mocking-guide.md` and the existing `agent/pr-reviewer/mocks/` reference. Removes five stray nested `pkg/mocks/` dirs in `agent/github-releaser`, `watcher/github-build`, `watcher/github-pr`, and `watcher/github-release` (21 files moved). Rewrites every `//counterfeiter:generate -o` directive to `../mocks/` (from `pkg/`) or `../../mocks/` (from `pkg/<sub>/`). Adds missing `//go:generate counterfeiter -generate` to `watcher/github-build/pkg/maintenance/suite_test.go` and `watcher/github-pr/pkg/handler/suite_test.go` (without those, `make generate`'s `rm -rf mocks` wiped subpkg mocks with no regen step). All four affected modules' `make precommit` green.
+
 ## v0.28.0
 
 - feat(agent/github-releaser): pre-push guard — release fails closed if the commit changed anything other than `CHANGELOG.md` (defense-in-depth on the direct-push trust model)

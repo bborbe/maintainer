@@ -27,7 +27,7 @@ import (
 	"github.com/golang/glog"
 )
 
-//counterfeiter:generate -o mocks/fetcher.go --fake-name Fetcher . Fetcher
+//counterfeiter:generate -o ../../mocks/fetcher.go --fake-name Fetcher . Fetcher
 
 // Fetcher reads CHANGELOG.md bytes from a remote GitHub repo at a ref.
 // Implementations MUST be safe for concurrent use. Returned bytes are the

@@ -43,7 +43,7 @@ type WorkflowJobInfo struct {
 	FailedStepName string // first failed step's name; empty when not determinable
 }
 
-//counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
+//counterfeiter:generate -o ../mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub Actions API calls.
 type GitHubClient interface {

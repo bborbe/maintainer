@@ -21,8 +21,8 @@ import (
 	"github.com/onsi/gomega/gexec"
 
 	runonce "github.com/bborbe/maintainer/watcher/github-build/cmd/run-once"
+	"github.com/bborbe/maintainer/watcher/github-build/mocks"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
-	"github.com/bborbe/maintainer/watcher/github-build/pkg/mocks"
 )
 
 // generateTestPEM produces a fresh 2048-bit RSA PEM block for testing.

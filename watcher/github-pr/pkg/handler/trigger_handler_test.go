@@ -19,10 +19,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/watcher/github-pr/mocks"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
