@@ -14,7 +14,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
 )
 
@@ -57,7 +56,7 @@ var _ = Describe("httpClient", func() {
 			_, err := client.TagExists(ctx, "bborbe", "maintainer", "v99.0.0")
 
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, pkg.ErrTagNotFound)).To(BeTrue())
+			Expect(errors.Is(err, githubreview.ErrTagNotFound)).To(BeTrue())
 		})
 
 		It("returns wrapped error on 5xx", func() {

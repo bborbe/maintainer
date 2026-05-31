@@ -6,14 +6,14 @@ package pkg
 
 import (
 	"context"
-	stderrors "errors"
-	"fmt"
 	"regexp"
 	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
+
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
 )
 
 // ReviewChecks holds the three boolean verification results.
@@ -32,43 +32,21 @@ type ReviewOutput struct {
 	Notes    string       `json:"notes"`
 }
 
-// ErrTagNotFound is returned by AIReviewClient.TagExists on a 404 response.
-// The step uses errors.Is(err, ErrTagNotFound) to distinguish 404 (verification
-// failure → write ## Review approved:false, return Status:Failed) from
-// 5xx / transport errors (wrap and return; controller retries).
-var ErrTagNotFound = stderrors.New("ai_review: tag not found")
+// changelogHeadingRE matches a level-2 markdown heading. Compiled once at
+// package load — the regex is invariant.
+var changelogHeadingRE = regexp.MustCompile(`^##\s+`)
 
-// AIReviewClient is the seam for the three GitHub REST API calls.
-// Mock it in tests with a counterfeiter-generated mock.
-type AIReviewClient interface {
-	// TagExists calls GET /repos/{owner}/{repo}/git/ref/tags/{tag} and
-	// returns (tagSHA, nil) on 200, or ("", ErrTagNotFound) on 404
-	// (the sentinel — step distinguishes 404 → verdict vs 5xx → retry),
-	// or ("", wrapped error) on transport / other non-2xx.
-	TagExists(ctx context.Context, owner, repo, tag string) (tagSHA string, _ error)
-
-	// ResolveTagCommit calls GET /repos/{owner}/{repo}/git/tags/{sha} and
-	// follows annotated tags to their underlying commit SHA. Returns the
-	// commit SHA or a wrapped error.
-	ResolveTagCommit(ctx context.Context, owner, repo, tagSHA string) (commitSHA string, _ error)
-
-	// FetchChangelog calls GET /repos/{owner}/{repo}/contents/CHANGELOG.md
-	// (no ?ref= — relies on API defaulting to the repo's default branch).
-	// Returns base64-decoded file bytes or a wrapped error.
-	FetchChangelog(ctx context.Context, owner, repo string) ([]byte, error)
+// NewAIReviewStep wires the ai_review step with its GitHub REST API client
+// and the GitHub token (used for authenticated API calls).
+func NewAIReviewStep(client githubreview.Client, ghToken string) agentlib.Step {
+	return &aiReviewStep{client: client, ghToken: ghToken}
 }
 
 // aiReviewStep implements agentlib.Step. It performs three remote verification
 // checks against the GitHub REST API and writes a ## Review section.
 type aiReviewStep struct {
-	client  AIReviewClient
+	client  githubreview.Client
 	ghToken string
-}
-
-// NewAIReviewStep wires the ai_review step with its HTTP client seam and the
-// GitHub token (used for authenticated API calls).
-func NewAIReviewStep(client AIReviewClient, ghToken string) agentlib.Step {
-	return &aiReviewStep{client: client, ghToken: ghToken}
 }
 
 // Name implements agentlib.Step.
@@ -117,7 +95,7 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 
 	var tagSHA string
 	if tagSHA, err = s.verifyTagExists(ctx, owner, name, result.Tag, &checks); err != nil {
-		if errors.Is(err, ErrTagNotFound) {
+		if errors.Is(err, githubreview.ErrTagNotFound) {
 			return s.writeReviewSection(
 				ctx,
 				md,
@@ -172,8 +150,9 @@ func (s *aiReviewStep) writeReviewSection(
 }
 
 // verifyTagExists calls TagExists API and records the result in checks.
-// Returns the tagSHA on success, ErrTagNotFound if the tag is missing (caller
-// handles the verdict), or a wrapped error for transient failures.
+// Returns the tagSHA on success, githubreview.ErrTagNotFound if the tag is
+// missing (caller handles the verdict), or a wrapped error for transient
+// failures.
 func (s *aiReviewStep) verifyTagExists(
 	ctx context.Context,
 	owner, repo, tag string,
@@ -181,10 +160,10 @@ func (s *aiReviewStep) verifyTagExists(
 ) (string, error) {
 	tagSHA, err := s.client.TagExists(ctx, owner, repo, tag)
 	if err != nil {
-		if errors.Is(err, ErrTagNotFound) {
+		if errors.Is(err, githubreview.ErrTagNotFound) {
 			checks.TagExists = false
 			glog.V(2).Infof("ai_review: check=TagExists result=false: %v", err)
-			return "", ErrTagNotFound
+			return "", githubreview.ErrTagNotFound
 		}
 		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
 		return "", errors.Wrapf(ctx, err, "ai_review: TagExists")
@@ -208,9 +187,9 @@ func (s *aiReviewStep) verifyTagAtExpectedCommit(
 	}
 	if commitSHA != expectedCommit {
 		checks.TagAtExpectedSHA = false
-		msg := "tag points to " + commitSHA + ", expected " + expectedCommit
-		glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=false: %s", msg)
-		return fmt.Errorf("%s", msg)
+		glog.V(2).
+			Infof("ai_review: check=TagAtExpectedSHA result=false: tag points to %s, expected %s", commitSHA, expectedCommit)
+		return errors.Errorf(ctx, "tag points to %s, expected %s", commitSHA, expectedCommit)
 	}
 	glog.V(2).Infof("ai_review: check=TagAtExpectedSHA result=true")
 	return nil
@@ -244,12 +223,9 @@ func (s *aiReviewStep) verifyChangelogHeaderRewritten(
 // is NOT "## Unreleased" (i.e. the header has been rewritten to a version).
 // Splits on newlines and finds the first line matching ^##\s+.
 func (s *aiReviewStep) changelogHeaderRewritten(content []byte) bool {
-	lines := strings.Split(string(content), "\n")
-	headingRE := regexp.MustCompile(`^##\s+`)
-	for _, line := range lines {
-		if headingRE.MatchString(line) {
-			trimmed := strings.TrimSpace(line)
-			return trimmed != "## Unreleased"
+	for _, line := range strings.Split(string(content), "\n") {
+		if changelogHeadingRE.MatchString(line) {
+			return strings.TrimSpace(line) != "## Unreleased"
 		}
 	}
 	return false

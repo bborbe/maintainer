@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,9 +18,17 @@ import (
 
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
-
-	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 )
+
+// ErrTagNotFound is returned by Client.TagExists on a 404 response.
+// Callers use errors.Is(err, ErrTagNotFound) to distinguish 404 (verification
+// failure → write ## Review approved:false, return Status:Failed) from
+// 5xx / transport errors (wrap and return; controller retries).
+var ErrTagNotFound = stderrors.New("githubreview: tag not found")
+
+// errBodyPreviewMax matches githubchangelog (200 bytes) — keeps non-2xx
+// response bodies short in error strings to avoid log spam.
+const errBodyPreviewMax = 200
 
 //counterfeiter:generate -o ../../mocks/review_client.go --fake-name ReviewClient . Client
 
@@ -48,9 +57,11 @@ func NewHTTPClient(token string) Client {
 }
 
 // newHTTPClientWithBase is the test seam — package-private so tests via
-// export_test.go can point the client at an httptest.Server.
-// Mirrors githubchangelog.newHTTPFetcherWithBase pattern.
-func newHTTPClientWithBase(token, apiBase string) *httpClient {
+// export_test.go can point the client at an httptest.Server. Returns the
+// Client interface (not *httpClient) so the concrete type stays private
+// and future interface changes are a one-step edit. Mirrors
+// githubchangelog.newHTTPFetcherWithBase pattern.
+func newHTTPClientWithBase(token, apiBase string) Client {
 	return &httpClient{
 		client:  &http.Client{Timeout: 15 * time.Second},
 		token:   token,
@@ -117,12 +128,12 @@ func (c *httpClient) TagExists(ctx context.Context, owner, repo, tag string) (st
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return "", pkg.ErrTagNotFound
+		return "", ErrTagNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview := string(body)
-		if len(preview) > 1024 {
-			preview = preview[:1024]
+		if len(preview) > errBodyPreviewMax {
+			preview = preview[:errBodyPreviewMax]
 		}
 		return "", errors.Errorf(ctx, "TagExists: status %d: %s", resp.StatusCode, preview)
 	}
@@ -169,8 +180,8 @@ func (c *httpClient) ResolveTagCommit(
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview := string(body)
-		if len(preview) > 1024 {
-			preview = preview[:1024]
+		if len(preview) > errBodyPreviewMax {
+			preview = preview[:errBodyPreviewMax]
 		}
 		return "", errors.Errorf(ctx, "ResolveTagCommit: status %d: %s", resp.StatusCode, preview)
 	}
@@ -228,8 +239,8 @@ func (c *httpClient) FetchChangelog(ctx context.Context, owner, repo string) ([]
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		preview := string(body)
-		if len(preview) > 1024 {
-			preview = preview[:1024]
+		if len(preview) > errBodyPreviewMax {
+			preview = preview[:errBodyPreviewMax]
 		}
 		return nil, errors.Errorf(ctx, "FetchChangelog: status %d: %s", resp.StatusCode, preview)
 	}

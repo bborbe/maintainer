@@ -22,7 +22,7 @@ import (
 	releaserpkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
-	githubreview "github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
 )
 
 const serviceName = "maintainer-agent-github-releaser"

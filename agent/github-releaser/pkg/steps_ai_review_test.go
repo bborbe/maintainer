@@ -16,6 +16,7 @@ import (
 
 	"github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
 )
 
 var _ = Describe("AIReviewStep", func() {
@@ -188,7 +189,7 @@ var _ = Describe("AIReviewStep", func() {
 
 		Context("7b. Tag missing (404)", func() {
 			It("ErrTagNotFound → approved:false, status:failed, next_phase:empty", func() {
-				fakeClient.TagExistsReturns("", pkg.ErrTagNotFound)
+				fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
 
 				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released"))
 
@@ -396,7 +397,7 @@ var _ = Describe("AIReviewStep", func() {
 
 		Context("7l. Step does NOT write ## Failure section", func() {
 			It("failure case has no ## Failure section in markdown", func() {
-				fakeClient.TagExistsReturns("", pkg.ErrTagNotFound)
+				fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
 
 				_, md := runStep(taskWithResult("abc123", "v1.0.0", "released"))
 

@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-05-31T20:33:16Z"
 generating: "2026-05-31T20:33:56Z"
 prompted: "2026-05-31T20:41:42Z"
+verifying: "2026-05-31T21:29:46Z"
 branch: dark-factory/github-releaser-ai-review-phase
 ---
 
