@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
+- feat(agent/github-releaser): wire ai_review phase into CreateAgent alongside planning and execution phases, completing the three-phase release agent
 - feat(agent/github-releaser): Add githubreview client implementing AIReviewClient interface with TagExists, ResolveTagCommit, and FetchChangelog methods for ai_review step verification
 - feat(agent/github-releaser): Add ai_review step with three verification checks (tag exists, tag at expected SHA, CHANGELOG header rewritten) and ReviewOutput section
 
