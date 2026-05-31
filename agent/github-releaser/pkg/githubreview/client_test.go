@@ -494,4 +494,193 @@ var _ = Describe("httpClient", func() {
 			Expect(data).To(Equal([]byte("## Unreleased\n")))
 		})
 	})
+
+	Describe("Error message sanitization", func() {
+		It("bearer token does not appear in error messages", func() {
+			// #nosec G101 -- test token, not a real credential
+			token := "ghp_verylongtokenthatweshouldnotsee1234567890abcdef"
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest(token, server.URL)
+			_, err := client.TagExists(ctx, "bborbe", "maintainer", "v1.0.0")
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).ToNot(ContainSubstring(token))
+			Expect(err.Error()).ToNot(ContainSubstring("ghp_"))
+		})
+
+		It("bearer token does not appear in FetchChangelog errors", func() {
+			// #nosec G101 -- test token, not a real credential
+			token := "ghp_verylongtokenthatweshouldnotsee1234567890abcdef"
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest(token, server.URL)
+			_, err := client.FetchChangelog(ctx, "bborbe", "maintainer")
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).ToNot(ContainSubstring(token))
+			Expect(err.Error()).ToNot(ContainSubstring("ghp_"))
+		})
+	})
+
+	Describe("ResolveTagCommit headers", func() {
+		It("sets Authorization header", func() {
+			var capturedAuth string
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAuth = r.Header.Get("Authorization")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "tag-sha-123",
+						"object": map[string]string{
+							"sha":  "commit-sha-456",
+							"type": "commit",
+						},
+					})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token-xyz", server.URL)
+			_, err := client.ResolveTagCommit(ctx, "bborbe", "maintainer", "tag-sha-123")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(capturedAuth).To(Equal("Bearer test-token-xyz"))
+		})
+
+		It("sets Accept and X-GitHub-Api-Version headers", func() {
+			var capturedAccept, capturedVersion string
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAccept = r.Header.Get("Accept")
+					capturedVersion = r.Header.Get("X-GitHub-Api-Version")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"sha": "tag-sha-123",
+						"object": map[string]string{
+							"sha":  "commit-sha-456",
+							"type": "commit",
+						},
+					})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
+			_, err := client.ResolveTagCommit(ctx, "bborbe", "maintainer", "tag-sha-123")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(capturedAccept).To(Equal("application/vnd.github+json"))
+			Expect(capturedVersion).To(Equal("2022-11-28"))
+		})
+
+		It("returns error on 404", func() {
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+					_ = json.NewEncoder(w).Encode(map[string]string{"message": "Not Found"})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
+			_, err := client.ResolveTagCommit(ctx, "bborbe", "maintainer", "nonexistent")
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("ResolveTagCommit"))
+			Expect(err.Error()).To(ContainSubstring("status 404"))
+		})
+	})
+
+	Describe("FetchChangelog headers", func() {
+		It("sets Authorization header", func() {
+			var capturedAuth string
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAuth = r.Header.Get("Authorization")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5yZWxlYXNlZAo=",
+					})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token-abc", server.URL)
+			_, err := client.FetchChangelog(ctx, "bborbe", "maintainer")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(capturedAuth).To(Equal("Bearer test-token-abc"))
+		})
+
+		It("sets Accept and X-GitHub-Api-Version headers", func() {
+			var capturedAccept, capturedVersion string
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedAccept = r.Header.Get("Accept")
+					capturedVersion = r.Header.Get("X-GitHub-Api-Version")
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"encoding": "base64",
+						"content":  "IyMgVW5yZWxlYXNlZAo=",
+					})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
+			_, err := client.FetchChangelog(ctx, "bborbe", "maintainer")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(capturedAccept).To(Equal("application/vnd.github+json"))
+			Expect(capturedVersion).To(Equal("2022-11-28"))
+		})
+
+		It("returns error on 404", func() {
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusNotFound)
+					_ = json.NewEncoder(w).Encode(map[string]string{"message": "Not Found"})
+				}),
+			)
+			defer server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
+			_, err := client.FetchChangelog(ctx, "bborbe", "maintainer")
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("FetchChangelog"))
+			Expect(err.Error()).To(ContainSubstring("status 404"))
+		})
+	})
+
+	Describe("TagExists transport error", func() {
+		It("returns wrapped error on transport failure", func() {
+			server := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// Close immediately without responding
+					w.WriteHeader(http.StatusOK)
+				}),
+			)
+			server.Close()
+
+			client := githubreview.NewHTTPClientForTest("test-token", server.URL)
+			_, err := client.TagExists(ctx, "bborbe", "maintainer", "v1.0.0")
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("TagExists"))
+			Expect(err.Error()).To(ContainSubstring("http"))
+		})
+	})
 })
