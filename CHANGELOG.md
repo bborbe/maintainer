@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- fix(agent/github-releaser): ai_review tag-SHA comparison now accepts short-vs-full SHA equivalence. Execution step writes Result.CommitSHA via `git rev-parse --short HEAD` (7 chars); GitHub API returns 40-char full SHA. Naive `==` was false-positive on every release (caught by canary on parked `Release bborbe-claude-yolo af4000c` immediately after prod deploy). Fix uses bidirectional `strings.HasPrefix`; regression test covers short-vs-full both directions plus a non-matching short prefix.
+
 ## v0.29.0
 
 - test(agent/github-releaser): add comprehensive unit tests for ai_review step covering all acceptance criteria (happy path, tag-missing/404, annotated/lightweight tag SHA mismatch, CHANGELOG ## Unreleased header, Result.outcome short-circuit, malformed/missing Result section, missing frontmatter repo, token-in-error guard, no-##-Failure assertion, Name/ShouldRun)

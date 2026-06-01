@@ -268,6 +268,65 @@ var _ = Describe("AIReviewStep", func() {
 			})
 		})
 
+		Context("7d-bis. Short-vs-full SHA equivalence (regression for prod-1)", func() {
+			// Bug observed in prod 2026-06-01: execution step writes
+			// Result.CommitSHA via `git rev-parse --short HEAD` (7 chars),
+			// GitHub API returns 40 chars. Naive == compare false-positived
+			// every release. Fix: bidirectional strings.HasPrefix match.
+			It("short stored vs full from API → matches → approved:true", func() {
+				short := "dcd3195"
+				full := "dcd3195e3cca37862f4e612a7b14c4e00af6b935"
+				fakeClient.TagExistsReturns("tag-sha", nil)
+				fakeClient.ResolveTagCommitReturns(full, nil)
+				fakeClient.FetchChangelogReturns(
+					[]byte("## v0.9.0\n\n- feat"), nil,
+				)
+
+				result, md := runStep(taskWithResult(short, "v0.9.0", "released"))
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("done"))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeTrue())
+				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
+			})
+
+			It("full stored vs short from API → matches → approved:true", func() {
+				short := "dcd3195"
+				full := "dcd3195e3cca37862f4e612a7b14c4e00af6b935"
+				fakeClient.TagExistsReturns("tag-sha", nil)
+				fakeClient.ResolveTagCommitReturns(short, nil)
+				fakeClient.FetchChangelogReturns(
+					[]byte("## v0.9.0\n\n- feat"), nil,
+				)
+
+				result, md := runStep(taskWithResult(full, "v0.9.0", "released"))
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("done"))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeTrue())
+				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
+			})
+
+			It("short prefix that does NOT match full → fails", func() {
+				short := "dcd3195"
+				full := "abc1234ffff37862f4e612a7b14c4e00af6b935f"
+				fakeClient.TagExistsReturns("tag-sha", nil)
+				fakeClient.ResolveTagCommitReturns(full, nil)
+
+				result, md := runStep(taskWithResult(short, "v0.9.0", "released"))
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeFalse())
+				Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
+			})
+		})
+
 		Context("7e. CHANGELOG still has ## Unreleased as top heading", func() {
 			It("changelog_header_rewritten:false → status:failed", func() {
 				fakeClient.TagExistsReturns("abc123", nil)
