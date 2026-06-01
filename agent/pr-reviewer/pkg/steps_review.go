@@ -22,8 +22,9 @@ import (
 // step writes. Only the fields needed for next-phase routing are typed
 // here; the full payload stays in the markdown body for humans.
 type verdictPayload struct {
-	Verdict string `json:"verdict"`
-	Reason  string `json:"reason"`
+	Verdict        string          `json:"verdict"`
+	Reason         string          `json:"reason"`
+	Hallucinations []Hallucination `json:"hallucinations"`
 }
 
 // reviewStep runs Claude on the task with the review-phase prompt, writes
@@ -32,6 +33,7 @@ type verdictPayload struct {
 // pass → done, fail (or unparseable) → human_review.
 type reviewStep struct {
 	runner       claudelib.ClaudeRunner
+	poster       PrPoster
 	instructions claudelib.Instructions
 	verifier     ReviewVerifier // nil = skip verification
 	ghToken      string
@@ -41,6 +43,7 @@ type reviewStep struct {
 // NewReviewStep constructs the ai_review-phase step.
 func NewReviewStep(
 	runner claudelib.ClaudeRunner,
+	poster PrPoster,
 	instructions claudelib.Instructions,
 	verifier ReviewVerifier,
 	ghToken string,
@@ -48,6 +51,7 @@ func NewReviewStep(
 ) agentlib.Step {
 	return &reviewStep{
 		runner:       runner,
+		poster:       poster,
 		instructions: instructions,
 		verifier:     verifier,
 		ghToken:      ghToken,
@@ -132,6 +136,16 @@ func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.
 			NextPhase: "human_review",
 			Message:   fmt.Sprintf("ai-review wrote ## Verdict but verdict unparseable: %v", err),
 		}, nil
+	}
+
+	// Dismiss-and-comment is intentionally fire-and-forget: the dismissal
+	// outcome is recorded in ## Diagnostics by tryDismissHallucinated, but
+	// the next-phase routing below still falls through unchanged. A human
+	// owns the final call on every fail verdict — the dismissal only
+	// unblocks the GitHub merge gate, it does not auto-merge or change
+	// where the task lands.
+	if verdict.Verdict == "fail" && len(verdict.Hallucinations) > 0 {
+		s.tryDismissHallucinated(ctx, md, verdict.Hallucinations)
 	}
 
 	if verdict.Verdict == "pass" {
@@ -249,6 +263,57 @@ func appendVerifyDiagnostic(_ context.Context, md *agentlib.Markdown, result Ver
 		existingBody = existing.Body
 	}
 	newBody := strings.TrimLeft(existingBody+"\n"+line, "\n")
+	md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
+}
+
+// tryDismissHallucinated dismisses the bot's hallucinated review on
+// the current head SHA and posts a follow-up COMMENT. Routing to
+// human_review still happens unconditionally in the caller — this
+// helper only mutates ## Diagnostics with the dismiss outcome.
+func (s *reviewStep) tryDismissHallucinated(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	hallucinations []Hallucination,
+) {
+	prURLStr := githubPRURLPattern.FindString(md.Preamble)
+	if prURLStr == "" {
+		glog.V(2).Infof("ai_review dismiss: no GitHub PR URL — skipping")
+		return
+	}
+	prInfo, err := prurl.ParsePRURL(ctx, prURLStr)
+	if err != nil {
+		glog.Warningf("ai_review dismiss: failed to parse PR URL %q: %v — skipping", prURLStr, err)
+		return
+	}
+	if prInfo.Platform != prurl.PlatformGitHub {
+		glog.V(2).Infof("ai_review dismiss: non-GitHub platform %q — skipping", prInfo.Platform)
+		return
+	}
+	headSHA, _ := md.Frontmatter.String("ref")
+	if headSHA == "" {
+		glog.Warningf("ai_review dismiss: empty ref in frontmatter — skipping")
+		return
+	}
+	result := s.poster.DismissCurrentReview(ctx, *prInfo, headSHA, hallucinations)
+	appendDismissDiagnostic(md, result)
+}
+
+// appendDismissDiagnostic appends a YAML block describing the dismiss
+// attempt to ## Diagnostics. Called on every attempt (success and
+// failure) so AC verification can grep for the step + http_status.
+func appendDismissDiagnostic(md *agentlib.Markdown, result PostResult) {
+	block := fmt.Sprintf(
+		"ai_review dismiss:\n  outcome: %q\n  step: %q\n  http_status: %d\n  error: %q\n",
+		result.Outcome,
+		result.FailureStep,
+		result.HTTPStatus,
+		result.ErrorMessage,
+	)
+	var existingBody string
+	if existing, ok := md.FindSection("## Diagnostics"); ok && existing != nil {
+		existingBody = existing.Body
+	}
+	newBody := strings.TrimLeft(existingBody+"\n"+block, "\n")
 	md.ReplaceSection(agentlib.Section{Heading: "## Diagnostics", Body: newBody})
 }
 

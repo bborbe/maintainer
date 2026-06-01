@@ -21,6 +21,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## v0.29.0
 
+- feat(agent/pr-reviewer): when ai_review returns verdict=fail with hallucinations, dismiss bot's prior APPROVED/CHANGES_REQUESTED review at head SHA via GitHub REST and post a COMMENT citing each hallucination; route to human_review regardless of dismissal outcome
+
 - test(agent/github-releaser): add comprehensive unit tests for ai_review step covering all acceptance criteria (happy path, tag-missing/404, annotated/lightweight tag SHA mismatch, CHANGELOG ## Unreleased header, Result.outcome short-circuit, malformed/missing Result section, missing frontmatter repo, token-in-error guard, no-##-Failure assertion, Name/ShouldRun)
 
 - feat(agent/github-releaser): wire ai_review phase into CreateAgent alongside planning and execution phases, completing the three-phase release agent

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [056-github-releaser-ai-review-phase]
+spec: [057-github-releaser-ai-review-phase]
 summary: Wire ai_review phase into CreateAgent factory alongside planning and execution phases
 container: maintainer-releaser-ai-review-exec-221-spec-056-factory-registration
 dark-factory-version: v0.173.0

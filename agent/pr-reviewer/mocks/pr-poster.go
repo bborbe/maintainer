@@ -13,6 +13,20 @@ import (
 )
 
 type PrPoster struct {
+	DismissCurrentReviewStub        func(context.Context, prurl.PRInfo, string, []pkg.Hallucination) pkg.PostResult
+	dismissCurrentReviewMutex       sync.RWMutex
+	dismissCurrentReviewArgsForCall []struct {
+		arg1 context.Context
+		arg2 prurl.PRInfo
+		arg3 string
+		arg4 []pkg.Hallucination
+	}
+	dismissCurrentReviewReturns struct {
+		result1 pkg.PostResult
+	}
+	dismissCurrentReviewReturnsOnCall map[int]struct {
+		result1 pkg.PostResult
+	}
 	PostStub        func(context.Context, pkg.PostRequest) pkg.PostResult
 	postMutex       sync.RWMutex
 	postArgsForCall []struct {
@@ -42,6 +56,75 @@ type PrPoster struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *PrPoster) DismissCurrentReview(arg1 context.Context, arg2 prurl.PRInfo, arg3 string, arg4 []pkg.Hallucination) pkg.PostResult {
+	var arg4Copy []pkg.Hallucination
+	if arg4 != nil {
+		arg4Copy = make([]pkg.Hallucination, len(arg4))
+		copy(arg4Copy, arg4)
+	}
+	fake.dismissCurrentReviewMutex.Lock()
+	ret, specificReturn := fake.dismissCurrentReviewReturnsOnCall[len(fake.dismissCurrentReviewArgsForCall)]
+	fake.dismissCurrentReviewArgsForCall = append(fake.dismissCurrentReviewArgsForCall, struct {
+		arg1 context.Context
+		arg2 prurl.PRInfo
+		arg3 string
+		arg4 []pkg.Hallucination
+	}{arg1, arg2, arg3, arg4Copy})
+	stub := fake.DismissCurrentReviewStub
+	fakeReturns := fake.dismissCurrentReviewReturns
+	fake.recordInvocation("DismissCurrentReview", []interface{}{arg1, arg2, arg3, arg4Copy})
+	fake.dismissCurrentReviewMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *PrPoster) DismissCurrentReviewCallCount() int {
+	fake.dismissCurrentReviewMutex.RLock()
+	defer fake.dismissCurrentReviewMutex.RUnlock()
+	return len(fake.dismissCurrentReviewArgsForCall)
+}
+
+func (fake *PrPoster) DismissCurrentReviewCalls(stub func(context.Context, prurl.PRInfo, string, []pkg.Hallucination) pkg.PostResult) {
+	fake.dismissCurrentReviewMutex.Lock()
+	defer fake.dismissCurrentReviewMutex.Unlock()
+	fake.DismissCurrentReviewStub = stub
+}
+
+func (fake *PrPoster) DismissCurrentReviewArgsForCall(i int) (context.Context, prurl.PRInfo, string, []pkg.Hallucination) {
+	fake.dismissCurrentReviewMutex.RLock()
+	defer fake.dismissCurrentReviewMutex.RUnlock()
+	argsForCall := fake.dismissCurrentReviewArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+}
+
+func (fake *PrPoster) DismissCurrentReviewReturns(result1 pkg.PostResult) {
+	fake.dismissCurrentReviewMutex.Lock()
+	defer fake.dismissCurrentReviewMutex.Unlock()
+	fake.DismissCurrentReviewStub = nil
+	fake.dismissCurrentReviewReturns = struct {
+		result1 pkg.PostResult
+	}{result1}
+}
+
+func (fake *PrPoster) DismissCurrentReviewReturnsOnCall(i int, result1 pkg.PostResult) {
+	fake.dismissCurrentReviewMutex.Lock()
+	defer fake.dismissCurrentReviewMutex.Unlock()
+	fake.DismissCurrentReviewStub = nil
+	if fake.dismissCurrentReviewReturnsOnCall == nil {
+		fake.dismissCurrentReviewReturnsOnCall = make(map[int]struct {
+			result1 pkg.PostResult
+		})
+	}
+	fake.dismissCurrentReviewReturnsOnCall[i] = struct {
+		result1 pkg.PostResult
+	}{result1}
 }
 
 func (fake *PrPoster) Post(arg1 context.Context, arg2 pkg.PostRequest) pkg.PostResult {

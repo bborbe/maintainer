@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [056-github-releaser-ai-review-phase]
+spec: [057-github-releaser-ai-review-phase]
 summary: 'Added missing test cases to client_test.go: transport error, 404 for ResolveTagCommit/FetchChangelog, bearer token sanitization, and header verification for all methods'
 container: maintainer-releaser-ai-review-exec-224-spec-056-http-client-tests
 dark-factory-version: v0.173.0

@@ -86,3 +86,9 @@ func AppendVerifyDiagnosticForTest(
 func NormalizeURLForTest(url string) string {
 	return normalizeURL(url)
 }
+
+// AppendDismissDiagnosticForTest exposes appendDismissDiagnostic to the
+// _test package.
+func AppendDismissDiagnosticForTest(md *agentlib.Markdown, result PostResult) {
+	appendDismissDiagnostic(md, result)
+}
