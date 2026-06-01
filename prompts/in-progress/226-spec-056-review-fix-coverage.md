@@ -1,9 +1,14 @@
 ---
-status: approved
+status: failed
 spec: [056-plugin-version-bump]
+container: maintainer-plugin-version-bump-exec-226-spec-056-review-fix-coverage
+dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"
 queued: "2026-06-01T19:07:00Z"
+started: "2026-06-01T19:10:00Z"
+completed: "2026-06-01T19:13:32Z"
 branch: feature/plugin-version-bump
+lastFailReason: 'validate completion report: completion report status: partial'
 ---
 
 <summary>

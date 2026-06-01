@@ -17,58 +17,46 @@ import (
 
 var _ = Describe("DetectManifests", func() {
 	DescribeTable("DetectManifests",
-		func(workdir string, want []string) {
-			got, err := plugin.DetectManifests(context.Background(), workdir)
+		func(setup func(dir string), want []string) {
+			dir := GinkgoT().TempDir()
+			setup(dir)
+			got, err := plugin.DetectManifests(context.Background(), dir)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got).To(Equal(want))
 		},
 		Entry("neither exists → returns nil slice",
-			func() string {
-				dir, _ := os.MkdirTemp("", "detect-neither")
-				return dir
-			}(),
+			func(dir string) {},
 			nil),
 		Entry("plugin.json only → returns [plugin.json]",
-			func() string {
-				dir, _ := os.MkdirTemp("", "detect-plugin-only")
-				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(
-					filepath.Join(dir, ".claude-plugin", "plugin.json"),
-					[]byte(`{"name":"test","version":"0.1.0"}`),
-					0644,
-				)
-				return dir
-			}(),
+			func(dir string) {
+				Expect(os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o750)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"),
+					[]byte(`{"name":"test","version":"0.1.0"}`), 0o600)).To(Succeed())
+			},
 			[]string{".claude-plugin/plugin.json"}),
 		Entry("marketplace.json only → returns [marketplace.json]",
-			func() string {
-				dir, _ := os.MkdirTemp("", "detect-marketplace-only")
-				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(
-					filepath.Join(dir, ".claude-plugin", "marketplace.json"),
-					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`),
-					0644,
-				)
-				return dir
-			}(),
+			func(dir string) {
+				Expect(os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o750)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir, ".claude-plugin", "marketplace.json"),
+					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`), 0o600)).To(Succeed())
+			},
 			[]string{".claude-plugin/marketplace.json"}),
 		Entry("both exist → returns both",
-			func() string {
-				dir, _ := os.MkdirTemp("", "detect-both")
-				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(
-					filepath.Join(dir, ".claude-plugin", "plugin.json"),
-					[]byte(`{"name":"test","version":"0.1.0"}`),
-					0644,
-				)
-				os.WriteFile(
-					filepath.Join(dir, ".claude-plugin", "marketplace.json"),
-					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`),
-					0644,
-				)
-				return dir
-			}(),
+			func(dir string) {
+				Expect(os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o750)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"),
+					[]byte(`{"name":"test","version":"0.1.0"}`), 0o600)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir, ".claude-plugin", "marketplace.json"),
+					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`), 0o600)).To(Succeed())
+			},
 			[]string{".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}),
+		Entry("plugin.json exists as a directory → omitted from result",
+			func(dir string) {
+				Expect(
+					os.MkdirAll(filepath.Join(dir, ".claude-plugin", "plugin.json"), 0o750),
+				).To(Succeed())
+			},
+			nil),
 	)
 })
 
@@ -157,6 +145,36 @@ var _ = Describe("BumpPluginJson", func() {
 			[]byte("{\n  \"version\": \"0.9.12\"}"),
 			"0.10.0",
 			[]byte("{\n  \"version\": \"0.10.0\"}"),
+			false, ""),
+		Entry("unquoted value with NO trailing comma — output keeps no comma",
+			[]byte(`{"name": "x", "version": 0.9.12}`),
+			"0.10.0",
+			[]byte(`{"name": "x", "version": 0.10.0}`),
+			false, ""),
+		Entry("unquoted value WITH trailing comma — output keeps comma",
+			[]byte(`{"name": "x", "version": 0.9.12, "other": 1}`),
+			"0.10.0",
+			[]byte(`{"name": "x", "version": 0.10.0, "other": 1}`),
+			false, ""),
+		Entry("unclosed quote on version value — error mentions version field",
+			[]byte(`{"version": "0.9.12}`),
+			"0.10.0",
+			nil,
+			true, "(not a semver|version)"),
+		Entry("second nested version key is left untouched",
+			[]byte(`{
+  "version": "0.9.12",
+  "extras": {
+    "version": "0.9.12"
+  }
+}`),
+			"0.10.0",
+			[]byte(`{
+  "version": "0.10.0",
+  "extras": {
+    "version": "0.9.12"
+  }
+}`),
 			false, ""),
 	)
 })
@@ -293,6 +311,29 @@ var _ = Describe("BumpMarketplaceJson", func() {
 			[]byte("{\n  \"metadata\": {\n    \"version\": \"0.9.12\"\n  }\n}\n"),
 			"0.10.0",
 			[]byte("{\n  \"metadata\": {\n    \"version\": \"0.10.0\"\n  }\n}\n"),
+			false, ""),
+		Entry("top-level version outside metadata/plugins is NOT rewritten",
+			[]byte(`{
+  "name": "x",
+  "version": "0.0.1",
+  "metadata": {
+    "version": "0.9.12"
+  },
+  "plugins": [
+    {"name": "a", "version": "0.9.12"}
+  ]
+}`),
+			"0.10.0",
+			[]byte(`{
+  "name": "x",
+  "version": "0.0.1",
+  "metadata": {
+    "version": "0.10.0"
+  },
+  "plugins": [
+    {"name": "a", "version": "0.10.0"}
+  ]
+}`),
 			false, ""),
 	)
 })

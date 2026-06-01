@@ -13,6 +13,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - feat(agent/github-releaser): release commit now bumps `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version fields alongside the CHANGELOG rewrite when those manifests exist at repo root — fixes the silent drift where Claude Code plugin repos (e.g. `bborbe/coding`) shipped release tags whose manifest versions disagreed with the CHANGELOG. Pre-push guard whitelist widened dynamically to the set of files actually touched; fails closed on anything else.
 - feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing/non-semver version field)
 - test(agent/github-releaser): add integration tests for manifest bumping in executeDirectPush covering both manifests present, one manifest only, no manifests (backward compatibility), unexpected_diff guard, and malformed plugin.json guard
+- test(agent/github-releaser): add edge-case coverage for DetectManifests (temp-dir cleanup via GinkgoT().TempDir, directory-as-file skip), BumpPluginJson (unquoted version values with/without trailing comma, unclosed quote error, second nested version key left untouched), BumpMarketplaceJson (top-level version outside metadata/plugins scope), deriveUnprefixedVersion(""), sameStringSet duplicate-element behavior, DetectManifests I/O error mapping to error_category=unknown, and marketplace.json malformed JSON mapping to error_category=plugin_manifest_invalid
 
 ## v0.29.1
 
