@@ -559,6 +559,30 @@ var _ = Describe("dismiss-and-comment routing", func() {
 			Expect(poster.DismissCurrentReviewCallCount()).To(Equal(0))
 		})
 	})
+
+	Describe("case (i): no PR URL in preamble → dismiss skipped", func() {
+		It("does not call DismissCurrentReview", func() {
+			verdictJSON := `{"verdict":"fail","reason":"issues","hallucinations":[{"file":"x.go","line":1,"issue":"a"}]}`
+			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
+			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
+			// Preamble has no GitHub PR URL at all — neither GitHub nor Bitbucket
+			md, err := agentlib.ParseMarkdown(ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview this PR — link missing\n\nsome content")
+			Expect(err).NotTo(HaveOccurred())
+
+			result, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.NextPhase).To(Equal("human_review"))
+			Expect(poster.DismissCurrentReviewCallCount()).To(Equal(0))
+		})
+	})
+
+	// Note: the "regex matches but ParsePRURL fails" branch in tryDismissHallucinated
+	// is defensive — any string that matches githubPRURLPattern
+	// (`https://github\.com/[^/\s]+/[^/\s]+/pull/\d+`) is by construction parseable
+	// by parseGitHub (4 path segments, non-empty owner/repo, "pull" keyword, numeric ID).
+	// No realistic input can reach the parse-error branch, so it stays uncovered by
+	// design — kept as a belt-and-suspenders guard for future regex changes.
 })
 
 var _ = Describe("shouldVerifyPost", func() {

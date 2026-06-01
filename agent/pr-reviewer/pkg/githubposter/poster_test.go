@@ -821,4 +821,46 @@ var _ = Describe("DismissCurrentReview", func() {
 			}
 		})
 	})
+
+	Describe("case (i): GET /pulls/N/reviews fails with 500", func() {
+		It("returns failed with the dismiss-current step, zero PUT/POST requests", func() {
+			fakeClient.DoStub = seqStub([]callSpec{
+				{500, `{"message":"Server Error"}`, nil},
+				{500, `{"message":"Server Error"}`, nil},
+			})
+			result := poster.DismissCurrentReview(ctx, pr, testHeadSHA, nil)
+			Expect(result.Outcome).To(Equal("failed"))
+			Expect(result.FailureStep).To(Equal("GET /pulls/N/reviews (dismiss-current)"))
+			Expect(result.HTTPStatus).To(Equal(500))
+			// No PUT, no POST
+			for _, call := range fakeClient.Invocations()["Do"] {
+				req, ok := call[0].(*http.Request)
+				Expect(ok).To(BeTrue())
+				Expect(req.Method).NotTo(Equal("PUT"))
+				Expect(req.Method).NotTo(Equal("POST"))
+			}
+		})
+	})
+
+	Describe("case (j): bot review at head SHA is COMMENTED (excluded)", func() {
+		It("returns no-op success — the COMMENTED-state filter rejects it", func() {
+			fakeClient.DoStub = seqStub([]callSpec{
+				{
+					200,
+					reviewListJSON(reviewJSON(55, testBotLogin, testHeadSHA, "COMMENTED")),
+					nil,
+				},
+			})
+			result := poster.DismissCurrentReview(ctx, pr, testHeadSHA, nil)
+			Expect(result.Outcome).To(Equal("success"))
+			Expect(result.FailureStep).To(Equal("dismiss-current-noop"))
+			// Only GET call — no PUT
+			Expect(fakeClient.DoCallCount()).To(Equal(1))
+			for _, call := range fakeClient.Invocations()["Do"] {
+				req, ok := call[0].(*http.Request)
+				Expect(ok).To(BeTrue())
+				Expect(req.Method).NotTo(Equal("PUT"))
+			}
+		})
+	})
 })
