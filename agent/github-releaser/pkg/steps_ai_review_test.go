@@ -311,28 +311,31 @@ var _ = Describe("AIReviewStep", func() {
 				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
 			})
 
-			It("short prefix that does NOT match full → fails via tag-points-to error path", func() {
-				short := "dcd3195"
-				// 40-char hex SHA (GitHub never returns anything else); the
-				// 7-char prefix `abc1234` does NOT match `dcd3195`.
-				full := "abc1234ffff37862f4e612a7b14c4e00af6b935"
-				fakeClient.TagExistsReturns("tag-sha", nil)
-				fakeClient.ResolveTagCommitReturns(full, nil)
+			It(
+				"short prefix that does NOT match full → fails via tag-points-to error path",
+				func() {
+					short := "dcd3195"
+					// 40-char hex SHA (GitHub never returns anything else); the
+					// 7-char prefix `abc1234` does NOT match `dcd3195`.
+					full := "abc1234ffff37862f4e612a7b14c4e00af6b935"
+					fakeClient.TagExistsReturns("tag-sha", nil)
+					fakeClient.ResolveTagCommitReturns(full, nil)
 
-				result, md := runStep(taskWithResult(short, "v0.9.0", "released"))
+					result, md := runStep(taskWithResult(short, "v0.9.0", "released"))
 
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-				// Assert the SHA-mismatch error path executed (not a different
-				// failure mode) — the prod regression was silent execution of
-				// the WRONG path; this assertion proves the right one fired.
-				Expect(review.Notes).To(ContainSubstring("tag points to"))
-				Expect(review.Notes).To(ContainSubstring(full))
-				Expect(review.Notes).To(ContainSubstring(short))
-			})
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
+					// Assert the SHA-mismatch error path executed (not a different
+					// failure mode) — the prod regression was silent execution of
+					// the WRONG path; this assertion proves the right one fired.
+					Expect(review.Notes).To(ContainSubstring("tag points to"))
+					Expect(review.Notes).To(ContainSubstring(full))
+					Expect(review.Notes).To(ContainSubstring(short))
+				},
+			)
 		})
 
 		Context("7e. CHANGELOG still has ## Unreleased as top heading", func() {

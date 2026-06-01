@@ -50,6 +50,20 @@ const (
 	// for it — it would never fire (no matching stderr) and would imply the
 	// wrong layer owns the check.
 	ErrorCategoryUnexpectedDiff ErrorCategory = "unexpected_diff"
+	// ErrorCategoryPluginManifestInvalid — plugin manifest (.claude-plugin/plugin.json or
+	// .claude-plugin/marketplace.json) is malformed (JSON parse error inside the version-locator
+	// scan) or its version field is absent or not a quoted semver-shaped string. Detected at
+	// the plugin manifest package layer (manifest.go bump operation), not git stderr.
+	//
+	// TWO-LAYER CLASSIFICATION: this category is set DIRECTLY by the execution step
+	// (steps_execution.go), NOT by ClassifyError. ClassifyError maps git *stderr* onto
+	// categories; plugin_manifest_invalid is a *semantic* assertion on the manifest content
+	// (the bump operation failed, git never ran), so there is no stderr fragment to match.
+	// Same split as changelog_missing / unreleased_not_found / unexpected_diff, which are
+	// set at the filesystem / changelog-package / guard layer respectively. Do NOT add
+	// a classifierTable entry for it — it would never fire (no matching stderr) and would
+	// imply the wrong layer owns the check.
+	ErrorCategoryPluginManifestInvalid ErrorCategory = "plugin_manifest_invalid"
 	// ErrorCategoryPushNonFastForward — remote moved between clone and push;
 	// controller retry will re-fetch.
 	ErrorCategoryPushNonFastForward ErrorCategory = "push_non_fast_forward"

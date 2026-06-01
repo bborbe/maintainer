@@ -81,6 +81,16 @@ var _ = Describe("ClassifyError", func() {
 		Expect(git.ClassifyError(errors.New("Unreleased header not found"))).
 			NotTo(Equal(git.ErrorCategoryUnreleasedNotFound))
 	})
+	It("never returns plugin_manifest_invalid from ClassifyError", func() {
+		// plugin_manifest_invalid — declared on enum but emitted by execution step
+		// at the plugin manifest package layer; never reaches ClassifyError because
+		// git never runs when the bump fails.
+		Expect(git.ClassifyError(errors.New("plugin.json version field not found"))).
+			NotTo(Equal(git.ErrorCategoryPluginManifestInvalid))
+	})
+	It("ErrorCategoryPluginManifestInvalid has string value plugin_manifest_invalid", func() {
+		Expect(string(git.ErrorCategoryPluginManifestInvalid)).To(Equal("plugin_manifest_invalid"))
+	})
 
 	It(
 		"returns empty-string sentinel on nil — distinguishes success from 'actually-unknown stderr'",
