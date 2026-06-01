@@ -10,8 +10,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing semver version field)
+- feat(agent/github-releaser): release commit now bumps `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version fields alongside the CHANGELOG rewrite when those manifests exist at repo root — fixes the silent drift where Claude Code plugin repos (e.g. `bborbe/coding`) shipped release tags whose manifest versions disagreed with the CHANGELOG. Pre-push guard whitelist widened dynamically to the set of files actually touched; fails closed on anything else.
+- feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing/non-semver version field)
 - test(agent/github-releaser): add integration tests for manifest bumping in executeDirectPush covering both manifests present, one manifest only, no manifests (backward compatibility), unexpected_diff guard, and malformed plugin.json guard
+
+## v0.29.1
+
+- fix(agent/github-releaser): ai_review tag-SHA comparison now accepts short-vs-full SHA equivalence. Execution step writes Result.CommitSHA via `git rev-parse --short HEAD` (7 chars); GitHub API returns 40-char full SHA. Naive `==` was false-positive on every release (caught by canary on parked `Release bborbe-claude-yolo af4000c` immediately after prod deploy). Fix uses bidirectional `strings.HasPrefix`; regression test covers short-vs-full both directions plus a non-matching short prefix.
 
 ## v0.29.0
 
