@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.30.0
 
 - feat(agent/github-releaser): release commit now bumps `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version fields alongside the CHANGELOG rewrite when those manifests exist at repo root — fixes the silent drift where Claude Code plugin repos (e.g. `bborbe/coding`) shipped release tags whose manifest versions disagreed with the CHANGELOG. Pre-push guard whitelist widened dynamically to the set of files actually touched; fails closed on anything else.
 - feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing/non-semver version field)
