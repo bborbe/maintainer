@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -21,6 +22,12 @@ import (
 // Package-level compiled regex for semver-shaped string validation.
 // Matches only the bare N.N.N pattern — no leading 'v', no suffix.
 var semverRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// Package-level compiled regex for the "plugins": [ array-opening line.
+var pluginsArrayLineRE = regexp.MustCompile(`^\s*"plugins"\s*:\s*\[`)
+
+// Package-level compiled regex for a named-object scope opener such as `"metadata": {`.
+var isOpenScopeKeyRE = regexp.MustCompile(`^\s*"[^"]+"\s*:\s*\{`)
 
 // DetectManifests returns the subset of known plugin manifest paths that exist
 // as regular files in the given workdir. The returned paths are repo-relative
@@ -36,7 +43,7 @@ func DetectManifests(ctx context.Context, workdir string) ([]string, error) {
 
 	var result []string
 	for _, rel := range known {
-		path := workdir + "/" + rel
+		path := filepath.Join(workdir, rel)
 		info, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -131,9 +138,6 @@ func BumpMarketplaceJson(ctx context.Context, content []byte, version string) ([
 	// inPluginsArray is true when we are inside the "plugins" array
 	inPluginsArray := false
 	foundAny := false
-
-	// Regex to detect "plugins": [ (plugins array opening line)
-	pluginsArrayLineRE := regexp.MustCompile(`^\s*"plugins"\s*:\s*\[`)
 
 	// Helper to check if a line contains a "version" key (not inside another string value)
 	lineHasVersionKey := func(l string) bool {
@@ -255,8 +259,7 @@ func BumpMarketplaceJson(ctx context.Context, content []byte, version string) ([
 // isOpenScopeKey returns true if the trimmed line opens a named object scope
 // with a key like "metadata" or "plugins" (e.g. `"metadata": {`).
 func isOpenScopeKey(trimmed string) bool {
-	matched, _ := regexp.MatchString(`^\s*"[^"]+"\s*:\s*\{`, trimmed)
-	return matched
+	return isOpenScopeKeyRE.MatchString(trimmed)
 }
 
 // extractScopeKey extracts the key name from a line like `"metadata": {` or `"plugins": {`.
@@ -306,7 +309,12 @@ func isVersionKeyLine(line string) bool {
 
 // rewriteVersionValue replaces the value after ": " on the given line with the quoted version.
 // The line must be a "version" key line. Returns an error if the existing value is not a quoted semver.
-func rewriteVersionValue(ctx context.Context, line string, version string, fileType string) (string, error) {
+func rewriteVersionValue(
+	ctx context.Context,
+	line string,
+	version string,
+	fileType string,
+) (string, error) {
 	trimmed := trimLine(line)
 
 	// Find the position of "version": in the line to locate the correct colon
@@ -333,7 +341,11 @@ func rewriteVersionValue(ctx context.Context, line string, version string, fileT
 	// Extract the value part after ": "
 	valuePart := trimmed[colonIdx+1:]
 	if len(valuePart) == 0 {
-		return "", bborbeerrors.Errorf(ctx, fileType+" existing version field is not a semver-shaped string: %q", "")
+		return "", bborbeerrors.Errorf(
+			ctx,
+			fileType+" existing version field is not a semver-shaped string: %q",
+			"",
+		)
 	}
 
 	// Skip whitespace after colon
@@ -362,7 +374,8 @@ func rewriteVersionValue(ctx context.Context, line string, version string, fileT
 
 		indent := getIndent(line)
 		keyPart := trimmed[:colonIdx+1]
-		return fmt.Sprintf("%s%s %s,", indent, keyPart, version), nil
+		trailing := rest[end:]
+		return fmt.Sprintf("%s%s %s%s", indent, keyPart, version, trailing), nil
 	}
 
 	// Find closing quote (handling escape sequences)

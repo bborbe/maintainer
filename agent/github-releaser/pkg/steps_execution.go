@@ -211,7 +211,9 @@ func (s *executionStep) executeDirectPush(
 	unprefixedVersion := deriveUnprefixedVersion(plan.NextVersionHeader)
 	for _, manifestPath := range detectedManifests {
 		manifestAbsPath := filepath.Join(workdir, manifestPath)
-		manifestContent, err := os.ReadFile(manifestAbsPath) // #nosec G304 -- workdir is os.TempDir-rooted
+		manifestContent, err := os.ReadFile(
+			manifestAbsPath,
+		) // #nosec G304 -- workdir is os.TempDir-rooted
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 				errors.Wrapf(ctx, err, "read %s", manifestAbsPath))
@@ -223,6 +225,10 @@ func (s *executionStep) executeDirectPush(
 			rewrittenManifest, err = plugin.BumpPluginJson(ctx, manifestContent, unprefixedVersion)
 		} else if strings.HasSuffix(manifestPath, "marketplace.json") {
 			rewrittenManifest, err = plugin.BumpMarketplaceJson(ctx, manifestContent, unprefixedVersion)
+		} else {
+			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
+				errors.Errorf(ctx, "unsupported manifest type: %s", manifestPath))
+			return "", "", result
 		}
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryPluginManifestInvalid,

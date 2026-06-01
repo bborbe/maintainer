@@ -32,7 +32,11 @@ var _ = Describe("DetectManifests", func() {
 			func() string {
 				dir, _ := os.MkdirTemp("", "detect-plugin-only")
 				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0644)
+				os.WriteFile(
+					filepath.Join(dir, ".claude-plugin", "plugin.json"),
+					[]byte(`{"name":"test","version":"0.1.0"}`),
+					0644,
+				)
 				return dir
 			}(),
 			[]string{".claude-plugin/plugin.json"}),
@@ -40,7 +44,11 @@ var _ = Describe("DetectManifests", func() {
 			func() string {
 				dir, _ := os.MkdirTemp("", "detect-marketplace-only")
 				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(filepath.Join(dir, ".claude-plugin", "marketplace.json"), []byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`), 0644)
+				os.WriteFile(
+					filepath.Join(dir, ".claude-plugin", "marketplace.json"),
+					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`),
+					0644,
+				)
 				return dir
 			}(),
 			[]string{".claude-plugin/marketplace.json"}),
@@ -48,8 +56,16 @@ var _ = Describe("DetectManifests", func() {
 			func() string {
 				dir, _ := os.MkdirTemp("", "detect-both")
 				os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755)
-				os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0644)
-				os.WriteFile(filepath.Join(dir, ".claude-plugin", "marketplace.json"), []byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`), 0644)
+				os.WriteFile(
+					filepath.Join(dir, ".claude-plugin", "plugin.json"),
+					[]byte(`{"name":"test","version":"0.1.0"}`),
+					0644,
+				)
+				os.WriteFile(
+					filepath.Join(dir, ".claude-plugin", "marketplace.json"),
+					[]byte(`{"metadata":{"version":"0.1.0"},"plugins":[]}`),
+					0644,
+				)
 				return dir
 			}(),
 			[]string{".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}),
@@ -72,8 +88,7 @@ var _ = Describe("BumpPluginJson", func() {
 				Expect(got).NotTo(BeNil())
 			}
 			// Prevent unused variable if wantErr path prints got
-			if wantErr && got != nil {
-			}
+			_ = got
 		},
 		Entry("0.10.0 is valid", "0.10.0", false),
 		Entry("1.2.8 is valid", "1.2.8", false),
@@ -98,8 +113,7 @@ var _ = Describe("BumpPluginJson", func() {
 				Expect(got).To(Equal(expected))
 			}
 			// Silence unused var
-			if !wantErr && got == nil {
-			}
+			_ = got
 		},
 		Entry("happy path — bumps version line, preserves rest",
 			[]byte(`{
@@ -164,8 +178,7 @@ var _ = Describe("BumpMarketplaceJson", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).NotTo(BeNil())
 			}
-			if wantErr && got != nil {
-			}
+			_ = got
 		},
 		Entry("0.10.0 is valid", "0.10.0", false),
 		Entry("1.2.8 is valid", "1.2.8", false),
@@ -189,8 +202,7 @@ var _ = Describe("BumpMarketplaceJson", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(got).To(Equal(expected))
 			}
-			if !wantErr && got == nil {
-			}
+			_ = got
 		},
 		Entry("N=0 plugins — bumps metadata.version only",
 			[]byte(`{

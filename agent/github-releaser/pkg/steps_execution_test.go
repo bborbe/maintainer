@@ -610,7 +610,9 @@ task_identifier: gh-release-bborbe-example-master-plugin
 
 		writeManifest := func(workdir, relPath, fixtureName string) {
 			Expect(os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750)).To(Succeed())
-			Expect(os.WriteFile(filepath.Join(workdir, relPath), readFixture(fixtureName), 0o600)).To(Succeed())
+			Expect(
+				os.WriteFile(filepath.Join(workdir, relPath), readFixture(fixtureName), 0o600),
+			).To(Succeed())
 		}
 
 		writeChangelogAndBothManifests := func(workdir string) {
@@ -619,91 +621,129 @@ task_identifier: gh-release-bborbe-example-master-plugin
 			writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
 		}
 
-		It("bumps plugin.json and marketplace.json to unprefixed semver; commits exactly those files plus CHANGELOG.md; guard passes", func() {
-			fakeOps := &gitmocks.GitOps{}
-			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-				writeChangelogAndBothManifests(workdir)
-				return nil
-			}
-			fakeOps.CommitStub = func(_ context.Context, workdir, _ string, _ ...string) (string, error) {
-				pluginActual, err := os.ReadFile(filepath.Join(workdir, ".claude-plugin", "plugin.json"))
+		It(
+			"bumps plugin.json and marketplace.json to unprefixed semver; commits exactly those files plus CHANGELOG.md; guard passes",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelogAndBothManifests(workdir)
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, workdir, _ string, _ ...string) (string, error) {
+					pluginActual, err := os.ReadFile(
+						filepath.Join(workdir, ".claude-plugin", "plugin.json"),
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(pluginActual).To(Equal(readFixture("plugin.json.post")))
+
+					marketplaceActual, err := os.ReadFile(
+						filepath.Join(workdir, ".claude-plugin", "marketplace.json"),
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(marketplaceActual).To(Equal(readFixture("marketplace.json.post")))
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{
+						"CHANGELOG.md",
+						".claude-plugin/plugin.json",
+						".claude-plugin/marketplace.json",
+					},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+				fakeOps.PushReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(pluginActual).To(Equal(readFixture("plugin.json.post")))
 
-				marketplaceActual, err := os.ReadFile(filepath.Join(workdir, ".claude-plugin", "marketplace.json"))
+				result, err := step.Run(context.Background(), md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(marketplaceActual).To(Equal(readFixture("marketplace.json.post")))
-				return "abc1234", nil
-			}
-			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}, nil)
-			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 
-			step := pkg.NewExecutionStep(fakeOps, "test-token")
-			md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
-			Expect(err).NotTo(HaveOccurred())
+				_, _, _, commitPaths := fakeOps.CommitArgsForCall(0)
+				Expect(
+					commitPaths,
+				).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}))
 
-			result, err := step.Run(context.Background(), md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(fakeOps.TagCallCount()).To(Equal(1))
+				Expect(fakeOps.PushCallCount()).To(Equal(1))
 
-			_, _, _, commitPaths := fakeOps.CommitArgsForCall(0)
-			Expect(commitPaths).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}))
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("released"))
+			},
+		)
 
-			Expect(fakeOps.TagCallCount()).To(Equal(1))
-			Expect(fakeOps.PushCallCount()).To(Equal(1))
+		It(
+			"plugin.json only → commits {CHANGELOG.md, .claude-plugin/plugin.json}; guard passes",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
+					Expect(paths).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/plugin.json"}))
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+				fakeOps.PushReturns(nil)
 
-			got, _ := agentlib.ExtractSection[pkg.ResultOutput](context.Background(), md, "## Result")
-			Expect(got.Outcome).To(Equal("released"))
-		})
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
 
-		It("plugin.json only → commits {CHANGELOG.md, .claude-plugin/plugin.json}; guard passes", func() {
-			fakeOps := &gitmocks.GitOps{}
-			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-				writeChangelog(workdir)
-				writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
-				return nil
-			}
-			fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
-				Expect(paths).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/plugin.json"}))
-				return "abc1234", nil
-			}
-			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md", ".claude-plugin/plugin.json"}, nil)
-			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			},
+		)
 
-			step := pkg.NewExecutionStep(fakeOps, "")
-			md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
-			Expect(err).NotTo(HaveOccurred())
+		It(
+			"marketplace.json only → commits {CHANGELOG.md, .claude-plugin/marketplace.json}; guard passes",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					writeManifest(
+						workdir,
+						".claude-plugin/marketplace.json",
+						"marketplace.json.pre",
+					)
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
+					Expect(
+						paths,
+					).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/marketplace.json"}))
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{"CHANGELOG.md", ".claude-plugin/marketplace.json"},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+				fakeOps.PushReturns(nil)
 
-			result, err := step.Run(context.Background(), md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
-		})
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
 
-		It("marketplace.json only → commits {CHANGELOG.md, .claude-plugin/marketplace.json}; guard passes", func() {
-			fakeOps := &gitmocks.GitOps{}
-			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-				writeChangelog(workdir)
-				writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
-				return nil
-			}
-			fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
-				Expect(paths).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/marketplace.json"}))
-				return "abc1234", nil
-			}
-			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md", ".claude-plugin/marketplace.json"}, nil)
-			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
-
-			step := pkg.NewExecutionStep(fakeOps, "")
-			md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := step.Run(context.Background(), md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
-		})
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			},
+		)
 
 		It("no .claude-plugin/ dir → commits only CHANGELOG.md; guard passes", func() {
 			fakeOps := &gitmocks.GitOps{}
@@ -728,73 +768,107 @@ task_identifier: gh-release-bborbe-example-master-plugin
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 
-			got, _ := agentlib.ExtractSection[pkg.ResultOutput](context.Background(), md, "## Result")
+			got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md,
+				"## Result",
+			)
 			Expect(got.Outcome).To(Equal("released"))
 		})
 
-		It("CommittedFiles returns unexpected file → Result(failed, error_category=unexpected_diff); Tag NOT called; Push NOT called", func() {
-			fakeOps := &gitmocks.GitOps{}
-			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-				writeChangelogAndBothManifests(workdir)
-				return nil
-			}
-			fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
-				return "def5678", nil
-			}
-			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "README.md"}, nil)
-			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
+		It(
+			"CommittedFiles returns unexpected file → Result(failed, error_category=unexpected_diff); Tag NOT called; Push NOT called",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelogAndBothManifests(workdir)
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
+					return "def5678", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{
+						"CHANGELOG.md",
+						".claude-plugin/plugin.json",
+						".claude-plugin/marketplace.json",
+						"README.md",
+					},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+				fakeOps.PushReturns(nil)
 
-			step := pkg.NewExecutionStep(fakeOps, "")
-			md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
-			Expect(err).NotTo(HaveOccurred())
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
 
-			result, err := step.Run(context.Background(), md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 
-			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
-			Expect(fakeOps.TagCallCount()).To(Equal(0))
-			Expect(fakeOps.PushCallCount()).To(Equal(0))
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
+				Expect(fakeOps.TagCallCount()).To(Equal(0))
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
 
-			got, _ := agentlib.ExtractSection[pkg.ResultOutput](context.Background(), md, "## Result")
-			Expect(got.Outcome).To(Equal("failed"))
-			Expect(string(got.ErrorCategory)).To(Equal("unexpected_diff"))
-			Expect(got.Tag).To(BeEmpty())
-			Expect(got.CommitSHA).To(BeEmpty())
-		})
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("failed"))
+				Expect(string(got.ErrorCategory)).To(Equal("unexpected_diff"))
+				Expect(got.Tag).To(BeEmpty())
+				Expect(got.CommitSHA).To(BeEmpty())
+			},
+		)
 
-		It("plugin.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called; Push NOT called", func() {
-			fakeOps := &gitmocks.GitOps{}
-			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-				writeChangelog(workdir)
-				Expect(os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750)).To(Succeed())
-				malformedPlugin := []byte(`{"name": "example", "version": }`)
-				Expect(os.WriteFile(filepath.Join(workdir, ".claude-plugin", "plugin.json"), malformedPlugin, 0o600)).To(Succeed())
-				return nil
-			}
-			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
+		It(
+			"plugin.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called; Push NOT called",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					Expect(
+						os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750),
+					).To(Succeed())
+					malformedPlugin := []byte(`{"name": "example", "version": }`)
+					Expect(
+						os.WriteFile(
+							filepath.Join(workdir, ".claude-plugin", "plugin.json"),
+							malformedPlugin,
+							0o600,
+						),
+					).To(Succeed())
+					return nil
+				}
+				fakeOps.TagReturns(nil)
+				fakeOps.PushReturns(nil)
 
-			step := pkg.NewExecutionStep(fakeOps, "")
-			md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
-			Expect(err).NotTo(HaveOccurred())
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
 
-			result, err := step.Run(context.Background(), md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 
-			Expect(fakeOps.CommitCallCount()).To(Equal(0))
-			Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
-			Expect(fakeOps.TagCallCount()).To(Equal(0))
-			Expect(fakeOps.PushCallCount()).To(Equal(0))
+				Expect(fakeOps.CommitCallCount()).To(Equal(0))
+				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(0))
+				Expect(fakeOps.TagCallCount()).To(Equal(0))
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
 
-			got, _ := agentlib.ExtractSection[pkg.ResultOutput](context.Background(), md, "## Result")
-			Expect(got.Outcome).To(Equal("failed"))
-			Expect(string(got.ErrorCategory)).To(Equal("plugin_manifest_invalid"))
-			Expect(got.Error).To(ContainSubstring(".claude-plugin/plugin.json"))
-			Expect(got.Tag).To(BeEmpty())
-			Expect(got.CommitSHA).To(BeEmpty())
-		})
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("failed"))
+				Expect(string(got.ErrorCategory)).To(Equal("plugin_manifest_invalid"))
+				Expect(got.Error).To(ContainSubstring(".claude-plugin/plugin.json"))
+				Expect(got.Tag).To(BeEmpty())
+				Expect(got.CommitSHA).To(BeEmpty())
+			},
+		)
 	})
 })
