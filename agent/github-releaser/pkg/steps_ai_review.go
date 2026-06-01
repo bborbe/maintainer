@@ -175,6 +175,12 @@ func (s *aiReviewStep) verifyTagExists(
 // verifyTagAtExpectedCommit calls ResolveTagCommit and checks the returned SHA
 // matches expectedCommit. Records the result in checks. Returns an error with a
 // descriptive message if the SHA mismatch cannot be retried.
+//
+// Length mismatch tolerance: the execution step writes Result.CommitSHA via
+// `git rev-parse --short HEAD` (7 chars by default — pkg/git/os_exec_git_ops.go),
+// while the GitHub API always returns a full 40-char SHA. A naive `==` compare
+// would false-positive every release. We accept either string as a prefix of
+// the other to handle both directions (short stored vs full stored).
 func (s *aiReviewStep) verifyTagAtExpectedCommit(
 	ctx context.Context,
 	owner, name, tagSHA, expectedCommit string,
@@ -185,7 +191,7 @@ func (s *aiReviewStep) verifyTagAtExpectedCommit(
 		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
 		return errors.Wrapf(ctx, err, "ai_review: ResolveTagCommit")
 	}
-	if commitSHA != expectedCommit {
+	if !commitSHAMatches(commitSHA, expectedCommit) {
 		checks.TagAtExpectedSHA = false
 		glog.V(2).
 			Infof("ai_review: check=TagAtExpectedSHA result=false: tag points to %s, expected %s", commitSHA, expectedCommit)
@@ -229,4 +235,17 @@ func (s *aiReviewStep) changelogHeaderRewritten(content []byte) bool {
 		}
 	}
 	return false
+}
+
+// commitSHAMatches returns true when one SHA is a prefix of the other. This
+// handles the short-vs-full length asymmetry between the execution step's
+// `git rev-parse --short HEAD` output (7 chars by default) and GitHub's API
+// which always returns the full 40-char SHA. Both directions are accepted so
+// the comparison is correct regardless of which side is shorter. An empty
+// string never matches (avoids vacuous-true on missing data).
+func commitSHAMatches(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return strings.HasPrefix(a, b) || strings.HasPrefix(b, a)
 }
