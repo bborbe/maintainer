@@ -222,7 +222,14 @@ prior verdict body
 		BeforeEach(func() {
 			verifier = &mocks.ReviewVerifier{}
 			poster = &mocks.PrPoster{}
-			step = pkg.NewReviewStep(runner, poster, instructions, verifier, "test-token", "test-bot")
+			step = pkg.NewReviewStep(
+				runner,
+				poster,
+				instructions,
+				verifier,
+				"test-token",
+				"test-bot",
+			)
 			runner.RunReturns(&claudelib.ClaudeResult{Result: passVerdict}, nil)
 		})
 
@@ -363,37 +370,42 @@ var _ = Describe("dismiss-and-comment routing", func() {
 		instructions = claudelib.Instructions{}
 	})
 
-	Describe("case (a): verdict=fail with hallucinations → dismiss called, routes to human_review", func() {
-		It("calls DismissCurrentReview with hallucinations and routes to human_review", func() {
-			verdictJSON := `{"verdict":"fail","reason":"line 99 not in diff","hallucinations":[{"file":"pkg/foo.go","line":99,"issue":"line 99 not in diff"}]}`
-			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
-			poster.DismissCurrentReviewReturns(pkg.PostResult{
-				Outcome:     "success",
-				FailureStep: "",
-				HTTPStatus:  200,
+	Describe(
+		"case (a): verdict=fail with hallucinations → dismiss called, routes to human_review",
+		func() {
+			It("calls DismissCurrentReview with hallucinations and routes to human_review", func() {
+				verdictJSON := `{"verdict":"fail","reason":"line 99 not in diff","hallucinations":[{"file":"pkg/foo.go","line":99,"issue":"line 99 not in diff"}]}`
+				runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
+				poster.DismissCurrentReviewReturns(pkg.PostResult{
+					Outcome:     "success",
+					FailureStep: "",
+					HTTPStatus:  200,
+				})
+				step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).NotTo(BeNil())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("human_review"))
+
+				Expect(poster.DismissCurrentReviewCallCount()).To(Equal(1))
+				_, _, _, gotHallucinations := poster.DismissCurrentReviewArgsForCall(0)
+				Expect(gotHallucinations).To(HaveLen(1))
+				Expect(gotHallucinations[0].File).To(Equal("pkg/foo.go"))
+				Expect(gotHallucinations[0].Line).To(Equal(99))
+				// Diagnostics contains dismiss outcome
+				diagSec, exists := md.FindSection("## Diagnostics")
+				Expect(exists).To(BeTrue())
+				Expect(diagSec.Body).To(ContainSubstring(`outcome: "success"`))
 			})
-			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := step.Run(ctx, md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result).NotTo(BeNil())
-			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
-			Expect(result.NextPhase).To(Equal("human_review"))
-
-			Expect(poster.DismissCurrentReviewCallCount()).To(Equal(1))
-			_, _, _, gotBotLogin, gotHallucinations := poster.DismissCurrentReviewArgsForCall(0)
-			Expect(gotBotLogin).To(Equal(botLogin))
-			Expect(gotHallucinations).To(HaveLen(1))
-			Expect(gotHallucinations[0].File).To(Equal("pkg/foo.go"))
-			Expect(gotHallucinations[0].Line).To(Equal(99))
-			// Diagnostics contains dismiss outcome
-			diagSec, exists := md.FindSection("## Diagnostics")
-			Expect(exists).To(BeTrue())
-			Expect(diagSec.Body).To(ContainSubstring(`outcome: "success"`))
-		})
-	})
+		},
+	)
 
 	Describe("case (b): verdict=fail with hallucinations + dismiss returns 404", func() {
 		It("routes to human_review with 404 in diagnostics", func() {
@@ -405,7 +417,10 @@ var _ = Describe("dismiss-and-comment routing", func() {
 				HTTPStatus:  404,
 			})
 			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
+			md, err := agentlib.ParseMarkdown(
+				ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := step.Run(ctx, md)
@@ -428,7 +443,10 @@ var _ = Describe("dismiss-and-comment routing", func() {
 				HTTPStatus:  422,
 			})
 			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
+			md, err := agentlib.ParseMarkdown(
+				ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := step.Run(ctx, md)
@@ -440,34 +458,43 @@ var _ = Describe("dismiss-and-comment routing", func() {
 		})
 	})
 
-	Describe("case (d): verdict=fail with hallucinations + dismiss success + COMMENT POST fails (partial)", func() {
-		It("routes to human_review with comment-after-dismiss step in diagnostics", func() {
-			verdictJSON := `{"verdict":"fail","reason":"issues","hallucinations":[{"file":"x.go","line":1,"issue":"a"}]}`
-			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
-			poster.DismissCurrentReviewReturns(pkg.PostResult{
-				Outcome:     "success",
-				FailureStep: "POST /pulls/2/reviews (comment-after-dismiss)",
-				HTTPStatus:  500,
+	Describe(
+		"case (d): verdict=fail with hallucinations + dismiss success + COMMENT POST fails (partial)",
+		func() {
+			It("routes to human_review with comment-after-dismiss step in diagnostics", func() {
+				verdictJSON := `{"verdict":"fail","reason":"issues","hallucinations":[{"file":"x.go","line":1,"issue":"a"}]}`
+				runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
+				poster.DismissCurrentReviewReturns(pkg.PostResult{
+					Outcome:     "success",
+					FailureStep: "POST /pulls/2/reviews (comment-after-dismiss)",
+					HTTPStatus:  500,
+				})
+				step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
+				md, err := agentlib.ParseMarkdown(
+					ctx,
+					"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.NextPhase).To(Equal("human_review"))
+
+				diagSec, _ := md.FindSection("## Diagnostics")
+				Expect(diagSec.Body).To(ContainSubstring("comment-after-dismiss"))
 			})
-			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
-			Expect(err).NotTo(HaveOccurred())
-
-			result, err := step.Run(ctx, md)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.NextPhase).To(Equal("human_review"))
-
-			diagSec, _ := md.FindSection("## Diagnostics")
-			Expect(diagSec.Body).To(ContainSubstring("comment-after-dismiss"))
-		})
-	})
+		},
+	)
 
 	Describe("case (e): verdict=fail with empty hallucinations → dismiss NOT called", func() {
 		It("does not call DismissCurrentReview and routes to human_review", func() {
 			verdictJSON := `{"verdict":"fail","reason":"inconsistent","hallucinations":[]}`
 			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
 			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
+			md, err := agentlib.ParseMarkdown(
+				ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := step.Run(ctx, md)
@@ -485,7 +512,10 @@ var _ = Describe("dismiss-and-comment routing", func() {
 			verdictJSON := `{"verdict":"pass","reason":"looks good","hallucinations":[]}`
 			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
 			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
-			md, err := agentlib.ParseMarkdown(ctx, "---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content")
+			md, err := agentlib.ParseMarkdown(
+				ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview the PR at "+prURL+"\n\nsome content",
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := step.Run(ctx, md)
@@ -501,8 +531,10 @@ var _ = Describe("dismiss-and-comment routing", func() {
 			runner.RunReturns(&claudelib.ClaudeResult{Result: verdictJSON}, nil)
 			step = pkg.NewReviewStep(runner, poster, instructions, nil, "", botLogin)
 			// Bitbucket URL in preamble
-			md, err := agentlib.ParseMarkdown(ctx,
-				"---\nref: "+headSHA+"\n---\n\nReview the PR at https://bitbucket.org/org/repo/pull-requests/1\n\nsome content")
+			md, err := agentlib.ParseMarkdown(
+				ctx,
+				"---\nref: "+headSHA+"\n---\n\nReview the PR at https://bitbucket.org/org/repo/pull-requests/1\n\nsome content",
+			)
 			Expect(err).NotTo(HaveOccurred())
 
 			result, err := step.Run(ctx, md)

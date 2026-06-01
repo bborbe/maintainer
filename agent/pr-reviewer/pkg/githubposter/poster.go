@@ -272,84 +272,75 @@ func (p *prPoster) listBotReviewsAtHead(
 	return cr.Value, prpkg.PostResult{}, true
 }
 
+// dismissPayload is the JSON body sent to PUT .../reviews/{id}/dismissals
+// when the bot's own review has been flagged hallucinated by ai_review.
+var dismissPayload = []byte(
+	`{"message":"hallucinated review — see follow-up COMMENT for evidence"}`,
+)
+
 // buildHallucinationCommentBody builds the COMMENT review body for the
-// follow-up comment after dismissing a hallucinated review.
+// follow-up comment after dismissing a hallucinated review. The opening
+// line does NOT repeat the dismissal sentence (which already appears in
+// the dismissed review's "reason"); it leads with the evidence header
+// the reader needs.
 func buildHallucinationCommentBody(hallucinations []prpkg.Hallucination) string {
 	if len(hallucinations) == 0 {
 		return ""
 	}
 	var sb strings.Builder
-	sb.WriteString("hallucinated review — see follow-up COMMENT for evidence\n\n")
+	sb.WriteString("Hallucinations flagged by ai_review (file:line not in diff):\n\n")
 	for _, h := range hallucinations {
-		sb.WriteString(fmt.Sprintf("- %s:%d — %s\n", h.File, h.Line, h.Issue))
+		fmt.Fprintf(&sb, "- %s:%d — %s\n", h.File, h.Line, h.Issue)
 	}
 	return sb.String()
 }
 
-func (p *prPoster) DismissCurrentReview(
+// noopDismissResult is the success no-op return for the empty-headSHA and
+// no-matching-review paths.
+var noopDismissResult = prpkg.PostResult{
+	Outcome:     "success",
+	FailureStep: "dismiss-current-noop",
+	HTTPStatus:  0,
+}
+
+// executeDismissPUT issues PUT .../reviews/{id}/dismissals via the existing
+// retryCall + doRequest plumbing and returns the HTTP status from the call
+// alongside the retryCall outcome.
+func (p *prPoster) executeDismissPUT(
 	ctx context.Context,
 	pr prurl.PRInfo,
-	headSHA, botLogin string,
-	hallucinations []prpkg.Hallucination,
-) prpkg.PostResult {
-	// No-op when headSHA is empty
-	if headSHA == "" {
-		return prpkg.PostResult{
-			Outcome:     "success",
-			FailureStep: "dismiss-current-noop",
-			HTTPStatus:  0,
-		}
-	}
-
-	// Find the bot's review at the current head SHA
-	reviews, result, ok := p.listBotReviewsAtHead(ctx, pr, headSHA)
-	if !ok {
-		return result
-	}
-	if len(reviews) == 0 {
-		return prpkg.PostResult{
-			Outcome:     "success",
-			FailureStep: "dismiss-current-noop",
-			HTTPStatus:  0,
-		}
-	}
-
-	// Dismiss the first matching review
-	review := reviews[0]
-	dismissStep := fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, review.ID)
+	reviewID int64,
+) CallResult[struct{}] {
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews/%d/dismissals",
-		pr.Owner, pr.Repo, pr.Number, review.ID,
+		pr.Owner, pr.Repo, pr.Number, reviewID,
 	)
-	dismissPayload := []byte(`{"message":"hallucinated review — see follow-up COMMENT for evidence"}`)
-	cr := retryCall(ctx, dismissStep, func(ctx context.Context) (struct{}, int, string, error) {
+	step := fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, reviewID)
+	return retryCall(ctx, step, func(ctx context.Context) (struct{}, int, string, error) {
 		status, body, err := doRequest(
-			ctx,
-			p.httpClient,
-			p.ghToken,
-			"PUT",
-			url,
-			bytes.NewReader(dismissPayload),
+			ctx, p.httpClient, p.ghToken, "PUT", url, bytes.NewReader(dismissPayload),
 		)
 		if err != nil {
 			return struct{}{}, status, truncateBody(body), err
 		}
 		if status < 200 || status >= 300 {
-			return struct{}{}, status, truncateBody(
-					body,
-				), errors.Errorf(
-					ctx,
-					"unexpected status %d",
-					status,
-				)
+			return struct{}{}, status, truncateBody(body),
+				errors.Errorf(ctx, "unexpected status %d", status)
 		}
 		return struct{}{}, status, truncateBody(body), nil
 	})
-	if cr.Err != nil {
-		return buildFailedResult(dismissStep, cr)
-	}
+}
 
-	// Dismissal succeeded — post follow-up COMMENT
+// postHallucinationComment posts the follow-up COMMENT review citing each
+// hallucination after a successful dismissal. The returned PostResult always
+// has Outcome="success" because the dismissal has already cleared the merge
+// gate — a COMMENT failure is logged but does not fail the operation.
+func (p *prPoster) postHallucinationComment(
+	ctx context.Context,
+	pr prurl.PRInfo,
+	headSHA string,
+	hallucinations []prpkg.Hallucination,
+) prpkg.PostResult {
 	body := buildHallucinationCommentBody(hallucinations)
 	if len(body) > maxGitHubCommentBody {
 		keep := maxGitHubCommentBody - len(maxGitHubCommentBodyNotice)
@@ -368,11 +359,43 @@ func (p *prPoster) DismissCurrentReview(
 			ErrorMessage: commentResult.ErrorMessage,
 		}
 	}
+	// postReview returns an empty PostResult on success — HTTPStatus is set
+	// from the wire only on failure. Use 200 as the success indicator so AC
+	// verification can grep http_status: 200 in the diagnostics block.
 	return prpkg.PostResult{
-		Outcome:     "success",
-		FailureStep: "",
-		HTTPStatus:  200,
+		Outcome:    "success",
+		HTTPStatus: 200,
 	}
+}
+
+// DismissCurrentReview dismisses the bot's APPROVED or CHANGES_REQUESTED
+// review at the current head SHA and posts a follow-up COMMENT citing the
+// hallucinations. See PrPoster.DismissCurrentReview for full semantics.
+func (p *prPoster) DismissCurrentReview(
+	ctx context.Context,
+	pr prurl.PRInfo,
+	headSHA string,
+	hallucinations []prpkg.Hallucination,
+) prpkg.PostResult {
+	if headSHA == "" {
+		return noopDismissResult
+	}
+	reviews, result, ok := p.listBotReviewsAtHead(ctx, pr, headSHA)
+	if !ok {
+		return result
+	}
+	if len(reviews) == 0 {
+		return noopDismissResult
+	}
+	review := reviews[0]
+	cr := p.executeDismissPUT(ctx, pr, review.ID)
+	if cr.Err != nil {
+		return buildFailedResult(
+			fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, review.ID),
+			cr,
+		)
+	}
+	return p.postHallucinationComment(ctx, pr, headSHA, hallucinations)
 }
 
 func (p *prPoster) postAndVerify(

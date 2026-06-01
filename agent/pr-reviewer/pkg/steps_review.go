@@ -275,8 +275,12 @@ func (s *reviewStep) tryDismissHallucinated(
 		return
 	}
 	prInfo, err := prurl.ParsePRURL(ctx, prURLStr)
-	if err != nil || prInfo.Platform != prurl.PlatformGitHub {
-		glog.V(2).Infof("ai_review dismiss: non-GitHub or unparseable URL — skipping")
+	if err != nil {
+		glog.Warningf("ai_review dismiss: failed to parse PR URL %q: %v — skipping", prURLStr, err)
+		return
+	}
+	if prInfo.Platform != prurl.PlatformGitHub {
+		glog.V(2).Infof("ai_review dismiss: non-GitHub platform %q — skipping", prInfo.Platform)
 		return
 	}
 	headSHA, _ := md.Frontmatter.String("ref")
@@ -284,7 +288,7 @@ func (s *reviewStep) tryDismissHallucinated(
 		glog.Warningf("ai_review dismiss: empty ref in frontmatter — skipping")
 		return
 	}
-	result := s.poster.DismissCurrentReview(ctx, *prInfo, headSHA, s.botLogin, hallucinations)
+	result := s.poster.DismissCurrentReview(ctx, *prInfo, headSHA, hallucinations)
 	appendDismissDiagnostic(md, result)
 }
 

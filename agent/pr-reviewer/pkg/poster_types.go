@@ -13,9 +13,8 @@ import (
 //counterfeiter:generate -o ../mocks/pr-poster.go --fake-name PrPoster . PrPoster
 //counterfeiter:generate -o ../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
 
-// Hallucination represents a single hallucination entry from the
-// ai_review verdict payload. Rendered verbatim in the dismissal
-// COMMENT body and in the Parked-Because section spawned downstream.
+// Hallucination describes a single file-reference that ai_review flagged
+// as fabricated (the file or line does not exist in the diff).
 type Hallucination struct {
 	File  string `json:"file"`
 	Line  int    `json:"line"`
@@ -44,7 +43,7 @@ type PrPoster interface {
 	DismissCurrentReview(
 		ctx context.Context,
 		pr prurl.PRInfo,
-		headSHA, botLogin string,
+		headSHA string,
 		hallucinations []Hallucination,
 	) PostResult
 }
