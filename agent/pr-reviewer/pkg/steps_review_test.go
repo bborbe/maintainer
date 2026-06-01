@@ -75,6 +75,27 @@ var _ = Describe("ExtractVerdict", func() {
 		Entry("malformed JSON with unbalanced braces fails",
 			"oops {{{", "", "", false),
 	)
+
+	It("populates Hallucinations from the JSON 'hallucinations' key", func() {
+		input := `{"verdict":"fail","reason":"line not in diff","hallucinations":[` +
+			`{"file":"pkg/foo.go","line":99,"issue":"line 99 not in diff"},` +
+			`{"file":"pkg/bar.go","line":7,"issue":"line 7 not in diff"}` +
+			`]}`
+		got, err := pkg.ExtractVerdictForTest(input)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Verdict).To(Equal("fail"))
+		Expect(got.Hallucinations).To(HaveLen(2))
+		Expect(got.Hallucinations[0].File).To(Equal("pkg/foo.go"))
+		Expect(got.Hallucinations[0].Line).To(Equal(99))
+		Expect(got.Hallucinations[0].Issue).To(Equal("line 99 not in diff"))
+		Expect(got.Hallucinations[1].File).To(Equal("pkg/bar.go"))
+	})
+
+	It("leaves Hallucinations empty when the JSON omits the key", func() {
+		got, err := pkg.ExtractVerdictForTest(`{"verdict":"pass","reason":"ok"}`)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Hallucinations).To(BeEmpty())
+	})
 })
 
 var _ = Describe("reviewStep", func() {

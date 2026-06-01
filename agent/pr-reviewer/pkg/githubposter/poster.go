@@ -16,6 +16,7 @@ import (
 
 	errors "github.com/bborbe/errors"
 	libtime "github.com/bborbe/time"
+	"github.com/golang/glog"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	prurl "github.com/bborbe/maintainer/lib/prurl"
@@ -305,7 +306,8 @@ var noopDismissResult = prpkg.PostResult{
 
 // executeDismissPUT issues PUT .../reviews/{id}/dismissals via the existing
 // retryCall + doRequest plumbing and returns the HTTP status from the call
-// alongside the retryCall outcome.
+// alongside the retryCall outcome. Emits a glog line on completion so pod
+// logs carry an audit trail of every dismissal attempt.
 func (p *prPoster) executeDismissPUT(
 	ctx context.Context,
 	pr prurl.PRInfo,
@@ -316,7 +318,7 @@ func (p *prPoster) executeDismissPUT(
 		pr.Owner, pr.Repo, pr.Number, reviewID,
 	)
 	step := fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, reviewID)
-	return retryCall(ctx, step, func(ctx context.Context) (struct{}, int, string, error) {
+	cr := retryCall(ctx, step, func(ctx context.Context) (struct{}, int, string, error) {
 		status, body, err := doRequest(
 			ctx, p.httpClient, p.ghToken, "PUT", url, bytes.NewReader(dismissPayload),
 		)
@@ -329,12 +331,25 @@ func (p *prPoster) executeDismissPUT(
 		}
 		return struct{}{}, status, truncateBody(body), nil
 	})
+	glog.Infof(
+		"dismiss-current: step=%s http_status=%d attempts=%d err=%v",
+		step, cr.HTTPStatus, cr.Attempts, cr.Err,
+	)
+	return cr
 }
 
 // postHallucinationComment posts the follow-up COMMENT review citing each
-// hallucination after a successful dismissal. The returned PostResult always
-// has Outcome="success" because the dismissal has already cleared the merge
-// gate — a COMMENT failure is logged but does not fail the operation.
+// hallucination after a successful dismissal.
+//
+// Outcome semantics: the returned PostResult always carries Outcome="success"
+// because the dismissal has already mutated PR review state — the merge gate
+// is cleared regardless of what happens to the COMMENT POST. A failed COMMENT
+// POST is captured in FailureStep + HTTPStatus + ErrorMessage for the
+// operator's diagnostic trail but is deliberately NOT promoted to
+// Outcome="failed" — doing so would misleadingly signal "dismissal didn't
+// happen" when in fact it did. The 422 case (e.g. PR closed between dismiss
+// and comment) is handled the same way: the dismissal stands, the failure is
+// recorded, the operator can grep `## Diagnostics` if context is needed.
 func (p *prPoster) postHallucinationComment(
 	ctx context.Context,
 	pr prurl.PRInfo,
@@ -352,6 +367,10 @@ func (p *prPoster) postHallucinationComment(
 	commentStep := fmt.Sprintf("POST /pulls/%d/reviews (comment-after-dismiss)", pr.Number)
 	_, commentResult, proceed := p.postReview(ctx, pr, headSHA, "COMMENT", body)
 	if !proceed {
+		glog.Warningf(
+			"dismiss-current: %s failed http_status=%d err=%s",
+			commentStep, commentResult.HTTPStatus, commentResult.ErrorMessage,
+		)
 		return prpkg.PostResult{
 			Outcome:      "success",
 			FailureStep:  commentStep,
@@ -359,6 +378,7 @@ func (p *prPoster) postHallucinationComment(
 			ErrorMessage: commentResult.ErrorMessage,
 		}
 	}
+	glog.Infof("dismiss-current: %s http_status=200", commentStep)
 	// postReview returns an empty PostResult on success — HTTPStatus is set
 	// from the wire only on failure. Use 200 as the success indicator so AC
 	// verification can grep http_status: 200 in the diagnostics block.
@@ -368,9 +388,15 @@ func (p *prPoster) postHallucinationComment(
 	}
 }
 
-// DismissCurrentReview dismisses the bot's APPROVED or CHANGES_REQUESTED
-// review at the current head SHA and posts a follow-up COMMENT citing the
-// hallucinations. See PrPoster.DismissCurrentReview for full semantics.
+// DismissCurrentReview dismisses every APPROVED or CHANGES_REQUESTED bot
+// review at the current head SHA and posts a single follow-up COMMENT citing
+// the hallucinations. See PrPoster.DismissCurrentReview for full semantics.
+//
+// Multiple-review handling: in practice the bot posts at most one
+// review-with-verdict per (PR, SHA) cycle, so the list is almost always
+// length 1. The loop is a belt-and-suspenders guard for the edge case where
+// a previous trigger somehow left an undismissed sibling — we dismiss them
+// all rather than silently leaving one to keep blocking the merge gate.
 func (p *prPoster) DismissCurrentReview(
 	ctx context.Context,
 	pr prurl.PRInfo,
@@ -387,13 +413,14 @@ func (p *prPoster) DismissCurrentReview(
 	if len(reviews) == 0 {
 		return noopDismissResult
 	}
-	review := reviews[0]
-	cr := p.executeDismissPUT(ctx, pr, review.ID)
-	if cr.Err != nil {
-		return buildFailedResult(
-			fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, review.ID),
-			cr,
-		)
+	for _, review := range reviews {
+		cr := p.executeDismissPUT(ctx, pr, review.ID)
+		if cr.Err != nil {
+			return buildFailedResult(
+				fmt.Sprintf("PUT /pulls/%d/reviews/%d/dismissals", pr.Number, review.ID),
+				cr,
+			)
+		}
 	}
 	return p.postHallucinationComment(ctx, pr, headSHA, hallucinations)
 }

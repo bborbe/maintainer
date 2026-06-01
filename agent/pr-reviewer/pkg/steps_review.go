@@ -138,6 +138,12 @@ func (s *reviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.
 		}, nil
 	}
 
+	// Dismiss-and-comment is intentionally fire-and-forget: the dismissal
+	// outcome is recorded in ## Diagnostics by tryDismissHallucinated, but
+	// the next-phase routing below still falls through unchanged. A human
+	// owns the final call on every fail verdict — the dismissal only
+	// unblocks the GitHub merge gate, it does not auto-merge or change
+	// where the task lands.
 	if verdict.Verdict == "fail" && len(verdict.Hallucinations) > 0 {
 		s.tryDismissHallucinated(ctx, md, verdict.Hallucinations)
 	}
