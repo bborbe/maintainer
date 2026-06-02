@@ -55,10 +55,74 @@ var _ = Describe("Parse", func() {
 			maintainerconfig.MaintainerConfig{
 				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
 			}),
+		Entry("release.changelogRewrite: true -> ChangelogRewrite true",
+			"release:\n  changelogRewrite: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease:      false,
+					ChangelogRewrite: true,
+				},
+			}),
+		Entry("release.changelogRewrite: false -> ChangelogRewrite false",
+			"release:\n  changelogRewrite: false\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					ChangelogRewrite: false,
+				},
+			}),
+		Entry("release: present but no changelogRewrite field -> ChangelogRewrite false (default)",
+			"release:\n  autoRelease: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease:      true,
+					ChangelogRewrite: false,
+				},
+			}),
+		Entry("no release: block -> ChangelogRewrite false",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				Release:    maintainerconfig.ReleaseConfig{ChangelogRewrite: false},
+			}),
+		Entry("empty bytes -> zero-value config, nil error",
+			"",
+			maintainerconfig.MaintainerConfig{}),
+		Entry("both autoRelease and changelogRewrite populated -> both true",
+			"release:\n  autoRelease: true\n  changelogRewrite: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease:      true,
+					ChangelogRewrite: true,
+				},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {
 		cfg, err := maintainerconfig.Parse(ctx, []byte("prReviewer:\n  autoApprove: [unclosed\n"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("release.changelogRewrite: non-bool string value -> wrapped error", func() {
+		// yaml.v3 coerces the YAML-truthy strings "yes"/"on"/"true" to bool
+		// and "no"/"off"/"false" to bool (per the YAML 1.2 spec), so a
+		// truthy string is NOT a load-bearing invalid-value test. A
+		// non-truthy string ("foo") IS rejected by the type system.
+		cfg, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("release:\n  changelogRewrite: \"foo\"\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("release.changelogRewrite: number value -> wrapped error", func() {
+		cfg, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("release:\n  changelogRewrite: 1\n"),
+		)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))

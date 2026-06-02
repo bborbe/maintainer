@@ -603,49 +603,57 @@ var _ = Describe("AIReviewStep", func() {
 		// with extras entries tagged Verdict=hallucinated. This
 		// integration seam catches regressions where extras is
 		// dropped or mis-mapped.
-		Context("FaithfulnessLLMResponse → ReviewOutput.PerEntry mapping flattens extras as hallucinated", func() {
-			It("flattens extras with Verdict=hallucinated in the order LLM emitted them", func() {
-				faithfulResp := map[string]interface{}{
-					"per_entry": []map[string]string{
-						{"entry": "- feat: X", "verdict": "present", "note": "ok"},
-						{"entry": "- fix: Y", "verdict": "silent-drop", "note": "gone"},
+		Context(
+			"FaithfulnessLLMResponse → ReviewOutput.PerEntry mapping flattens extras as hallucinated",
+			func() {
+				It(
+					"flattens extras with Verdict=hallucinated in the order LLM emitted them",
+					func() {
+						faithfulResp := map[string]interface{}{
+							"per_entry": []map[string]string{
+								{"entry": "- feat: X", "verdict": "present", "note": "ok"},
+								{"entry": "- fix: Y", "verdict": "silent-drop", "note": "gone"},
+							},
+							"extras": []map[string]string{
+								{"entry": "- chore: Z", "verdict": "hallucinated", "note": "added"},
+							},
+							"overall": pkg.OverallFail,
+						}
+						fakeRunner.RunReturns(
+							&claudelib.ClaudeResult{Result: mustJSON(faithfulResp)},
+							nil,
+						)
+
+						result, md := runStep(
+							taskWithResult("abc123", "v1.0.0", "released", tmpDir),
+						)
+
+						Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+						Expect(result.NextPhase).To(Equal("human_review"))
+
+						review := extractReview(md)
+						Expect(review.PerEntry).To(HaveLen(3))
+						Expect(review.PerEntry[0]).To(Equal(pkg.FaithfulnessVerdict{
+							Entry:   "- feat: X",
+							Verdict: pkg.FaithfulnessPresent,
+							Note:    "ok",
+						}))
+						Expect(review.PerEntry[1]).To(Equal(pkg.FaithfulnessVerdict{
+							Entry:   "- fix: Y",
+							Verdict: pkg.FaithfulnessSilentDrop,
+							Note:    "gone",
+						}))
+						Expect(review.PerEntry[2]).To(Equal(pkg.FaithfulnessVerdict{
+							Entry:   "- chore: Z",
+							Verdict: pkg.FaithfulnessHallucinated,
+							Note:    "added",
+						}))
+						Expect(review.Overall).To(Equal(pkg.OverallFail))
+						Expect(review.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
 					},
-					"extras": []map[string]string{
-						{"entry": "- chore: Z", "verdict": "hallucinated", "note": "added"},
-					},
-					"overall": pkg.OverallFail,
-				}
-				fakeRunner.RunReturns(
-					&claudelib.ClaudeResult{Result: mustJSON(faithfulResp)},
-					nil,
 				)
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
-
-				review := extractReview(md)
-				Expect(review.PerEntry).To(HaveLen(3))
-				Expect(review.PerEntry[0]).To(Equal(pkg.FaithfulnessVerdict{
-					Entry:   "- feat: X",
-					Verdict: pkg.FaithfulnessPresent,
-					Note:    "ok",
-				}))
-				Expect(review.PerEntry[1]).To(Equal(pkg.FaithfulnessVerdict{
-					Entry:   "- fix: Y",
-					Verdict: pkg.FaithfulnessSilentDrop,
-					Note:    "gone",
-				}))
-				Expect(review.PerEntry[2]).To(Equal(pkg.FaithfulnessVerdict{
-					Entry:   "- chore: Z",
-					Verdict: pkg.FaithfulnessHallucinated,
-					Note:    "added",
-				}))
-				Expect(review.Overall).To(Equal(pkg.OverallFail))
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
-			})
-		})
+			},
+		)
 
 		// Spec 058 prompt 3 — Req 8: faithful rewrite happy path.
 		Context("faithful rewrite", func() {
@@ -672,42 +680,45 @@ var _ = Describe("AIReviewStep", func() {
 
 		// Spec 058 prompt 3 — Req 9: faithfulness failure modes.
 		Context("faithfulness failures", func() {
-			It("silent-drop → overall=fail, failed_checks contains Faithfulness, no push, ## Review captured", func() {
-				fakeClient.TagExistsReturns("abc1234", nil)
-				fakeClient.ResolveTagCommitReturns("abc1234", nil)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.2.8\n\n- feat: add foo\n"),
-					nil,
-				)
-				resp := map[string]interface{}{
-					"per_entry": []map[string]string{
-						{"entry": "- fix: bar", "verdict": "silent-drop", "note": "missing"},
-					},
-					"extras":  []map[string]string{},
-					"overall": pkg.OverallFail,
-				}
-				fakeRunner.RunReturns(
-					&claudelib.ClaudeResult{Result: mustJSON(resp)},
-					nil,
-				)
-				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+			It(
+				"silent-drop → overall=fail, failed_checks contains Faithfulness, no push, ## Review captured",
+				func() {
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.2.8\n\n- feat: add foo\n"),
+						nil,
+					)
+					resp := map[string]interface{}{
+						"per_entry": []map[string]string{
+							{"entry": "- fix: bar", "verdict": "silent-drop", "note": "missing"},
+						},
+						"extras":  []map[string]string{},
+						"overall": pkg.OverallFail,
+					}
+					fakeRunner.RunReturns(
+						&claudelib.ClaudeResult{Result: mustJSON(resp)},
+						nil,
+					)
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
 
-				result, md := runStep(taskWithResult("abc1234", "v1.2.8", "released", tmpDir))
+					result, md := runStep(taskWithResult("abc1234", "v1.2.8", "released", tmpDir))
 
-				Expect(fakeOps.PushCallCount()).To(Equal(0))
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
+					Expect(fakeOps.PushCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
 
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
-				Expect(review.Notes).To(ContainSubstring(pkg.CheckFaithfulness))
-				Expect(review.PerEntry).To(ContainElement(pkg.FaithfulnessVerdict{
-					Entry:   "- fix: bar",
-					Verdict: pkg.FaithfulnessSilentDrop,
-					Note:    "missing",
-				}))
-			})
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
+					Expect(review.Notes).To(ContainSubstring(pkg.CheckFaithfulness))
+					Expect(review.PerEntry).To(ContainElement(pkg.FaithfulnessVerdict{
+						Entry:   "- fix: bar",
+						Verdict: pkg.FaithfulnessSilentDrop,
+						Note:    "missing",
+					}))
+				},
+			)
 
 			It("hallucinated → overall=fail, per_entry contains hallucinated entry", func() {
 				fakeClient.TagExistsReturns("abc1234", nil)
@@ -746,31 +757,34 @@ var _ = Describe("AIReviewStep", func() {
 				}))
 			})
 
-			It("unexpected file change → overall=fail, unexpected_files lists the offending file", func() {
-				fakeClient.TagExistsReturns("abc1234", nil)
-				fakeClient.ResolveTagCommitReturns("abc1234", nil)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.2.8\n\n- feat: add foo\n"),
-					nil,
-				)
-				fakeOps.CommittedFilesReturns(
-					[]string{"CHANGELOG.md", "secrets.env"},
-					nil,
-				)
-				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+			It(
+				"unexpected file change → overall=fail, unexpected_files lists the offending file",
+				func() {
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.2.8\n\n- feat: add foo\n"),
+						nil,
+					)
+					fakeOps.CommittedFilesReturns(
+						[]string{"CHANGELOG.md", "secrets.env"},
+						nil,
+					)
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
 
-				result, md := runStep(taskWithResult("abc1234", "v1.2.8", "released", tmpDir))
+					result, md := runStep(taskWithResult("abc1234", "v1.2.8", "released", tmpDir))
 
-				Expect(fakeOps.PushCallCount()).To(Equal(0))
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
+					Expect(fakeOps.PushCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
 
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
-				Expect(review.UnexpectedFiles).To(ContainElement("secrets.env"))
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
-			})
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
+					Expect(review.UnexpectedFiles).To(ContainElement("secrets.env"))
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
+				},
+			)
 		})
 
 		// Spec 058 prompt 3 — Req 10: structural checks toggle
@@ -796,47 +810,55 @@ var _ = Describe("AIReviewStep", func() {
 				Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagExists))
 			})
 
-			It("TagAtExpectedSHA fails → approved=false, FailedChecks contains TagAtExpectedSHA", func() {
-				fakeClient.TagExistsReturns("tag-sha", nil)
-				fakeClient.ResolveTagCommitReturns("different-sha", nil)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.0.0\n\n- feat\n"),
-					nil,
-				)
-				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+			It(
+				"TagAtExpectedSHA fails → approved=false, FailedChecks contains TagAtExpectedSHA",
+				func() {
+					fakeClient.TagExistsReturns("tag-sha", nil)
+					fakeClient.ResolveTagCommitReturns("different-sha", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
 
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
+					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
 
-				Expect(fakeOps.PushCallCount()).To(Equal(0))
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
+					Expect(fakeOps.PushCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
 
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
-			})
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
+				},
+			)
 
-			It("ChangelogHeaderRewritten fails → approved=false, FailedChecks contains ChangelogHeaderRewritten", func() {
-				fakeClient.TagExistsReturns("abc1234", nil)
-				fakeClient.ResolveTagCommitReturns("abc1234", nil)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## Unreleased\n\n- new\n"),
-					nil,
-				)
-				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+			It(
+				"ChangelogHeaderRewritten fails → approved=false, FailedChecks contains ChangelogHeaderRewritten",
+				func() {
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## Unreleased\n\n- new\n"),
+						nil,
+					)
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
 
-				result, md := runStep(taskWithResult("abc1234", "v1.0.0", "released", tmpDir))
+					result, md := runStep(taskWithResult("abc1234", "v1.0.0", "released", tmpDir))
 
-				Expect(fakeOps.PushCallCount()).To(Equal(0))
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
+					Expect(fakeOps.PushCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
 
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
-			})
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
+					Expect(
+						review.FailedChecks,
+					).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
+				},
+			)
 		})
 
 		// Spec 058 prompt 3 — Req 11: LLM unavailable.

@@ -255,7 +255,8 @@ var _ = Describe("ChangelogFaithfulnessPrompt", func() {
 	})
 })
 
-var _ = DescribeTable("ParseFaithfulnessResponse",
+var _ = DescribeTable(
+	"ParseFaithfulnessResponse",
 	func(input string, wantOverall string, wantPerEntryLen, wantExtrasLen int, wantErrSubstr string) {
 		resp, err := prompts.ParseFaithfulnessResponse(context.Background(), input)
 		if wantErrSubstr == "" {
@@ -273,7 +274,10 @@ var _ = DescribeTable("ParseFaithfulnessResponse",
 	Entry(
 		"plain JSON all-present → overall=pass",
 		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok"}],"extras":[],"overall":"pass"}`,
-		"pass", 1, 0, "",
+		"pass",
+		1,
+		0,
+		"",
 	),
 	Entry(
 		"fenced JSON with one silent-drop → overall=fail",
@@ -284,14 +288,27 @@ var _ = DescribeTable("ParseFaithfulnessResponse",
 	Entry(
 		"plain JSON with one extras entry → overall=fail",
 		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok"}],"extras":[{"entry":"- chore: z","verdict":"hallucinated","note":"added"}],"overall":"fail"}`,
-		"fail", 1, 1, "",
+		"fail",
+		1,
+		1,
+		"",
 	),
-	Entry("bad per_entry verdict errors",
+	Entry(
+		"bad per_entry verdict errors",
 		`{"per_entry":[{"entry":"- feat: x","verdict":"maybe","note":"?"}],"extras":[],"overall":"pass"}`,
-		"", 0, 0, "per_entry[0] invalid verdict"),
-	Entry("bad extras verdict errors",
+		"",
+		0,
+		0,
+		"per_entry[0] invalid verdict",
+	),
+	Entry(
+		"bad extras verdict errors",
 		`{"per_entry":[],"extras":[{"entry":"- chore: z","verdict":"fictional","note":"?"}],"overall":"pass"}`,
-		"", 0, 0, "extras[0] invalid verdict"),
+		"",
+		0,
+		0,
+		"extras[0] invalid verdict",
+	),
 	Entry("missing overall errors",
 		`{"per_entry":[],"extras":[],"overall":""}`,
 		"", 0, 0, "invalid overall value"),
@@ -301,6 +318,9 @@ var _ = DescribeTable("ParseFaithfulnessResponse",
 	Entry(
 		"plain JSON with extra fields tolerated",
 		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok","extra":"junk"}],"extras":[],"overall":"pass","confidence":0.9}`,
-		"pass", 1, 0, "",
+		"pass",
+		1,
+		0,
+		"",
 	),
 )

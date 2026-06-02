@@ -42,8 +42,19 @@ type MaintainerConfig struct {
 // ReleaseConfig is the `release:` namespace. AutoRelease=true is the ONLY
 // shape that lets the github-release watcher emit a release task; everything
 // else (key absent, value false, file absent) skips the repo.
+//
+// ChangelogRewrite is the spec-059 per-repo opt-in flag for the 058 LLM
+// rewrite pipeline. Default false (omit the field, set false explicitly,
+// or omit the `release:` block — all equivalent). When true, planning
+// invokes the 058 rewrite classification; when false (or absent), planning
+// short-circuits with `rewrite_needed=false` regardless of ## Unreleased
+// content — preserving the pre-058 header-rename-only behavior fleet-wide.
+// Non-boolean values fail at parse time; the planning step is responsible
+// for surfacing the error as `error_category=invalid_config`.
+// See spec 059 § Desired Behavior 1-3 and § Goal.
 type ReleaseConfig struct {
-	AutoRelease bool `yaml:"autoRelease"`
+	AutoRelease      bool `yaml:"autoRelease"`
+	ChangelogRewrite bool `yaml:"changelogRewrite"`
 }
 
 // PrReviewerConfig is the `prReviewer:` namespace. AutoApprove=true means

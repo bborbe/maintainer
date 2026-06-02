@@ -1,11 +1,13 @@
 ---
-status: executing
+status: completed
 spec: [059-changelog-rewrite-opt-in-flag]
+summary: Added `release.changelogRewrite` field to `lib/maintainerconfig.ReleaseConfig` with full Ginkgo coverage (default-false, true/false, missing-field, missing-block, empty-bytes, both-true, fail-closed on non-bool string/number); created `agent/github-releaser/pkg/maintainerconfig` package with a `Fetcher` interface that mirrors the `githubchangelog` shape, returns the sentinel `ErrFileNotFound` on HTTP 404 via `stderrors.New`, re-exports the lib types/Parse, and ships with the new counterfeiter mock `MaintainerConfigFetcher`; both `make precommit` invocations exit 0
 container: maintainer-changelog-rewrite-exec-230-spec-059-config-field-and-yaml-fetcher
 dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T18:30:00Z"
 queued: "2026-06-02T18:59:48Z"
 started: "2026-06-02T18:59:50Z"
+completed: "2026-06-02T19:11:55Z"
 branch: dark-factory/changelog-rewrite-opt-in-flag
 ---
 
