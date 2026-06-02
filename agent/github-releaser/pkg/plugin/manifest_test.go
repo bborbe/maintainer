@@ -60,14 +60,14 @@ var _ = Describe("DetectManifests", func() {
 	)
 })
 
-var _ = Describe("BumpPluginJson", func() {
-	DescribeTable("BumpPluginJson version-parameter boundary",
+var _ = Describe("BumpPluginJSON", func() {
+	DescribeTable("BumpPluginJSON version-parameter boundary",
 		func(version string, wantErr bool) {
 			input := []byte(`{
   "name": "test",
   "version": "0.9.12"
 }`)
-			got, err := plugin.BumpPluginJson(context.Background(), input, version)
+			got, err := plugin.BumpPluginJSON(context.Background(), input, version)
 			if wantErr {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("version parameter"))
@@ -88,9 +88,9 @@ var _ = Describe("BumpPluginJson", func() {
 		Entry("00.10.0 accepted (leading zeros OK per shape)", "00.10.0", false),
 	)
 
-	DescribeTable("BumpPluginJson file content",
+	DescribeTable("BumpPluginJSON file content",
 		func(input []byte, version string, expected []byte, wantErr bool, errMsgRegex string) {
-			got, err := plugin.BumpPluginJson(context.Background(), input, version)
+			got, err := plugin.BumpPluginJSON(context.Background(), input, version)
 			if wantErr {
 				Expect(err).To(HaveOccurred())
 				if errMsgRegex != "" {
@@ -179,8 +179,8 @@ var _ = Describe("BumpPluginJson", func() {
 	)
 })
 
-var _ = Describe("BumpMarketplaceJson", func() {
-	DescribeTable("BumpMarketplaceJson version-parameter boundary",
+var _ = Describe("BumpMarketplaceJSON", func() {
+	DescribeTable("BumpMarketplaceJSON version-parameter boundary",
 		func(version string, wantErr bool) {
 			input := []byte(`{
   "metadata": {
@@ -188,7 +188,7 @@ var _ = Describe("BumpMarketplaceJson", func() {
   },
   "plugins": []
 }`)
-			got, err := plugin.BumpMarketplaceJson(context.Background(), input, version)
+			got, err := plugin.BumpMarketplaceJSON(context.Background(), input, version)
 			if wantErr {
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("version parameter"))
@@ -208,9 +208,9 @@ var _ = Describe("BumpMarketplaceJson", func() {
 		Entry("00.10.0 accepted (leading zeros OK per shape)", "00.10.0", false),
 	)
 
-	DescribeTable("BumpMarketplaceJson file content",
+	DescribeTable("BumpMarketplaceJSON file content",
 		func(input []byte, version string, expected []byte, wantErr bool, errMsgRegex string) {
-			got, err := plugin.BumpMarketplaceJson(context.Background(), input, version)
+			got, err := plugin.BumpMarketplaceJSON(context.Background(), input, version)
 			if wantErr {
 				Expect(err).To(HaveOccurred())
 				if errMsgRegex != "" {

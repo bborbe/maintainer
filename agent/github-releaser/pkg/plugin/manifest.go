@@ -59,10 +59,10 @@ func DetectManifests(ctx context.Context, workdir string) ([]string, error) {
 	return result, nil
 }
 
-// BumpPluginJson rewrites the top-level "version" field in a plugin.json byte stream.
+// BumpPluginJSON rewrites the top-level "version" field in a plugin.json byte stream.
 // It validates the version parameter against semverRE before touching content.
 // All other bytes are preserved verbatim (same indentation, key order, trailing newline).
-func BumpPluginJson(ctx context.Context, content []byte, version string) ([]byte, error) {
+func BumpPluginJSON(ctx context.Context, content []byte, version string) ([]byte, error) {
 	if !semverRE.MatchString(version) {
 		return nil, bborbeerrors.Errorf(ctx,
 			"plugin.json bump rejected: version parameter %q is not a semver-shaped string",
@@ -184,10 +184,10 @@ func (s *scopeTracker) inVersionScope() bool {
 	return s.inMetadata || s.inPlugin
 }
 
-// BumpMarketplaceJson rewrites metadata.version and every plugins[].version
+// BumpMarketplaceJSON rewrites metadata.version and every plugins[].version
 // in a marketplace.json byte stream. It validates the version parameter against
 // semverRE before touching content. All other bytes are preserved verbatim.
-func BumpMarketplaceJson(ctx context.Context, content []byte, version string) ([]byte, error) {
+func BumpMarketplaceJSON(ctx context.Context, content []byte, version string) ([]byte, error) {
 	if !semverRE.MatchString(version) {
 		return nil, bborbeerrors.Errorf(ctx,
 			"marketplace.json bump rejected: version parameter %q is not a semver-shaped string",
@@ -294,7 +294,7 @@ func isVersionKeyLine(line string) bool {
 // lineHasVersionKey returns true if the trimmed line opens a "version" key
 // (e.g. `"version": "x"` or `"version" : "x"`). The function is identical
 // to isVersionKeyLine but operates on a pre-trimmed input — extracted from
-// the closure that used to live inside BumpMarketplaceJson.
+// the closure that used to live inside BumpMarketplaceJSON.
 func lineHasVersionKey(trimmed string) bool {
 	idx := strings.Index(trimmed, `"version":`)
 	if idx < 0 {
@@ -512,8 +512,8 @@ func isCloseBracket(line string) bool {
 	return false
 }
 
-// writeLine appends line + a single '\n' to buf. Used by both BumpPluginJson
-// and BumpMarketplaceJson to dedupe the out.WriteString(line); out.WriteByte('\n')
+// writeLine appends line + a single '\n' to buf. Used by both BumpPluginJSON
+// and BumpMarketplaceJSON to dedupe the out.WriteString(line); out.WriteByte('\n')
 // pair that appears on every loop iteration.
 func writeLine(buf *bytes.Buffer, line string) {
 	buf.WriteString(line)

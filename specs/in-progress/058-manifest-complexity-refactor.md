@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-02T19:06:30Z"
 generating: "2026-06-02T19:16:26Z"
 prompted: "2026-06-02T19:34:40Z"
+verifying: "2026-06-02T20:19:41Z"
 branch: dark-factory/manifest-complexity-refactor
 ---
 
