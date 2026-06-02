@@ -905,7 +905,11 @@ task_identifier: gh-release-bborbe-example-master-plugin
 				// DeferCleanup restores the directory mode so the workdir-cleanup RemoveAll succeeds.
 				DeferCleanup(func() {
 					if capturedWorkdir != "" {
-						_ = os.Chmod(filepath.Join(capturedWorkdir, ".claude-plugin"), 0o750)
+						const testDirRestoreMode os.FileMode = 0o750 //nolint:gosec // restore test fixture dir mode set on line 900
+						_ = os.Chmod(
+							filepath.Join(capturedWorkdir, ".claude-plugin"),
+							testDirRestoreMode,
+						)
 					}
 				})
 
