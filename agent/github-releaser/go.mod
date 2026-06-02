@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer/agent/github-releaser
 
-go 1.26.3
+go 1.26.4
 
 replace (
 	github.com/opencontainers/runtime-spec => github.com/opencontainers/runtime-spec v1.2.0

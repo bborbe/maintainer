@@ -47,12 +47,9 @@ const (
 // asserts on these literals verbatim; do not rename without a spec
 // amendment.
 const (
-	CheckTagExists                = "TagExists"
-	CheckTagAtExpectedSHA         = "TagAtExpectedSHA"
-	CheckChangelogHeaderRewritten = "ChangelogHeaderRewritten"
-	CheckFaithfulness             = "Faithfulness"
-	CheckUnexpectedFileChange     = "UnexpectedFileChange"
-	CheckPush                     = "Push"
+	CheckFaithfulness         = "Faithfulness"
+	CheckUnexpectedFileChange = "UnexpectedFileChange"
+	CheckPush                 = "Push"
 )
 
 // FaithfulnessVerdict captures the semantic comparison of one entry from
@@ -118,11 +115,10 @@ type ReviewOutput struct {
 	// UnexpectedFileChange is false.
 	UnexpectedFiles []string `json:"unexpected_files,omitempty"`
 
-	// FailedChecks names the structural and semantic checks that did
-	// not pass. Stable strings — referenced by spec AC 15 assertions.
-	// One or more of: CheckTagExists, CheckTagAtExpectedSHA,
-	// CheckChangelogHeaderRewritten, CheckFaithfulness,
-	// CheckUnexpectedFileChange.
+	// FailedChecks names the semantic / local checks that did not pass.
+	// Stable strings — referenced by spec AC 15 assertions.
+	// One or more of: CheckFaithfulness, CheckUnexpectedFileChange,
+	// CheckPush.
 	FailedChecks []string `json:"failed_checks,omitempty"`
 }
 
