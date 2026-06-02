@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [059-changelog-rewrite-opt-in-flag]
 created: "2026-06-02T18:30:00Z"
+queued: "2026-06-02T18:59:48Z"
 branch: dark-factory/changelog-rewrite-opt-in-flag
 ---
 
@@ -12,7 +13,7 @@ branch: dark-factory/changelog-rewrite-opt-in-flag
 - Non-boolean values (string, number) cause planning to fail fast with `Status=AgentStatusFailed`, `NextPhase=human_review`, and a new `## Plan(outcome=failed, error_category=invalid_config, invalid_field=release.changelogRewrite, invalid_value="<the bad value>")` block on the task page — no commit, no tag, no push
 - The resolved flag value is recorded on the task page in the `## Plan` JSON (new `changelog_rewrite` field) so a reader can tell from the task page alone which mode the run took
 - Factory wiring is updated in `pkg/factory/factory.go`; both `main.go` and `cmd/run-task/main.go` entry points are updated; every `NewPlanningStep` call site (test fixtures) is updated to pass the new fetcher
-- Adds comprehensive Ginkgo coverage: short-circuit happy path (flag=false, clean + noisy `## Unreleased`), rewrite happy path (flag=true, noisy → `rewrite_needed=true`), no-rewrite-needed-when-flag-true-but-clean, fetch-failure-does-not-block-default (network error → treated as false, NOT invalid_config), invalid-value fail-closed (string + number), task-page audit-trail field, flag-read-once semantics (mutating the file mid-run has no effect)
+- Adds comprehensive Ginkgo coverage: short-circuit happy path (flag=false, clean + noisy `## Unreleased`), rewrite happy path (flag=true, noisy → `rewrite_needed=true`), no-rewrite-needed-when-flag-true-but-clean, fetch-failure-does-not-block-default (network error → treated as false, NOT invalid_config), empty-yaml-from-fetch (Fetch returns `(nil, nil)` → parsed as zero config → default false, distinct from the 404 path), invalid-value fail-closed (string + number), task-page audit-trail field, flag-read-once semantics (mutating the file mid-run has no effect)
 </summary>
 
 <objective>
@@ -24,8 +25,8 @@ Read `~/Documents/workspaces/maintainer-changelog-rewrite/CLAUDE.md` and `agent/
 
 Read these files BEFORE editing:
 - `agent/github-releaser/pkg/steps_planning.go` — current planning step. EXTEND the `planningStep` struct with a `maintainerConfig` fetcher; do NOT replace the step. The `Run` method signature stays the same.
-- `agent/github-releaser/pkg/plan_output.go` — current `PlanOutput`. ADD three new fields (`ChangelogRewrite *bool`, `ErrorCategory string`, `InvalidField string`, `InvalidValue string`) and a new `PlanOutcomeFailed = "failed"` constant. The existing fields and constants stay untouched (round-trip with persisted task pages must still decode).
-- `agent/github-releaser/pkg/steps_planning_test.go` — existing Ginkgo style. The step constructor signature is changing (`NewPlanningStep(runner, fetcher, maintainerConfig)`) — every existing test fixture that calls `pkg.NewPlanningStep` MUST be updated to pass a `&mocks.MaintainerConfigFetcher{}` (default returns are zero/nil which means "not configured" — fine for the existing tests because the new fetcher is invoked AFTER the frontmatter + CHANGELOG.md validation gates that those tests exercise).
+- `agent/github-releaser/pkg/plan_output.go` — current `PlanOutput`. ADD four new fields (`ChangelogRewrite *bool`, `ErrorCategory string`, `InvalidField string`, `InvalidValue string`) and a new `PlanOutcomeFailed = "failed"` constant. The existing fields and constants stay untouched (round-trip with persisted task pages must still decode).
+- `agent/github-releaser/pkg/steps_planning_test.go` — existing Ginkgo style. The step constructor signature is changing (`NewPlanningStep(runner, fetcher, maintainerConfig)`) — every existing test fixture that calls `pkg.NewPlanningStep` MUST be updated to pass a `&mocks.MaintainerConfigFetcher{}` (default returns `(nil, nil)` which means "Fetch ok, empty bytes"; combined with prompt 1's locked contract `Parse(ctx, []byte{}) → (zero, nil)` this yields `changelogRewrite=false` cleanly — fine for the existing tests because the new fetcher is invoked AFTER the frontmatter + CHANGELOG.md validation gates that those tests exercise).
 - `agent/github-releaser/pkg/githubchangelog/fetcher.go` — the existing `Fetcher` interface that the new `MaintainerConfigFetcher` mirrors. The mock lives at `mocks/fetcher.go`; the new mock lives at `mocks/maintainer_config_fetcher.go` (created by prompt 1's `go generate`).
 - `agent/github-releaser/pkg/factory/factory.go` — `CreateAgent` wires `NewPlanningStep(planningRunner, fetcher)` today. ADD a third argument (the new `maintainerconfig.Fetcher`) — the call site for this lives in `factory.CreateAgent`; update it. `NewPlanningStep` is also called in test code (steps_planning_test.go) — those call sites are NOT in this file, but the `pkg.NewPlanningStep` signature change forces them to be updated.
 - `agent/github-releaser/main.go` — the long-running agent entry. It calls `factory.CreateAgent(...)`; the new factory signature change is transparent to this file (no edits required) UNLESS the spec's signature change forces more arguments. Verify with grep after editing factory.go.
@@ -35,7 +36,7 @@ Read these files BEFORE editing:
 - `agent/github-releaser/pkg/buildenv.go` — `BuildEnv` is the env-builder used by both entry points. DO NOT EDIT; the new fetcher is independent of `ANTHROPIC_*` env vars.
 
 Read these coding plugin guides (in-container paths):
-- `/home/node/.claude/plugins/marketprises/coding/docs/go-error-wrapping-guide.md`
+- `/home/node/.claude/plugins/marketplaces/coding/docs/go-error-wrapping-guide.md`
 - `/home/node/.claude/plugins/marketplaces/coding/docs/go-testing-guide.md`
 - `/home/node/.claude/plugins/marketplaces/coding/docs/go-factory-pattern.md`
 - `/home/node/.claude/plugins/marketplaces/coding/docs/go-mocking-guide.md`
@@ -47,7 +48,7 @@ Verified symbols (from module source — grep-confirmed):
 - `agentlib.AgentStatusFailed` / `AgentStatusDone` / `AgentStatusNeedsInput` (string enums) from agentlib.
 - `errors.Wrapf(ctx, err, format, args...)`, `errors.Errorf(ctx, format, args...)` from `github.com/bborbe/errors`.
 - `mocks.Fetcher` and the new `mocks.MaintainerConfigFetcher` (generated by prompt 1's `go generate`).
-- `pkg/maintainerconfig.Fetcher` (new) and `pkg/maintainerconfig.ErrFileNotFound` (new sentinel), `pkg/maintainerconfig.Parse` (alias to lib parser) — all from prompt 1.
+- `pkg/maintainerconfig.Fetcher` (new) and `pkg/maintainerconfig.ErrFileNotFound` (new sentinel declared via `stderrors.New`), `pkg/maintainerconfig.Parse` (alias to lib parser, contract: `Parse(ctx, []byte{}) → (zero, nil)`) — all from prompt 1.
 - `git.ErrorCategory` constants in `pkg/git/error_classifier.go` — do NOT add a new one; planning uses its own string `ErrorCategory` field on `PlanOutput` (the existing `ErrorCategory` on `ResultOutput` is `git.ErrorCategory` because the execution step is the one that surfaces it; planning has no `git.ErrorCategory` to classify into).
 </context>
 
@@ -63,6 +64,15 @@ Verified symbols (from module source — grep-confirmed):
    // outcomes), so a reader can audit which mode the run took. Omitted
    // from JSON only on the failure path (outcome="failed" carries the
    // error info instead).
+   //
+   // JSON encoding contract (load-bearing for spec AC #14 and prompt-2
+   // requirement 5a/6 evidence):
+   //   - happy path, flag false → field SET to &false → JSON emits
+   //     literal substring `"changelog_rewrite":false`
+   //   - happy path, flag true  → field SET to &true  → JSON emits
+   //     literal substring `"changelog_rewrite":true`
+   //   - failure path           → field LEFT nil     → omitempty omits
+   //     the token entirely; `changelog_rewrite` is absent from the JSON
    ChangelogRewrite *bool `json:"changelog_rewrite,omitempty"`
 
    // ErrorCategory names the failure category on outcome="failed". For
@@ -132,7 +142,7 @@ Verified symbols (from module source — grep-confirmed):
    }
    ```
 
-   **Imports.** Add (to the import block) `maintainerconfigpkg "github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"` — the `maintainerconfig` name collides with nothing today, but a clear alias is a load-bearing convention for prompts that touch this file. If a prior prompt landed and chose a different alias, use that — do not introduce a new one. The previous name `maintainerconfig` (no alias) is acceptable too; the test files will mirror the same choice.
+   **Imports.** Add to the import block: `maintainerconfig "github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"` (no alias needed — the package name is `maintainerconfig` and does not collide with anything in this file). Also add `stderrors "errors"` for the `errors.Is` call against `maintainerconfig.ErrFileNotFound` (the file currently imports only `github.com/bborbe/errors`; the stdlib alias is needed for `Is`).
 
    b. **Update `Run`'s flow** to insert the new `resolveChangelogRewrite` step. The new sequence (eight steps; the original six are renumbered but their behavior is preserved):
 
@@ -143,7 +153,7 @@ Verified symbols (from module source — grep-confirmed):
       4. Claude verdict unparseable → Failed (controller retries)
       5. semver.BumpVersion fails   → escalate
       6. Resolve release.changelogRewrite from .maintainer.yaml at the ref's tip
-         - ErrFileNotFound or any fetch error → treat as false, log V(2), continue
+         - ErrFileNotFound or any fetch transport error → treat as false, log V(2), continue
          - Parse error containing "unmarshal" → fail-closed (outcome=failed, error_category=invalid_config)
          - Resolved true  → run rewrite LLM call (existing 058 path)
          - Resolved false → SKIP rewrite LLM call, set plan.ChangelogRewrite=ptr(false), plan.RewriteNeeded=false
@@ -179,7 +189,7 @@ Verified symbols (from module source — grep-confirmed):
    ```go
    bytes, err := s.maintainerConfig.Fetch(ctx, owner, name, ref)
    if err != nil {
-       if errors.Is(err, maintainerconfig.ErrFileNotFound) {
+       if stderrors.Is(err, maintainerconfig.ErrFileNotFound) {
            glog.V(2).Infof("planning: .maintainer.yaml absent at ref=%s — using default changelogRewrite=false", ref)
            return false, nil
        }
@@ -193,12 +203,10 @@ Verified symbols (from module source — grep-confirmed):
        // YAML parse error or non-boolean value: fail-closed. Surface the
        // original error so the caller can include it in the human_review
        // task-page block.
-       return false, errors.Wrap(ctx, err, "parse .maintainer.yaml")
+       return false, errors.Wrapf(ctx, err, "parse .maintainer.yaml")
    }
    return cfg.Release.ChangelogRewrite, nil
    ```
-
-   Add the `import "errors"` to the import block (it is not currently imported in `steps_planning.go`).
 
    d. **Update `runClassification`** so it accepts the resolved `changelogRewrite` bool and branches:
 
@@ -274,7 +282,7 @@ Verified symbols (from module source — grep-confirmed):
    }
    section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
    if err != nil {
-       return nil, errors.Wrap(ctx, err, "marshal ## Plan section (failed)")
+       return nil, errors.Wrapf(ctx, err, "marshal ## Plan section (failed)")
    }
    md.ReplaceSection(section)
    glog.V(2).Infof("planning: invalid config: field=%s err=%v", field, cause)
@@ -294,12 +302,6 @@ Verified symbols (from module source — grep-confirmed):
    // We surface the offending token; on parse-format drift, fall back
    // to the full error string so the field is never blank.
    func extractInvalidValue(msg string) string {
-       // Look for the yaml.v3 "cannot unmarshal ... into bool" pattern.
-       // Return whatever appears between backticks if present;
-       // otherwise return the whole string.
-       // Implementation: simple string scan — keep the parser-specific
-       // shape loosely coupled; the value is for human audit, not
-       // machine consumption.
        if i := strings.Index(msg, "`"); i >= 0 {
            if j := strings.Index(msg[i+1:], "`"); j >= 0 {
                return msg[i+1 : i+1+j]
@@ -311,7 +313,7 @@ Verified symbols (from module source — grep-confirmed):
 
    g. **Counterfeiter / mock setup is already done by prompt 1** (the `mocks.MaintainerConfigFetcher` is generated). The new tests below will use it.
 
-3. **Update `factory.CreateAgent`.** In `agent/github-releaser/pkg/factory/factory.go`, the `CreateAgent` function (line ~107) builds the planning step. Change the call to pass the new fetcher:
+3. **Update `factory.CreateAgent`.** In `agent/github-releaser/pkg/factory/factory.go`, the `CreateAgent` function builds the planning step. Change the call to pass the new fetcher:
 
    ```go
    planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
@@ -337,15 +339,15 @@ Verified symbols (from module source — grep-confirmed):
    1. `agent/github-releaser/pkg/factory/factory.go` — `CreateAgent` (covered above).
    2. `agent/github-releaser/main.go` — calls `factory.CreateAgent(...)`; the factory signature is unchanged (it accepts `(claudeConfigDir, agentDir, model, ghToken, env)` — the new `maintainerConfigFetcher` is built INSIDE `CreateAgent` from `ghToken`, so this file needs no edits. Verify after editing factory.go.
    3. `agent/github-releaser/cmd/run-task/main.go` — same: calls `factory.CreateAgent(...)` with the same signature. Verify after editing factory.go.
-   4. `agent/github-releaser/pkg/steps_planning_test.go` — every `pkg.NewPlanningStep(...)` call site must be updated to pass `&mocks.MaintainerConfigFetcher{}` as the third argument. The mock's default returns are zero/nil — the `Fetch` method returns `nil, nil`, which the planning step will interpret as "file present but empty" (no 404, no error). Add a small comment in each test fixture: `// maintainerConfigFetcher mock returns nil/nil by default — tests that need a specific response set FetchReturns explicitly.`
+   4. `agent/github-releaser/pkg/steps_planning_test.go` — every `pkg.NewPlanningStep(...)` call site must be updated to pass `&mocks.MaintainerConfigFetcher{}` as the third argument. The mock's default returns are zero/nil — the `Fetch` method returns `(nil, nil)`, which the planning step will interpret as "file present, empty bytes" (no 404, no error). By prompt 1's locked contract `Parse(ctx, []byte{}) → (zero, nil)`, this yields `changelogRewrite=false`. Add a small comment in each test fixture: `// maintainerConfigFetcher mock returns nil/nil by default — yields changelogRewrite=false via Parse(empty) contract.`
 
-4. **Update the existing planning Ginkgo tests for the new constructor signature.** Every existing test in `agent/github-releaser/pkg/steps_planning_test.go` that calls `pkg.NewPlanningStep(runner, fetcher)` must be updated to `pkg.NewPlanningStep(runner, fetcher, &mocks.MaintainerConfigFetcher{})`. There are roughly a dozen existing call sites — find them all via `grep -n "NewPlanningStep" /workspace/agent/github-releaser/pkg/steps_planning_test.go` and update each.
+4. **Update the existing planning Ginkgo tests for the new constructor signature.** Every existing test in `agent/github-releaser/pkg/steps_planning_test.go` that calls `pkg.NewPlanningStep(runner, fetcher)` must be updated to `pkg.NewPlanningStep(runner, fetcher, &mocks.MaintainerConfigFetcher{})`. Find them via `grep -n "NewPlanningStep" /workspace/agent/github-releaser/pkg/steps_planning_test.go` and update each.
 
-   The default `&mocks.MaintainerConfigFetcher{}` returns `(nil, nil)` from `Fetch`. Today's tests expect exactly the bump+rewrite happy path (or a single short-circuit). With the new planning step, the default mock means "file present, empty bytes" → `Parse(ctx, []byte{})` returns zero-value config (nil error) → `changelogRewrite=false` → rewrite LLM call is SKIPPED.
+   The default `&mocks.MaintainerConfigFetcher{}` returns `(nil, nil)` from `Fetch`. By prompt 1's locked contract `Parse(ctx, []byte{}) → (zero MaintainerConfig, nil)`, this resolves to `changelogRewrite=false` → rewrite LLM call is SKIPPED.
 
    **This breaks the existing "rewrite decision" Context** because those tests expect TWO LLM calls (bump + rewrite). After this prompt, the default mock returns changelogRewrite=false, so only ONE LLM call is made.
 
-   **Resolution:** update the existing "rewrite decision" Context tests to set up the mock to return a config that signals `changelogRewrite: true`. The cleanest approach is to add a helper at the top of the test file:
+   **Resolution:** update the existing "rewrite decision" Context tests to set up the mock to return a config that signals `changelogRewrite: true`. Add a helper at the top of the test file:
 
    ```go
    // withChangelogRewriteTrue returns a MaintainerConfigFetcher mock whose
@@ -366,39 +368,47 @@ Verified symbols (from module source — grep-confirmed):
 
 5. **Add new planning Ginkgo coverage.** In `agent/github-releaser/pkg/steps_planning_test.go`, add a new `Context("changelogRewrite opt-in flag")` block (parallel to the existing `Context("rewrite decision")` block) with these `It` cases. Each one MUST assert on the parsed `## Plan` JSON via `agentlib.ExtractSection[pkg.PlanOutput]` plus the LLM call count.
 
-   a. `It("flag absent (file 404) → rewrite_needed=false, LLM not called for rewrite, PlanOutput.ChangelogRewrite is *false")` — `maintainerConfigFetcher.FetchReturns(nil, maintainerconfig.ErrFileNotFound)`. Fetcher returns noisy `## Unreleased` body. Assert `fakeRunner.RunCallCount() == 1` (only the bump call), `plan.RewriteNeeded == false`, `plan.RewrittenUnreleased == ""`, `plan.ChangelogRewrite != nil && *plan.ChangelogRewrite == false`.
+   a. `It("flag absent (file 404) → rewrite_needed=false, LLM not called for rewrite, PlanOutput.ChangelogRewrite is *false")` — `maintainerConfigFetcher.FetchReturns(nil, maintainerconfig.ErrFileNotFound)`. Fetcher returns noisy `## Unreleased` body. Assert `fakeRunner.RunCallCount() == 1` (only the bump call), `plan.RewriteNeeded == false`, `plan.RewrittenUnreleased == ""`, `plan.ChangelogRewrite != nil && *plan.ChangelogRewrite == false`. **Also assert the marshaled `## Plan` JSON bytes contain the literal substring `"changelog_rewrite":false`** (capture the section bytes via `md.Section("## Plan").Body` or equivalent and assert with `Expect(string(planJSON)).To(ContainSubstring(`"changelog_rewrite":false`))`). This locks the JSON encoding contract from the `PlanOutput` doc-comment.
 
-   b. `It("flag absent (file present, no release: block) → rewrite_needed=false, rewrite LLM not called")` — `maintainerConfigFetcher.FetchReturns([]byte("prReviewer:\n  autoApprove: true\n"), nil)`. Assert `fakeRunner.RunCallCount() == 1`, `plan.RewriteNeeded == false`, `*plan.ChangelogRewrite == false`.
+   b. `It("Fetch returns (nil, nil): empty bytes → Parse zero config → default false, rewrite LLM not called")` — `maintainerConfigFetcher.FetchReturns(nil, nil)`. This is the default-mock semantics path and is distinct from the 404 path in (a): the resolver does NOT hit the `ErrFileNotFound` branch but instead proceeds to `Parse(ctx, nil)` which (per prompt 1's locked contract) returns `(zero, nil)`. Assert `fakeRunner.RunCallCount() == 1`, `plan.RewriteNeeded == false`, `*plan.ChangelogRewrite == false`. Cross-references prompt 1 requirement 2.
 
-   c. `It("flag explicit false → rewrite_needed=false, rewrite LLM not called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: false\n"), nil)`. Assert `fakeRunner.RunCallCount() == 1`, `plan.RewriteNeeded == false`, `*plan.ChangelogRewrite == false`.
+   c. `It("flag absent (file present, no release: block) → rewrite_needed=false, rewrite LLM not called")` — `maintainerConfigFetcher.FetchReturns([]byte("prReviewer:\n  autoApprove: true\n"), nil)`. Assert `fakeRunner.RunCallCount() == 1`, `plan.RewriteNeeded == false`, `*plan.ChangelogRewrite == false`.
 
-   d. `It("flag true + noisy Unreleased → rewrite_needed=true, rewrite LLM IS called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: true\n"), nil)`. Fetcher returns noisy `## Unreleased`. Mock `ClaudeRunnerMock.RunReturnsOnCall(0, …)` (bump = minor) and `RunReturnsOnCall(1, …)` (rewrite = `{"rewrite_needed": true, "rewritten_unreleased": "- feat: x", "reasoning": "y"}`). Assert `fakeRunner.RunCallCount() == 2`, `plan.RewriteNeeded == true`, `plan.RewrittenUnreleased != ""`, `*plan.ChangelogRewrite == true`.
+   d. `It("flag explicit false → rewrite_needed=false, rewrite LLM not called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: false\n"), nil)`. Assert `fakeRunner.RunCallCount() == 1`, `plan.RewriteNeeded == false`, `*plan.ChangelogRewrite == false`.
 
-   e. `It("flag true + clean Unreleased → rewrite_needed=false (LLM judges clean), rewrite LLM IS called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: true\n"), nil)`. Fetcher returns clean `## Unreleased`. Mock rewrite verdict = `{"rewrite_needed": false, "rewritten_unreleased": "", "reasoning": "already clean"}`. Assert `fakeRunner.RunCallCount() == 2`, `plan.RewriteNeeded == false`, `plan.RewrittenUnreleased == ""`, `*plan.ChangelogRewrite == true`. (This proves the spec's Non-goal: "do NOT short-circuit the rewrite-flow when the flag is true but ## Unreleased is already clean — planning still emits rewrite_needed=false (the LLM judges).")
+   e. `It("flag true + noisy Unreleased → rewrite_needed=true, rewrite LLM IS called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: true\n"), nil)`. Fetcher returns noisy `## Unreleased`. Mock `ClaudeRunnerMock.RunReturnsOnCall(0, …)` (bump = minor) and `RunReturnsOnCall(1, …)` (rewrite = `{"rewrite_needed": true, "rewritten_unreleased": "- feat: x", "reasoning": "y"}`). Assert `fakeRunner.RunCallCount() == 2`, `plan.RewriteNeeded == true`, `plan.RewrittenUnreleased != ""`, `*plan.ChangelogRewrite == true`. **Also assert the marshaled `## Plan` JSON contains the literal substring `"changelog_rewrite":true`.**
 
-   f. `It("network error on .maintainer.yaml fetch → treated as default false, NOT fail-closed")` — `maintainerConfigFetcher.FetchReturns(nil, errors.New("dial tcp: connection refused"))`. Assert no `## Error` block (the planning step succeeds), `fakeRunner.RunCallCount() == 1` (rewrite skipped), `*plan.ChangelogRewrite == false`. This is the "Any other fetch error → default false" branch of `resolveChangelogRewrite`. **Distinguishing this from the invalid-config case is load-bearing for the spec — the spec's Failure Modes row "Ambient master .maintainer.yaml flips the flag mid-release" implies a similar transient-fetch-failure class should be treated permissively.**
+   f. `It("flag true + clean Unreleased → rewrite_needed=false (LLM judges clean), rewrite LLM IS called")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: true\n"), nil)`. Fetcher returns clean `## Unreleased`. Mock rewrite verdict = `{"rewrite_needed": false, "rewritten_unreleased": "", "reasoning": "already clean"}`. Assert `fakeRunner.RunCallCount() == 2`, `plan.RewriteNeeded == false`, `plan.RewrittenUnreleased == ""`, `*plan.ChangelogRewrite == true`. Proves the spec's Non-goal: "do NOT short-circuit the rewrite-flow when the flag is true but ## Unreleased is already clean — planning still emits rewrite_needed=false (the LLM judges)."
 
-   g. `It("invalid value: string \"yes\" → outcome=failed, error_category=invalid_config, human_review")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: \"yes\"\n"), nil)`. Assert `result.Status == AgentStatusFailed`, `result.NextPhase == "human_review"`, `fakeRunner.RunCallCount() == 0` (NO LLM call, neither bump nor rewrite). Parse `## Plan` and assert `plan.Outcome == "failed"`, `plan.ErrorCategory == "invalid_config"`, `plan.InvalidField == "release.changelogRewrite"`, `plan.InvalidValue == "yes"`. Also assert the Result Message contains the literal token `error_category=invalid_config` (per spec AC #12) — actually the AC asks for it on the task page, not the Result Message. The task-page assertion IS the `## Plan.ErrorCategory == "invalid_config"` check; the Result Message just needs to mention the field and value (e.g. `invalid .maintainer.yaml: release.changelogRewrite: ...`).
+   g. `It("network error on .maintainer.yaml fetch → treated as default false, NOT fail-closed")` — `maintainerConfigFetcher.FetchReturns(nil, stderrors.New("dial tcp: connection refused"))`. Assert no `## Error` block (the planning step succeeds), `fakeRunner.RunCallCount() == 1` (rewrite skipped), `*plan.ChangelogRewrite == false`. This is the "Any other fetch error → default false" branch of `resolveChangelogRewrite`.
 
-   h. `It("invalid value: number 1 → outcome=failed, error_category=invalid_config, human_review")` — same fixture as (g) but value `1`. Assert same outcomes; `plan.InvalidValue == "1"`.
+   h. `It("invalid value: string \"yes\" → outcome=failed, error_category=invalid_config, human_review")` — `maintainerConfigFetcher.FetchReturns([]byte("release:\n  changelogRewrite: \"yes\"\n"), nil)`. Assert `result.Status == AgentStatusFailed`, `result.NextPhase == "human_review"`, `fakeRunner.RunCallCount() == 0` (NO LLM call, neither bump nor rewrite). Parse `## Plan` and assert `plan.Outcome == "failed"`, `plan.ErrorCategory == "invalid_config"`, `plan.InvalidField == "release.changelogRewrite"`, `plan.InvalidValue == "yes"`. **Also assert the marshaled `## Plan` JSON bytes do NOT contain the token `changelog_rewrite` at all** (verifies the nil pointer + `omitempty` path: on the failure outcome the field is omitted). Assert the Result Message contains the literal field token `release.changelogRewrite` and the bad value.
 
-   i. `It("task page audit trail: PlanOutput.ChangelogRewrite is the resolved value, not the file content")` — after the happy-path run (case d), assert the `## Plan` JSON's `changelog_rewrite` field is the boolean `true`, AND assert the value is recorded as a JSON `true`, not the string `"true"`. This is the audit-trail invariant from spec AC #14.
+   i. `It("invalid value: number 1 → outcome=failed, error_category=invalid_config, human_review")` — same fixture as (h) but value `1`. Assert same outcomes; `plan.InvalidValue == "1"`.
 
-   j. `It("flag-read-once: mutating the mock mid-run does not affect the in-flight planning step")` — build a scenario where the planning step captures the `changelogRewrite` value once (this is implicit in the design: `resolveChangelogRewrite` is called once per `Run`). For a tighter test, use a counterfeiter `FetchStub` that returns a different config on the second call: `func(ctx, owner, repo, ref) ([]byte, error) { callCount++; if callCount == 1 { return []byte("release:\n  changelogRewrite: true\n"), nil } else { return []byte("release:\n  changelogRewrite: false\n"), nil } }`. After `Run`, assert the resolved `*plan.ChangelogRewrite == true` (the first call's value). This is the spec AC #18 "Flag-read-once semantics" test.
+   j. `It("task page audit trail: PlanOutput.ChangelogRewrite is the resolved value, not the file content")` — after the happy-path run (case e), assert the `## Plan` JSON's `changelog_rewrite` field is the boolean `true`, recorded as a JSON `true` (not the string `"true"`). This is the audit-trail invariant from spec AC #14.
+
+   k. `It("flag-read-once: mutating the mock mid-run does not affect the in-flight planning step")` — use a counterfeiter `FetchStub` that returns a different config on the second call: `func(ctx, owner, repo, ref) ([]byte, error) { callCount++; if callCount == 1 { return []byte("release:\n  changelogRewrite: true\n"), nil } else { return []byte("release:\n  changelogRewrite: false\n"), nil } }`. After `Run`, assert the resolved `*plan.ChangelogRewrite == true` (the first call's value). This is the spec AC #18 "Flag-read-once semantics" test.
 
 6. **Update `plan_output_test.go`.** In `agent/github-releaser/pkg/plan_output_test.go`, add ONE new `It` case in the existing `Describe("PlanOutput JSON contract", ...)` block:
 
-   - `It("round-trips failed outcome with invalid_config details")` — `in := pkg.PlanOutput{Outcome: pkg.PlanOutcomeFailed, ErrorCategory: pkg.ErrorCategoryInvalidConfig, InvalidField: "release.changelogRewrite", InvalidValue: "yes", CurrentVersion: "v1.2.6"}`. Assert the JSON contains the literal substrings `"outcome":"failed"`, `"error_category":"invalid_config"`, `"invalid_field":"release.changelogRewrite"`, `"invalid_value":"yes"`, `"current_version":"v1.2.6"`. Also assert `"changelog_rewrite"` is NOT in the JSON (it's `omitempty` and stays empty on the failure path). Round-trip Unmarshal the bytes; assert the result equals `in`.
+   - `It("round-trips failed outcome with invalid_config details")` — `in := pkg.PlanOutput{Outcome: pkg.PlanOutcomeFailed, ErrorCategory: pkg.ErrorCategoryInvalidConfig, InvalidField: "release.changelogRewrite", InvalidValue: "yes", CurrentVersion: "v1.2.6"}`. Assert the JSON contains the literal substrings `"outcome":"failed"`, `"error_category":"invalid_config"`, `"invalid_field":"release.changelogRewrite"`, `"invalid_value":"yes"`, `"current_version":"v1.2.6"`. Also assert the token `changelog_rewrite` is NOT in the JSON (it's `omitempty` and stays empty on the failure path). Round-trip Unmarshal the bytes; assert the result equals `in`.
 
-7. **Acceptance gate — `make precommit` exits 0 in `agent/github-releaser`.** Run `cd /workspace/agent/github-releaser && make precommit` and confirm exit code 0. This is the full precommit (format + generate + test + lint + gosec + trivy); it MUST pass. Investigate and fix any failures. Counterfeiter regen MAY be needed if any interface in `pkg/maintainerconfig/` or `pkg/githubchangelog/` changed (the prompt 1 mock was already generated; this prompt does not add new counterfeiter directives).
+7. **Sibling-coverage check — only `steps_planning.go` consumes the maintainer config.** Run:
+   ```
+   grep -rn "MaintainerYaml\|maintainerconfig\|changelogRewrite\|ChangelogRewrite" /workspace/agent/github-releaser/pkg/steps_*.go
+   ```
+   Expected hits: `steps_planning.go` (the file being edited) and `steps_planning_test.go`. If `steps_execution.go` or `steps_ai_review.go` (or their test files) also reference these tokens, the new field must be plumbed there too — re-scope this prompt. If the grep returns ONLY `steps_planning*`, no sibling step files need editing.
 
-   The `NewPlanningStep` signature change is consumed by the factory (covered) and by every test fixture in `steps_planning_test.go` (covered by step 4). After all edits, run `cd /workspace/agent/github-releaser && go build ./...` to prove every call site compiles.
+   Then acceptance gate — `make precommit` exits 0 in `agent/github-releaser`. Run `cd /workspace/agent/github-releaser && make precommit` and confirm exit code 0. This is the full precommit (format + generate + test + lint + gosec + trivy); it MUST pass. Investigate and fix any failures. Counterfeiter regen MAY be needed if any interface in `pkg/maintainerconfig/` or `pkg/githubchangelog/` changed (the prompt 1 mock was already generated; this prompt does not add new counterfeiter directives).
+
+   The `NewPlanningStep` signature change is consumed by the factory (covered) and by every test fixture in `steps_planning_test.go` (covered by requirement 4). After all edits, run `cd /workspace/agent/github-releaser && go build ./...` to prove every call site compiles.
 
 8. **Changelog entry.** Add a single `## Unreleased` bullet to `/workspace/CHANGELOG.md` describing the spec-059 work. Follow the format and prefix style of the existing entries in that file (read `/home/node/.claude/plugins/marketplaces/coding/docs/changelog-guide.md` for the full style rules). Suggested entry:
 
-   `- feat(agent/github-releaser): planning step now reads release.changelogRewrite from .maintainer.yaml at the target ref's tip via a new pkg/maintainerconfig fetcher; when false (default — file absent, field absent, or explicit false) the planning LLM is NOT invoked for the rewrite call and the resulting ## Plan carries rewrite_needed=false; when true the existing 058 rewrite pipeline runs unchanged. Non-boolean values for release.changelogRewrite fail closed at planning entry (outcome=failed, error_category=invalid_config on ## Plan, task ends in human_review, no commit/tag/push). The resolved flag value is recorded on ## Plan for audit. Adds Ginkgo coverage for all six value cases plus the human_review fail-closed path and flag-read-once semantics.`
+   `- feat(agent/github-releaser): planning step now reads release.changelogRewrite from .maintainer.yaml at the target ref's tip via a new pkg/maintainerconfig fetcher; when false (default — file absent, field absent, or explicit false) the planning LLM is NOT invoked for the rewrite call and the resulting ## Plan carries rewrite_needed=false; when true the existing 058 rewrite pipeline runs unchanged. Non-boolean values for release.changelogRewrite fail closed at planning entry (outcome=failed, error_category=invalid_config on ## Plan, task ends in human_review, no commit/tag/push). The resolved flag value is recorded on ## Plan for audit. Adds Ginkgo coverage for all value cases plus the human_review fail-closed path and flag-read-once semantics.`
 
-9. **Cross-prompt dependency declaration.** This prompt depends on prompt 1 having shipped first (the `ChangelogRewrite` field on `lib/maintainerconfig.ReleaseConfig`, the `pkg/maintainerconfig` package, the `mocks.MaintainerConfigFetcher` mock). If prompt 1 has not landed when this prompt is executed, the build will fail at the `go build ./...` step in step 7 with a "package github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig: cannot find package" error. **Do not stub the package or define a placeholder — surface the failure as `status: failed` with the message "prompt 1 (ChangelogRewrite field + pkg/maintainerconfig fetcher) has not shipped yet" and let the daemon re-queue.** The dark-factory prompt ordering ensures prompt 1 runs first.
+9. **Cross-prompt dependency declaration.** This prompt depends on prompt 1 having shipped first (the `ChangelogRewrite` field on `lib/maintainerconfig.ReleaseConfig`, the `pkg/maintainerconfig` package, the `mocks.MaintainerConfigFetcher` mock). If prompt 1 has not landed when this prompt is executed, the build will fail at the `go build ./...` step in requirement 7 with a "package github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig: cannot find package" error — let the build failure surface and the daemon re-queue. Do not stub the package or define a placeholder. The dark-factory prompt ordering ensures prompt 1 runs first.
 </requirements>
 
 <constraints>
@@ -406,31 +416,32 @@ Verified symbols (from module source — grep-confirmed):
 - The flag is per-repo only — do NOT add CLI flags, env vars, or frontmatter overrides. Spec 059 § Non-goals explicitly forbids all three.
 - Fail-closed ONLY on parse / non-boolean errors from the lib parser. Transport / network errors (5xx, dial timeouts, 4xx other than 404) are treated as default-false (the spec's Failure Modes table lists these as "treated as `false`" cases).
 - The fail-closed return shape is `Status=AgentStatusFailed, NextPhase=string(domain.TaskPhaseHumanReview)`. The framework's `agent_agent.go` exit-condition table treats this combination as a terminal human_review escalation. Do NOT use the existing `escalate` helper for this path — it returns `AgentStatusNeedsInput` and keeps the task `in_progress`, which is the wrong terminal state.
-- The `changelog_rewrite` field on `## Plan` JSON is a `*bool` (pointer), NOT a `bool`. This is so the JSON distinguishes "resolved false" (`false` in JSON) from "not resolved" (field absent). The planning step MUST set the field on the happy path (both ready and rewrite-needed outcomes) so the audit trail is complete.
-- On the failure path (outcome=failed), `ChangelogRewrite` stays nil (omitted via `omitempty`). The audit-trail surface is `ErrorCategory` + `InvalidField` + `InvalidValue` instead.
+- The `changelog_rewrite` field on `## Plan` JSON is a `*bool` (pointer), NOT a `bool`. This is so the JSON distinguishes "resolved false" (`false` in JSON) from "not resolved" (field absent). The planning step MUST set the field on the happy path (both ready and rewrite-needed outcomes) so the audit trail is complete; happy-path JSON bytes MUST contain the literal substring `"changelog_rewrite":false` or `"changelog_rewrite":true`.
+- On the failure path (outcome=failed), `ChangelogRewrite` stays nil and `omitempty` omits the token entirely from the JSON. The audit-trail surface is `ErrorCategory` + `InvalidField` + `InvalidValue` instead.
 - The new `pkg/maintainerconfig.Fetcher` mock is generated by prompt 1's `go generate`. If the mock is missing at execution time, run `cd /workspace/agent/github-releaser && go generate ./...` first; the Makefile's `generate` target is the canonical entry point.
 - The 3-phase task lifecycle (`planning → execution → ai_review`) and its `human_review` exit point are frozen — this prompt fills in a planning-time failure path that lands in `human_review`, consistent with that contract.
 - The 058 rewrite pipeline (the second LLM call inside `runClassification`) is unchanged when the flag is true. The ONLY diff is a guard that skips the call when the flag is false.
 - Do NOT add Prometheus metrics, debug logging, or other observability beyond the existing `glog.V(2).Infof` / `glog.Warningf` pattern.
 - Do NOT commit — dark-factory handles git.
-- Existing tests must still pass (after the targeted updates in step 4).
+- Existing tests must still pass (after the targeted updates in requirement 4).
 </constraints>
 
 <verification>
 ```
-cd /workspace/agent/github-releaser
-make precommit
+cd /workspace/agent/github-releaser && make precommit
 ```
 Expected: exit code 0; all Ginkgo `It` cases listed in requirements 5 and 6 pass; the updated existing `It` cases in steps_planning_test.go still pass.
 
 Evidence commands the auditor will run:
 - `grep -n 'ChangelogRewrite\|ErrorCategory\|InvalidField\|InvalidValue' /workspace/agent/github-releaser/pkg/plan_output.go` → all four documented fields with JSON tags.
 - `grep -n 'PlanOutcomeFailed\|ErrorCategoryInvalidConfig' /workspace/agent/github-releaser/pkg/plan_output.go` → both new constants present.
-- `grep -n 'NewPlanningStep' /workspace/agent/github-releaser/` (recursively) → every call site now passes THREE arguments (runner, fetcher, maintainerConfigFetcher); signature matches the documented one.
+- `grep -rn 'NewPlanningStep' /workspace/agent/github-releaser/` → every call site now passes THREE arguments (runner, fetcher, maintainerConfigFetcher); signature matches the documented one.
 - `grep -n 's.maintainerConfig.Fetch' /workspace/agent/github-releaser/pkg/steps_planning.go` → exactly ONE call site, inside `resolveChangelogRewrite`.
 - `grep -n 's.runner.Run' /workspace/agent/github-releaser/pkg/steps_planning.go` → at most TWO call sites (bump + rewrite); the rewrite call must be guarded by `if changelogRewrite`.
 - `grep -n 'AgentStatusFailed\|TaskPhaseHumanReview' /workspace/agent/github-releaser/pkg/steps_planning.go` → the new `failInvalidConfig` helper uses both.
 - `grep -n 'withChangelogRewriteTrue\|mocks.MaintainerConfigFetcher{}' /workspace/agent/github-releaser/pkg/steps_planning_test.go` → existing "rewrite decision" tests rewire to use the opt-in helper; new "changelogRewrite opt-in flag" tests use the default mock.
-- `ginkgo --v ./pkg | grep -E 'flag absent|flag explicit false|flag true \+|network error|invalid value|task page audit trail|flag-read-once'` → all required `It` descriptions appear and pass.
+- `grep -rn 'MaintainerYaml\|maintainerconfig\|changelogRewrite\|ChangelogRewrite' /workspace/agent/github-releaser/pkg/steps_*.go` → hits ONLY in `steps_planning.go` and `steps_planning_test.go`; no plumbing leaks into `steps_execution.go` or `steps_ai_review.go`.
+- `ginkgo --v ./pkg | grep -E 'flag absent|Fetch returns \(nil, nil\)|flag explicit false|flag true \+|network error|invalid value|task page audit trail|flag-read-once'` → all required `It` descriptions appear and pass.
 - `cat /workspace/CHANGELOG.md | head -25` → `## Unreleased` section contains the new spec-059 changelog entry.
 </verification>
+</output>
