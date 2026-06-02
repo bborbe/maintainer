@@ -99,8 +99,17 @@ var _ = Describe("Parse", func() {
 		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
 	})
 
-	It("unknown top-level field rejected", func() {
-		_, err := maintainerconfig.Parse(
+	It("Parse ignores unknown top-level field (lenient — fleet tolerance)", func() {
+		cfg, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("build-fix:\n  enabled: true\nprReviewer:\n  autoApprove: true\n"),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.PrReviewer.AutoApprove).To(BeTrue())
+	})
+
+	It("ParseStrict rejects unknown top-level field", func() {
+		_, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("build-fix:\n  enabled: true\nprReviewer:\n  autoApprove: true\n"),
 		)
@@ -109,9 +118,9 @@ var _ = Describe("Parse", func() {
 		Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 
-	It("typo in nested release field rejected", func() {
+	It("ParseStrict rejects typo in nested release field", func() {
 		// changelogRwrite is the canonical typo from PR-36 review.
-		_, err := maintainerconfig.Parse(
+		_, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("release:\n  changelogRwrite: true\n"),
 		)
@@ -120,8 +129,8 @@ var _ = Describe("Parse", func() {
 		Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 
-	It("typo in top-level prReviewer key rejected", func() {
-		_, err := maintainerconfig.Parse(
+	It("ParseStrict rejects typo in top-level prReviewer key", func() {
+		_, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("prRevierer:\n  autoApprove: true\n"),
 		)

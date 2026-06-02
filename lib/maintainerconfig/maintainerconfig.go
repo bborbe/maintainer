@@ -74,11 +74,36 @@ type PrReviewerConfig struct {
 	AutoApprove bool `yaml:"autoApprove"`
 }
 
-// Parse unmarshals a `.maintainer.yaml` document and returns the parsed
-// config. Pure data extraction — no I/O. Empty input returns a zero-value
-// MaintainerConfig with nil error. Malformed YAML returns a wrapped error
-// (NOT a silent zero-value) so callers can fail loudly.
+// Parse unmarshals a `.maintainer.yaml` document leniently (unknown fields
+// are silently ignored). Pure data extraction — no I/O. Empty input returns
+// a zero-value MaintainerConfig with nil error. Malformed YAML returns a
+// wrapped error (NOT a silent zero-value) so callers can fail loudly.
+//
+// Fleet-tolerant by design: the github-release watcher reads `.maintainer.yaml`
+// from every repo to gate auto-release, and a typo'd key in one repo must NOT
+// break the watcher for the rest of the fleet. Use ParseStrict instead when
+// the caller wants typos to fail closed (e.g. the github-releaser planning
+// step — see spec 059).
 func Parse(ctx context.Context, content []byte) (MaintainerConfig, error) {
+	return parseInternal(ctx, content, false)
+}
+
+// ParseStrict unmarshals a `.maintainer.yaml` document with `KnownFields(true)`
+// so any unrecognized top-level or nested key produces a wrapped error.
+// Use this when the caller wants typos like `changelogRwrite` to fail loudly
+// (e.g. the github-releaser planning step where a silent zero-value would
+// disable the rewrite pipeline without operator signal).
+//
+// The lib's lenient Parse remains the default for fleet readers (watcher).
+func ParseStrict(ctx context.Context, content []byte) (MaintainerConfig, error) {
+	return parseInternal(ctx, content, true)
+}
+
+func parseInternal(
+	ctx context.Context,
+	content []byte,
+	strict bool,
+) (MaintainerConfig, error) {
 	var cfg MaintainerConfig
 	if len(content) == 0 {
 		// Preserve the existing "empty bytes -> zero-value, nil" contract
@@ -88,7 +113,9 @@ func Parse(ctx context.Context, content []byte) (MaintainerConfig, error) {
 		return cfg, nil
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(content))
-	dec.KnownFields(true)
+	if strict {
+		dec.KnownFields(true)
+	}
 	if err := dec.Decode(&cfg); err != nil {
 		return MaintainerConfig{}, errors.Wrap(ctx, err, "unmarshal .maintainer.yaml")
 	}

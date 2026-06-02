@@ -37,9 +37,10 @@ type (
 	PrReviewerConfig = libmaintainerconfig.PrReviewerConfig
 )
 
-// Parse is a thin alias to lib/maintainerconfig.Parse so callers
-// don't need to import the lib directly.
-var Parse = libmaintainerconfig.Parse
+// Parse is a thin alias to lib/maintainerconfig.ParseStrict so the agent's
+// planning step fails closed on unknown/typo'd keys. The watcher uses the
+// lenient lib.Parse directly (fleet tolerance — see lib comment on Parse).
+var Parse = libmaintainerconfig.ParseStrict
 
 // fetchTimeout caps the GitHub contents-API call. Set high enough to
 // survive typical transient latency, low enough to fail the planning
