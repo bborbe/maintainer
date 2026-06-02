@@ -193,4 +193,17 @@ var _ = Describe("httpFetcher", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("base64 decode"))
 	})
+
+	It("empty 200 OK body with no encoding field rejected", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer server.Close()
+
+		fetcher := maintainerconfig.NewHTTPFetcherForTest("", server.URL)
+		_, err := fetcher.Fetch(ctx, "bborbe", "maintainer", "master")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring(`unsupported encoding ""`))
+	})
 })

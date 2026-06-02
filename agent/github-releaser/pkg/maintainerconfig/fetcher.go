@@ -39,7 +39,10 @@ type (
 // don't need to import the lib directly.
 var Parse = libmaintainerconfig.Parse
 
-//counterfeiter:generate -o ../../mocks/maintainer_config_fetcher.go --fake-name MaintainerConfigFetcher . Fetcher
+// fetchTimeout caps the GitHub contents-API call. Set high enough to
+// survive typical transient latency, low enough to fail the planning
+// step within the controller's per-step budget.
+const fetchTimeout = 15 * time.Second
 
 // Fetcher reads .maintainer.yaml bytes from a remote GitHub repo at a ref.
 // Implementations MUST be safe for concurrent use. Returned bytes are the
@@ -49,6 +52,8 @@ var Parse = libmaintainerconfig.Parse
 // so callers can treat the absent-file case as a clean default-valued config
 // (see spec 059 § Desired Behavior 6: missing .maintainer.yaml is treated as
 // `changelogRewrite: false`).
+//
+//counterfeiter:generate -o ../../mocks/maintainer_config_fetcher.go --fake-name MaintainerConfigFetcher . Fetcher
 type Fetcher interface {
 	Fetch(ctx context.Context, owner, repo, ref string) ([]byte, error)
 }
@@ -70,7 +75,7 @@ var ErrFileNotFound = stderrors.New("maintainerconfig: .maintainer.yaml not foun
 // context-deadline-exceeded error.
 func NewHTTPFetcher(token string) Fetcher {
 	return &httpFetcher{
-		client:  &http.Client{Timeout: 15 * time.Second},
+		client:  &http.Client{Timeout: fetchTimeout},
 		token:   token,
 		apiBase: "https://api.github.com",
 	}
@@ -80,7 +85,7 @@ func NewHTTPFetcher(token string) Fetcher {
 // point the fetcher at a test server. Not exported.
 func newHTTPFetcherWithBase(token, apiBase string) Fetcher {
 	return &httpFetcher{
-		client:  &http.Client{Timeout: 15 * time.Second},
+		client:  &http.Client{Timeout: fetchTimeout},
 		token:   token,
 		apiBase: apiBase,
 	}

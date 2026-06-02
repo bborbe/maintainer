@@ -1,10 +1,12 @@
 ---
-status: executing
+status: completed
+summary: 'All 9 fixes applied: fail-closed transport errors in ai-review structural checks, plugin-manifest + rewrite_needed + empty-body test coverage, rollupVerdict unknown+structural spec, counterfeiter directive position, aiReviewTools local-scope, CheckPush constant, setupWorkdir godoc clarification, fetchTimeout constant'
 container: maintainer-changelog-rewrite-exec-232-pr-review-058-059-fixes
 dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T17:25:00Z"
 queued: "2026-06-02T19:53:30Z"
 started: "2026-06-02T19:53:32Z"
+completed: "2026-06-02T20:09:30Z"
 ---
 
 <summary>

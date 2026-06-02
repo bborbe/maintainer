@@ -13,11 +13,13 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	gitmocks "github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 )
 
 var _ = Describe("ExecutionStep", func() {
@@ -484,6 +486,164 @@ task_identifier: gh-release-bborbe-example-master-norewrite
 
 				Expect(fakeOps.CommitCallCount()).To(Equal(1))
 				Expect(fakeOps.PushCallCount()).To(Equal(0))
+			},
+		)
+	})
+
+	// Spec 059 prompt 3 — Req 1: cover the rewrite_needed branch with
+	// a clean rewritten body under the new header. Captures the
+	// post-Commit CHANGELOG.md bytes via a closure variable and asserts
+	// the verbatim rewritten body appears under `## v1.0.0`, with no
+	// leftover `## Unreleased` heading or noisy original body.
+	Describe("rewrite_needed branch", func() {
+		const happyTaskMD = `---
+status: in_progress
+phase: execution
+assignee: github-releaser-agent
+task_type: github-release
+repo: x/y
+clone_url: https://github.com/x/y.git
+ref: main
+current_version: v0.9.0
+task_identifier: rewrite-happy
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "minor",
+  "reasoning": "new feature",
+  "current_version": "v0.9.0",
+  "next_version": "1.0.0",
+  "next_version_header": "## v1.0.0",
+  "header_prefix_style": "v",
+  "bullets": ["feat: clean one", "feat: clean two"],
+  "rewrite_needed": true,
+  "rewritten_unreleased": "- clean entry one\n- clean entry two\n"
+}
+` + "```" + `
+`
+		const noUnreleasedTaskMD = `---
+status: in_progress
+phase: execution
+assignee: github-releaser-agent
+task_type: github-release
+repo: x/y
+clone_url: https://github.com/x/y.git
+ref: main
+current_version: v0.9.0
+task_identifier: rewrite-no-unreleased
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "minor",
+  "reasoning": "new feature",
+  "current_version": "v0.9.0",
+  "next_version": "1.0.0",
+  "next_version_header": "## v1.0.0",
+  "header_prefix_style": "v",
+  "bullets": ["feat: x"],
+  "rewrite_needed": true,
+  "rewritten_unreleased": "- clean entry one\n"
+}
+` + "```" + `
+`
+
+		// Happy path: capture the bytes Commit saw on disk so the spec
+		// can assert the rewritten body landed under the new header.
+		It(
+			"rewrite_needed=true rewrites body under new header; Commit captures bytes; Status=Done",
+			func() {
+				var capturedBytes []byte
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					Expect(os.MkdirAll(workdir, 0o750)).To(Succeed())
+					content := []byte(
+						"## Unreleased\n\n- noisy original entry that gets rewritten\n- another noisy one\n\n## v0.9.0\n\n- old release\n",
+					)
+					Expect(
+						os.WriteFile(filepath.Join(workdir, "CHANGELOG.md"), content, 0o600),
+					).To(Succeed())
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, workdir, _ string, _ ...string) (string, error) {
+					content, readErr := os.ReadFile(filepath.Join(workdir, "CHANGELOG.md"))
+					Expect(readErr).NotTo(HaveOccurred())
+					capturedBytes = content
+					return "deadbee", nil
+				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), happyTaskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal(string(domain.TaskPhaseAIReview)))
+
+				// capturedBytes MUST contain the rewritten body under the new
+				// header verbatim, MUST NOT contain the noisy original, MUST
+				// NOT contain `## Unreleased`.
+				Expect(
+					string(capturedBytes),
+				).To(ContainSubstring("## v1.0.0\n- clean entry one\n- clean entry two\n"))
+				Expect(string(capturedBytes)).NotTo(ContainSubstring("noisy original entry"))
+				Expect(string(capturedBytes)).NotTo(ContainSubstring("## Unreleased"))
+			},
+		)
+
+		// Error mapping: missing `## Unreleased` heading causes
+		// ReplaceUnreleasedBody to return "unreleased header not
+		// found"; the execution step must surface this as
+		// error_category=unreleased_not_found and Status=Failed.
+		It(
+			"rewrite_needed=true with no ## Unreleased heading → Status=Failed, error_category=unreleased_not_found, Commit not invoked",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					Expect(os.MkdirAll(workdir, 0o750)).To(Succeed())
+					// No `## Unreleased` line — ReplaceUnreleasedBody will
+					// return "unreleased header not found".
+					content := []byte("## v0.9.0\n\n- old\n")
+					Expect(
+						os.WriteFile(filepath.Join(workdir, "CHANGELOG.md"), content, 0o600),
+					).To(Succeed())
+					return nil
+				}
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), noUnreleasedTaskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+
+				// Commit was NOT invoked — the failure occurs before commit.
+				Expect(fakeOps.CommitCallCount()).To(Equal(0))
+
+				got, err := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.Outcome).To(Equal(pkg.ResultOutcomeFailed))
+				Expect(got.ErrorCategory).To(Equal(git.ErrorCategoryUnreleasedNotFound))
 			},
 		)
 	})

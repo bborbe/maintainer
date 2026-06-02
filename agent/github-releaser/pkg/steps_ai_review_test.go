@@ -936,5 +936,243 @@ var _ = Describe("AIReviewStep", func() {
 				Expect(review.Notes).To(ContainSubstring("push failed"))
 			})
 		})
+
+		// Spec 059 prompt 3 — Req 1a/1b: transport errors on the
+		// two structural checks (TagAtExpectedSHA,
+		// ChangelogHeaderRewritten) must fail closed: the boolean
+		// is set to false AND the failed-check name is appended.
+		// Empty workdir short-circuits the faithfulness path to
+		// OverallUnknown (per existing semantics), so we drive it
+		// through taskWithResult with workdir="" rather than the
+		// default BeforeEach(tmpDir). The faithfulness path then
+		// records CheckFaithfulness, but the rollup surfaces
+		// OverallUnknown — which the spec instructs NOT to assert on
+		// (the override masks the underlying failure for triage
+		// purposes; the boolean + FailedChecks assertions are the
+		// load-bearing contract).
+		Context("transport-error fail-closed", func() {
+			It(
+				"verifyTagAtExpectedCommit transport error sets TagAtExpectedSHA=false and appends CheckTagAtExpectedSHA",
+				func() {
+					fakeClient.TagExistsReturns("abc123", nil)
+					fakeClient.ResolveTagCommitReturns("", errors.New("connection reset by peer"))
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+
+					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
+				},
+			)
+
+			It(
+				"verifyChangelogHeaderRewritten transport error sets ChangelogHeaderRewritten=false and appends CheckChangelogHeaderRewritten",
+				func() {
+					fakeClient.TagExistsReturns("abc123", nil)
+					fakeClient.ResolveTagCommitReturns("abc123", nil)
+					fakeClient.FetchChangelogReturns(nil, errors.New("timeout"))
+
+					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
+					Expect(
+						review.FailedChecks,
+					).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
+				},
+			)
+		})
+
+		// Spec 059 prompt 3 — Req 5b: rollupVerdict surfaces
+		// OverallUnknown when the LLM is unreachable AND a
+		// structural check fails. Both failed-check names must
+		// appear in FailedChecks.
+		Context("rollupVerdict: LLM unknown + structural failure", func() {
+			It(
+				"LLM unknown + tag missing → Overall=unknown, FailedChecks contains both TagExists and Faithfulness",
+				func() {
+					fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					fakeRunner.RunReturns(nil, errors.New("claude unavailable"))
+
+					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Overall).To(Equal(pkg.OverallUnknown))
+					Expect(review.FailedChecks).To(ContainElements(
+						pkg.CheckTagExists,
+						pkg.CheckFaithfulness,
+					))
+				},
+			)
+		})
+
+		// Spec 059 prompt 3 — Req 3: plugin-manifest branch in the
+		// unexpected-file-change check. Case A applies:
+		// plugin.DetectManifests CAN return an error (manifest.go
+		// line 52 — non-IsNotExist Stat failures). 3a proves a
+		// committed plugin manifest is in the expected set, 3b
+		// proves that a DetectManifests error falls back to the
+		// changelog-only expected set so an extra committed file
+		// surfaces as unexpected.
+		Context("plugin-manifest branch in unexpected-file-change check", func() {
+			// taskWithResultWithWorkdir is a thin wrapper that lets us
+			// supply an arbitrary workdir path (the default helper is
+			// tagged to the BeforeEach tmpDir).
+			taskWithResultWithWorkdir := func(
+				workdir, commitSHA, tag string,
+			) string {
+				return taskWithResult(commitSHA, tag, "released", workdir)
+			}
+
+			// 3a — plugin manifest in expected set passes. Seed a
+			// real on-disk temp workdir with a valid plugin.json so
+			// DetectManifests returns it. Committed files match.
+			It(
+				"committed plugin manifest is in the expected set → UnexpectedFileChange=false, FailedChecks does NOT contain CheckUnexpectedFileChange",
+				func() {
+					workdir, err := os.MkdirTemp("", "ai-review-test-")
+					Expect(err).NotTo(HaveOccurred())
+					DeferCleanup(func() { _ = os.RemoveAll(workdir) })
+
+					Expect(
+						os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750),
+					).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, ".claude-plugin", "plugin.json"),
+						[]byte(`{"name":"x","version":"0.9.0"}`),
+						0o600,
+					)).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, "CHANGELOG.md"),
+						[]byte("## v1.0.0\n\n- feat\n"),
+						0o600,
+					)).To(Succeed())
+
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					fakeOps.CommittedFilesReturns(
+						[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+						nil,
+					)
+					// Default BeforeEach stubFaithfulLLM produces pass.
+
+					result, md := runStep(taskWithResultWithWorkdir(workdir, "abc1234", "v1.0.0"))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("done"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeTrue())
+					Expect(review.Checks.UnexpectedFileChange).To(BeFalse())
+					Expect(review.UnexpectedFiles).To(BeEmpty())
+					Expect(review.FailedChecks).NotTo(ContainElement(pkg.CheckUnexpectedFileChange))
+				},
+			)
+
+			// 3b — DetectManifests error → falls back to
+			// changelog-only expected set. Seed the workdir with
+			// INVALID JSON in plugin.json so Stat on a child file
+			// would NOT raise a non-IsNotExist error directly;
+			// instead we chmod the parent .claude-plugin dir to
+			// 0000 so Stat on the children returns EACCES, which
+			// DetectManifests converts to a wrapped error.
+			It(
+				"DetectManifests error + unexpected committed file → UnexpectedFileChange=true, FailedChecks contains CheckUnexpectedFileChange, UnexpectedFiles lists the file",
+				func() {
+					workdir, err := os.MkdirTemp("", "ai-review-test-")
+					Expect(err).NotTo(HaveOccurred())
+					DeferCleanup(func() { _ = os.RemoveAll(workdir) })
+
+					Expect(
+						os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750),
+					).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, ".claude-plugin", "plugin.json"),
+						[]byte("not-json"),
+						0o600,
+					)).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, "CHANGELOG.md"),
+						[]byte("## v1.0.0\n\n- feat\n"),
+						0o600,
+					))
+					// Chmod the .claude-plugin dir to 0000 so that
+					// DetectManifests (which calls Stat on
+					// .claude-plugin/plugin.json) returns EACCES, a
+					// non-IsNotExist error. The execution
+					// executeLocalRelease already runs
+					// DetectManifests earlier in the pipeline; here we
+					// are on the ai-review side. We just need the
+					// ai-review check to see the error path. To force
+					// that, the simplest reliable way is to delete the
+					// plugin.json after writing it and put an
+					// UNREADABLE directory in its place: delete the
+					// file and leave .claude-plugin/ but chmod it to
+					// 0000 so Stat on .claude-plugin/plugin.json
+					// returns EACCES (a non-IsNotExist error →
+					// DetectManifests returns the wrapped error).
+					Expect(
+						os.Remove(filepath.Join(workdir, ".claude-plugin", "plugin.json")),
+					).To(Succeed())
+					Expect(os.Chmod(filepath.Join(workdir, ".claude-plugin"), 0o000)).To(Succeed())
+					DeferCleanup(func() {
+						_ = os.Chmod(
+							filepath.Join(workdir, ".claude-plugin"),
+							0o750,
+						) // #nosec G302 -- restore test fixture dir mode
+					})
+
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					// Fallback: expected = [CHANGELOG.md]. An extra
+					// committed "plugin.json" then surfaces as
+					// unexpected.
+					fakeOps.CommittedFilesReturns(
+						[]string{"CHANGELOG.md", "plugin.json"},
+						nil,
+					)
+					// Default BeforeEach stubFaithfulLLM produces pass.
+
+					result, md := runStep(taskWithResultWithWorkdir(workdir, "abc1234", "v1.0.0"))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
+					Expect(review.UnexpectedFiles).To(ContainElement("plugin.json"))
+				},
+			)
+		})
 	})
 })

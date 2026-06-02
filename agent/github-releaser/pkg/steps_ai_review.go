@@ -53,6 +53,7 @@ const (
 	CheckChangelogHeaderRewritten = "ChangelogHeaderRewritten"
 	CheckFaithfulness             = "Faithfulness"
 	CheckUnexpectedFileChange     = "UnexpectedFileChange"
+	CheckPush                     = "Push"
 )
 
 // FaithfulnessVerdict captures the semantic comparison of one entry from
@@ -297,7 +298,7 @@ func (s *aiReviewStep) finishApproved(
 		glog.Warningf("ai_review: push failed: %v", pushErr)
 		output.Notes = "push failed: " + pushErr.Error()
 		output.Approved = false
-		output.FailedChecks = append(output.FailedChecks, "Push")
+		output.FailedChecks = append(output.FailedChecks, CheckPush)
 		return s.finishHumanReview(ctx, md, output, workdirShouldCleanup)
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Review", output)
@@ -388,7 +389,7 @@ func (s *aiReviewStep) runStructuralChecks(
 	}
 
 	if tagSHA != "" {
-		if err := s.verifyTagAtExpectedCommit(
+		s.verifyTagAtExpectedCommit(
 			ctx,
 			owner,
 			name,
@@ -396,20 +397,16 @@ func (s *aiReviewStep) runStructuralChecks(
 			result.CommitSHA,
 			checks,
 			failedChecks,
-		); err != nil {
-			glog.Warningf("ai_review: verifyTagAtExpectedCommit: %v", err)
-		}
+		)
 	}
 
-	if err := s.verifyChangelogHeaderRewritten(
+	s.verifyChangelogHeaderRewritten(
 		ctx,
 		owner,
 		name,
 		checks,
 		failedChecks,
-	); err != nil {
-		glog.Warningf("ai_review: verifyChangelogHeaderRewritten: %v", err)
-	}
+	)
 	return nil
 }
 
@@ -439,10 +436,12 @@ func (s *aiReviewStep) verifyTagExists(
 
 // verifyTagAtExpectedCommit calls ResolveTagCommit and checks the
 // returned SHA matches expectedCommit. Records the result in checks
-// and appends the failed-check name on mismatch. Returns a wrapped
-// error ONLY for transient transport failures (controller retries);
-// a SHA mismatch is a check failure that must keep the rest of the
-// pipeline running.
+// and appends the failed-check name on mismatch.
+//
+// On API/transport error: records CheckTagAtExpectedSHA as failed
+// (sets check false + appends to failedChecks) and returns nil. The
+// release trust model requires fail-closed on transient errors — a
+// network blip must not leave the check passing.
 //
 // Length mismatch tolerance: the execution step writes
 // Result.CommitSHA via `git rev-parse --short HEAD` (7 chars by
@@ -456,11 +455,17 @@ func (s *aiReviewStep) verifyTagAtExpectedCommit(
 	owner, name, tagSHA, expectedCommit string,
 	checks *ReviewChecks,
 	failedChecks *[]string,
-) error {
+) {
 	commitSHA, err := s.client.ResolveTagCommit(ctx, owner, name, tagSHA)
 	if err != nil {
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
-		return errors.Wrapf(ctx, err, "ai_review: ResolveTagCommit")
+		checks.TagAtExpectedSHA = false
+		*failedChecks = append(*failedChecks, CheckTagAtExpectedSHA)
+		glog.V(2).Infof(
+			"ai_review: check=%s result=false: GitHub API error: %v",
+			CheckTagAtExpectedSHA,
+			err,
+		)
+		return
 	}
 	if !commitSHAMatches(commitSHA, expectedCommit) {
 		checks.TagAtExpectedSHA = false
@@ -471,37 +476,43 @@ func (s *aiReviewStep) verifyTagAtExpectedCommit(
 			commitSHA,
 			expectedCommit,
 		)
-		return nil
+		return
 	}
 	glog.V(2).Infof("ai_review: check=%s result=true", CheckTagAtExpectedSHA)
-	return nil
 }
 
 // verifyChangelogHeaderRewritten calls FetchChangelog and checks that
 // the top heading is NOT "## Unreleased". Records the result in
-// checks and appends the failed-check name on mismatch. Returns a
-// wrapped error ONLY for transient transport failures; a header
-// mismatch is a check failure that must keep the rest of the
-// pipeline running.
+// checks and appends the failed-check name on mismatch.
+//
+// On API/transport error: records CheckChangelogHeaderRewritten as
+// failed (sets check false + appends to failedChecks) and returns
+// nil. The release trust model requires fail-closed on transient
+// errors — a network blip must not leave the check passing.
 func (s *aiReviewStep) verifyChangelogHeaderRewritten(
 	ctx context.Context,
 	owner, repo string,
 	checks *ReviewChecks,
 	failedChecks *[]string,
-) error {
+) {
 	changelogBytes, err := s.client.FetchChangelog(ctx, owner, repo)
 	if err != nil {
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
-		return errors.Wrapf(ctx, err, "ai_review: FetchChangelog")
+		checks.ChangelogHeaderRewritten = false
+		*failedChecks = append(*failedChecks, CheckChangelogHeaderRewritten)
+		glog.V(2).Infof(
+			"ai_review: check=%s result=false: GitHub API error: %v",
+			CheckChangelogHeaderRewritten,
+			err,
+		)
+		return
 	}
 	if !s.changelogHeaderRewritten(changelogBytes) {
 		checks.ChangelogHeaderRewritten = false
 		*failedChecks = append(*failedChecks, CheckChangelogHeaderRewritten)
 		glog.V(2).Infof("ai_review: check=%s result=false", CheckChangelogHeaderRewritten)
-		return nil
+		return
 	}
 	glog.V(2).Infof("ai_review: check=%s result=true", CheckChangelogHeaderRewritten)
-	return nil
 }
 
 // changelogHeaderRewritten returns true if the first ## heading in

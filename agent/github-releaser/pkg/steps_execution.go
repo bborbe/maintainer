@@ -170,7 +170,11 @@ func (s *executionStep) extractFrontmatter(
 	return cloneURL, ref, taskID, nil
 }
 
-// setupWorkdir creates a clean ephemeral workdir under os.TempDir().
+// setupWorkdir returns the canonical workdir path for the given task ID
+// and removes any stale copy from a prior run. Does NOT create the
+// directory — the subsequent ops.Clone call creates it. Stale-removal
+// failure is logged at Warning level and the path is returned anyway
+// (Clone will then fail with a more actionable error).
 func (s *executionStep) setupWorkdir(taskID string) string {
 	workdir := filepath.Join(os.TempDir(), workdirPrefix+taskID)
 	if err := os.RemoveAll(workdir); err != nil {
