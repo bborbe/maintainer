@@ -88,3 +88,132 @@ var _ = DescribeTable("ParseBumpVerdict",
 		`Claude says: the answer is patch but I am not formatting JSON.`,
 		"", "", "no JSON found"),
 )
+
+var _ = Describe("ChangelogQualityGuide", func() {
+	It("returns non-empty string", func() {
+		g := prompts.ChangelogQualityGuide()
+		Expect(g).NotTo(BeEmpty())
+	})
+
+	It("contains the Conventional Prefixes heading", func() {
+		g := prompts.ChangelogQualityGuide()
+		Expect(g).To(ContainSubstring("Conventional Prefixes"))
+	})
+
+	It("contains feat: rule", func() {
+		g := prompts.ChangelogQualityGuide()
+		Expect(g).To(ContainSubstring("feat:"))
+	})
+
+	It("contains fix: rule", func() {
+		g := prompts.ChangelogQualityGuide()
+		Expect(g).To(ContainSubstring("fix:"))
+	})
+
+	It("contains the Anti-Patterns section", func() {
+		g := prompts.ChangelogQualityGuide()
+		Expect(g).To(ContainSubstring("Anti-Patterns"))
+	})
+})
+
+var _ = Describe("ChangelogRewritePrompt", func() {
+	It("returns non-empty string", func() {
+		p := prompts.ChangelogRewritePrompt()
+		Expect(p).NotTo(BeEmpty())
+	})
+
+	It("mentions cleaning the ## Unreleased section", func() {
+		p := prompts.ChangelogRewritePrompt()
+		Expect(p).To(ContainSubstring("## Unreleased"))
+	})
+
+	It("cites the Changelog Quality Guide", func() {
+		p := prompts.ChangelogRewritePrompt()
+		Expect(p).To(ContainSubstring("Changelog Quality Guide"))
+	})
+
+	It("contains faithfulness constraint", func() {
+		p := prompts.ChangelogRewritePrompt()
+		Expect(p).To(ContainSubstring("Faithfulness"))
+	})
+
+	It("contains JSON output format", func() {
+		p := prompts.ChangelogRewritePrompt()
+		Expect(p).To(ContainSubstring("rewrite_needed"))
+		Expect(p).To(ContainSubstring("rewritten_unreleased"))
+		Expect(p).To(ContainSubstring("reasoning"))
+	})
+})
+
+var _ = DescribeTable("ParseRewriteVerdict",
+	func(
+		input string,
+		wantRewriteNeeded bool,
+		wantRewritten string,
+		wantReasoning string,
+		wantErrSubstr string,
+	) {
+		verdict, err := prompts.ParseRewriteVerdict(context.Background(), input)
+		if wantErrSubstr == "" {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(verdict.RewriteNeeded).To(Equal(wantRewriteNeeded))
+			Expect(verdict.RewrittenUnreleased).To(Equal(wantRewritten))
+			Expect(verdict.Reasoning).To(Equal(wantReasoning))
+		} else {
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("parse rewrite verdict"))
+			Expect(err.Error()).To(ContainSubstring(wantErrSubstr))
+			Expect(verdict).To(Equal(prompts.RewriteVerdict{}))
+		}
+	},
+	Entry(
+		"plain JSON parsed — rewrite_needed=true",
+		`{"rewrite_needed":true,"rewritten_unreleased":"- feat: add foo\n","reasoning":"missing prefix"}`,
+		true,
+		"- feat: add foo\n",
+		"missing prefix",
+		"",
+	),
+	Entry(
+		"fenced JSON block extracted from prose",
+		"Here is my verdict:\n\n```json\n{\"rewrite_needed\":true,\"rewritten_unreleased\":\"- fix: x\\n\",\"reasoning\":\"git log style\"}\n```\n",
+		true,
+		"- fix: x\n",
+		"git log style",
+		"",
+	),
+	Entry(
+		"rewrite_needed=false with empty rewritten_unreleased passes",
+		`{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"all bullets already conform"}`,
+		false,
+		"",
+		"all bullets already conform",
+		"",
+	),
+	Entry("rewrite_needed=true with empty rewritten_unreleased errors",
+		`{"rewrite_needed":true,"rewritten_unreleased":"","reasoning":"x"}`,
+		true, "", "x", "rewritten_unreleased is empty"),
+	Entry("rewrite_needed=false with non-empty rewritten_unreleased errors",
+		`{"rewrite_needed":false,"rewritten_unreleased":"- feat: x\n","reasoning":"x"}`,
+		false, "- feat: x\n", "x", "rewritten_unreleased is non-empty"),
+	Entry("missing reasoning errors",
+		`{"rewrite_needed":true,"rewritten_unreleased":"- feat: x\n","reasoning":""}`,
+		true, "- feat: x\n", "", "missing reasoning"),
+	Entry("empty input errors",
+		``,
+		false, "", "", "no JSON found"),
+	Entry("malformed JSON errors with parse rewrite verdict substring",
+		`{"rewrite_needed": true`,
+		false, "", "", "parse rewrite verdict"),
+	Entry("prose only no JSON errors",
+		`Claude says: the answer is yes but I am not formatting JSON.`,
+		false, "", "", "no JSON found"),
+	Entry(
+		"plain JSON with extra fields tolerated",
+		`{"rewrite_needed":true,"rewritten_unreleased":"- chore: deps\n","reasoning":"bump dump","confidence":0.8}`,
+		true,
+		"- chore: deps\n",
+		"bump dump",
+		"",
+	),
+)

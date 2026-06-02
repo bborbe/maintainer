@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [058-changelog-rewrite-flow]
+summary: 'Planning step now captures original ## Unreleased verbatim and emits a rewrite verdict (rewrite_needed + optional cleaned body) via a second focused Claude call using the embedded Changelog Quality Guide; all 11 requirements met, make precommit exit=0 with pkg/changelog 96.2% and pkg/prompts 90.4% coverage.'
+container: maintainer-changelog-rewrite-exec-227-spec-058-planning-rewrite
+dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T16:30:08Z"
 queued: "2026-06-02T16:43:47Z"
+started: "2026-06-02T17:46:26Z"
+completed: "2026-06-02T17:57:38Z"
 ---
 
 <summary>

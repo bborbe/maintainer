@@ -116,8 +116,16 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 
 	bullets := changelog.ExtractUnreleasedBullets(changelogBytes)
 	prefixStyle := changelog.InferHeaderPrefixStyle(changelogBytes)
+	originalBody, err := changelog.ExtractUnreleasedBody(ctx, changelogBytes)
+	if err != nil {
+		glog.V(2).Infof("planning: extract unreleased body failed: %v", err)
+		return &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "extract unreleased body: " + err.Error(),
+		}, nil
+	}
 
-	return s.runClassification(ctx, md, currentVersion, bullets, prefixStyle)
+	return s.runClassification(ctx, md, currentVersion, bullets, prefixStyle, originalBody)
 }
 
 func (s *planningStep) runClassification(
@@ -126,6 +134,7 @@ func (s *planningStep) runClassification(
 	currentVersion string,
 	bullets []string,
 	prefixStyle string,
+	originalBody string,
 ) (*agentlib.Result, error) {
 	userMsg := strings.Join(bullets, "\n")
 	fullPrompt := prompts.BumpClassificationPrompt() + "\n\n## Bullets to classify\n\n" + userMsg
@@ -158,16 +167,28 @@ func (s *planningStep) runClassification(
 		})
 	}
 
+	rewriteVerdict, err := s.runRewrite(ctx, originalBody)
+	if err != nil {
+		glog.V(2).Infof("planning: rewrite failed: %v", err)
+		return &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: err.Error(),
+		}, nil
+	}
+
 	header := "## " + prefixStyle + nextNumeric
 	output := PlanOutput{
-		Outcome:           PlanOutcomeReady,
-		Bump:              verdict.Bump,
-		Reasoning:         verdict.Reasoning,
-		CurrentVersion:    currentVersion,
-		NextVersion:       nextNumeric,
-		NextVersionHeader: header,
-		HeaderPrefixStyle: prefixStyle,
-		Bullets:           bullets,
+		Outcome:             PlanOutcomeReady,
+		Bump:                verdict.Bump,
+		Reasoning:           verdict.Reasoning,
+		CurrentVersion:      currentVersion,
+		NextVersion:         nextNumeric,
+		NextVersionHeader:   header,
+		HeaderPrefixStyle:   prefixStyle,
+		Bullets:             bullets,
+		OriginalUnreleased:  originalBody,
+		RewriteNeeded:       rewriteVerdict.RewriteNeeded,
+		RewrittenUnreleased: rewriteVerdict.RewrittenUnreleased,
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {
@@ -179,6 +200,32 @@ func (s *planningStep) runClassification(
 		Status:    agentlib.AgentStatusDone,
 		NextPhase: string(domain.TaskPhaseExecution),
 	}, nil
+}
+
+// runRewrite runs the changelog-rewrite classification against the verbatim
+// ## Unreleased body and returns the parsed verdict. The two Claude calls
+// (bump and rewrite) are kept separate so each LLM gets a focused prompt
+// and so the rewrite failure mode is distinguishable from a bump failure
+// at the planning layer. Returns a wrapped error containing the relevant
+// failure message — the caller maps it to AgentStatusFailed.
+func (s *planningStep) runRewrite(
+	ctx context.Context,
+	originalBody string,
+) (prompts.RewriteVerdict, error) {
+	rewritePrompt := prompts.ChangelogRewritePrompt() +
+		"\n\n## Changelog Quality Guide\n\n" + prompts.ChangelogQualityGuide() +
+		"\n\n## Current ## Unreleased body\n\n" + originalBody
+	runResult, err := s.runner.Run(ctx, rewritePrompt)
+	if err != nil {
+		return prompts.RewriteVerdict{},
+			errors.Wrap(ctx, err, "claude run rewrite")
+	}
+	verdict, err := prompts.ParseRewriteVerdict(ctx, runResult.Result)
+	if err != nil {
+		return prompts.RewriteVerdict{},
+			errors.Wrap(ctx, err, "parse rewrite verdict")
+	}
+	return verdict, nil
 }
 
 // escalation captures the fields the escalate path needs to assemble the

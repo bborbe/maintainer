@@ -241,6 +241,52 @@ func trimTrailingWhitespace(s string) string {
 	return s[:end]
 }
 
+// ExtractUnreleasedBody returns the verbatim body of the ## Unreleased
+// section: every line after the `## Unreleased` heading up to (but
+// excluding) the next `## ` heading or EOF. Line endings are normalized
+// to '\n' between emitted lines (matching the RewriteUnreleasedHeader
+// line-ending convention). Leading and trailing blank lines are NOT
+// trimmed — the returned string is the raw slice of the section.
+//
+// Returns a wrapped bborbe/errors error if ## Unreleased is not present.
+// The ctx parameter is used only for error wrapping consistency.
+// No IO, deterministic. Safe for concurrent use.
+func ExtractUnreleasedBody(
+	ctx context.Context,
+	content []byte,
+) (string, error) {
+	if len(content) == 0 {
+		return "", bborbeerrors.New(ctx, "extract unreleased body: unreleased header not found")
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	// The bufio default 64KB token limit is plenty for CHANGELOGs.
+
+	found := false
+	var out bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !found {
+			if isHeading(line) && parseHeading(line) == "Unreleased" {
+				found = true
+			}
+			continue
+		}
+		if isHeading(line) {
+			break
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		return "", bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
+	}
+	if !found {
+		return "", bborbeerrors.New(ctx, "extract unreleased body: unreleased header not found")
+	}
+	return out.String(), nil
+}
+
 // RewriteUnreleasedHeader returns content with the "## Unreleased" line
 // replaced by newHeader (e.g. "## v1.2.8"). Whitespace-tolerant: trailing
 // spaces/tabs/CR on the Unreleased heading are accepted and discarded along

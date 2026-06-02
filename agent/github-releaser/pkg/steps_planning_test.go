@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
@@ -279,6 +280,213 @@ var _ = Describe("steps_planning", func() {
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(plan.Outcome).To(Equal("ready"))
+			})
+		})
+
+		// spec 058 — planning step now invokes Claude twice: once for the
+		// bump verdict, once for the rewrite verdict. The fixtures below use
+		// RunReturnsOnCall(0, ...) and RunReturnsOnCall(1, ...) so the mock
+		// dispatches by call index. Order matters: bump first, rewrite second.
+		Context("rewrite decision", func() {
+			const taskMD = "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-rewrite\n---\n\n# release task\n"
+
+			It("clean Unreleased → rewrite_needed=false with empty rewritten_unreleased", func() {
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(
+					[]byte("## Unreleased\n\n- feat: add foo\n- fix: bar\n\n## v1.7.7\n\n- old\n"),
+					nil,
+				)
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+				fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+					Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"all bullets already conform"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(fakeRunner.RunCallCount()).To(Equal(2))
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(),
+					md,
+					"## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.RewriteNeeded).To(BeFalse())
+				Expect(plan.RewrittenUnreleased).To(BeEmpty())
+				Expect(plan.OriginalUnreleased).NotTo(BeEmpty())
+			})
+
+			It(
+				"noisy git log dump → rewrite_needed=true with every line conventional-prefix-conformant",
+				func() {
+					noisyBody := "- abc1234 2026-05-12 foo author — bump foo\n" +
+						"- def5678 2026-05-13 bar author — update docs\n" +
+						"- 9abc012 2026-05-14 baz author — internal rename\n"
+					fixture := "## Unreleased\n\n" + noisyBody + "## v1.7.7\n\n- old\n"
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns([]byte(fixture), nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.RewriteNeeded).To(BeTrue())
+					Expect(plan.RewrittenUnreleased).NotTo(BeEmpty())
+
+					// Every non-blank line must match a conventional prefix.
+					prefixRegex := `^- (feat|fix|refactor|chore|docs|test|build|ci|perf|style)(\([^)]*\))?:\s+\S`
+					for _, line := range strings.Split(plan.RewrittenUnreleased, "\n") {
+						if strings.TrimSpace(line) == "" {
+							continue
+						}
+						Expect(line).To(
+							MatchRegexp(prefixRegex),
+							"line %q in rewritten_unreleased does not match conventional prefix",
+							line,
+						)
+					}
+				},
+			)
+
+			It("missing-prefix entry → rewrite adds prefix", func() {
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(
+					[]byte("## Unreleased\n\n- add foo\n\n## v1.7.7\n\n- old\n"),
+					nil,
+				)
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+				fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- feat: add foo\n","reasoning":"added missing feat: prefix"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(),
+					md,
+					"## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.RewriteNeeded).To(BeTrue())
+				Expect(plan.RewrittenUnreleased).To(ContainSubstring("feat: add foo"))
+			})
+
+			It(
+				"chore: bump dump (10 lines) → folded into a single dependency-updates entry",
+				func() {
+					var dumpLines []string
+					for i := 0; i < 10; i++ {
+						dumpLines = append(dumpLines, "- chore: bump x-v0.0.0")
+					}
+					dump := strings.Join(dumpLines, "\n")
+					fixture := "## Unreleased\n\n" + dump + "\n\n## v1.7.7\n\n- old\n"
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns([]byte(fixture), nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"patch","reasoning":"chore dump"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: routine dependency updates\n","reasoning":"folded 10 adjacent chore bump lines into one entry"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.RewriteNeeded).To(BeTrue())
+					Expect(
+						plan.RewrittenUnreleased,
+					).To(ContainSubstring("routine dependency updates"))
+
+					// Count the non-blank bullet lines: must be exactly 1.
+					bulletCount := 0
+					for _, line := range strings.Split(plan.RewrittenUnreleased, "\n") {
+						if strings.HasPrefix(line, "- ") {
+							bulletCount++
+						}
+					}
+					Expect(bulletCount).To(Equal(1))
+				},
+			)
+
+			It("captures original_unreleased verbatim regardless of rewrite decision", func() {
+				noisyBody := "- abc1234 2026-05-12 foo author — bump foo\n" +
+					"- def5678 2026-05-13 bar author — update docs\n" +
+					"- 9abc012 2026-05-14 baz author — internal rename\n"
+				fixture := "## Unreleased\n\n" + noisyBody + "## v1.7.7\n\n- old\n"
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns([]byte(fixture), nil)
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+				fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(),
+					md,
+					"## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				// The captured original must BYTE-EQUAL the body slice that
+				// ExtractUnreleasedBody would emit. That is: every line
+				// AFTER the "## Unreleased" heading up to (but excluding)
+				// the next "## " heading, with lines joined by "\n".
+				// This is the security-relevant invariant: capture-time
+				// must match the bytes ai-review later reads.
+				expected := "\n" + noisyBody
+				Expect(plan.OriginalUnreleased).To(Equal(expected))
 			})
 		})
 	})

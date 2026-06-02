@@ -25,6 +25,27 @@ type PlanOutput struct {
 	Bullets            []string `json:"bullets,omitempty"`
 	Reason             string   `json:"reason,omitempty"`
 	PreconditionFailed string   `json:"precondition_failed,omitempty"`
+
+	// OriginalUnreleased is the raw ## Unreleased body (verbatim, line-endings
+	// preserved) captured at planning time. ai-review reads this from the task
+	// page — never re-derives it from the repo — so an attacker who modifies
+	// the repo between planning and review cannot mask drift.
+	OriginalUnreleased string `json:"original_unreleased,omitempty"`
+
+	// RewriteNeeded is true when the planning LLM judged the original body
+	// does not conform to the Changelog Quality Guide and produced a cleaned
+	// body in RewrittenUnreleased. When false, execution renames the header
+	// only and leaves the body untouched.
+	//
+	// omitempty is deliberately NOT applied so a `false` decision is always
+	// written explicitly — ai-review needs to distinguish "not decided" from
+	// "decided no".
+	RewriteNeeded bool `json:"rewrite_needed"`
+
+	// RewrittenUnreleased is the cleaned body. Populated only when
+	// RewriteNeeded is true. Execution replaces the ## Unreleased body with
+	// this text before renaming the header.
+	RewrittenUnreleased string `json:"rewritten_unreleased,omitempty"`
 }
 
 // Outcome values for PlanOutput.Outcome.

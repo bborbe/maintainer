@@ -8,6 +8,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/github-releaser): planning step now captures the original `## Unreleased` body verbatim and emits a rewrite verdict (rewrite_needed + optional cleaned body) into the `## Plan` JSON, with the Changelog Quality Guide embedded via `//go:embed` and a second focused Claude call. Already-clean changelogs pass through with `rewrite_needed=false`; noisy bodies (raw `git log` lines, missing prefixes, ten-line `chore: bump` dumps) are cleaned into prefix-conformant bullets by the planning LLM using the embedded guide as the ruleset
+- feat(agent/github-releaser): add `changelog.ExtractUnreleasedBody` pure helper returning the verbatim body of the `## Unreleased` section, plus table tests in `pkg/changelog/changelog_test.go`
+- feat(agent/github-releaser): add `prompts.RewriteVerdict` type and `ParseRewriteVerdict` parser using the same three-strategy extraction as `ParseBumpVerdict` (plain JSON, fenced ```json, last balanced block); Ginkgo coverage for plain / fenced / empty / missing-reasoning / malformed / extra-fields cases
+- test(agent/github-releaser): five new `It` cases in `pkg/steps_planning_test.go` under `Context("rewrite decision")` — clean → false, noisy git-log dump → true, missing-prefix, chore-dump fold, verbatim capture. The verbatim-capture test asserts the security-relevant invariant that `OriginalUnreleased` is byte-equal to the slice ai-review will read
+
 ## v0.30.0
 
 - feat(agent/github-releaser): release commit now bumps `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version fields alongside the CHANGELOG rewrite when those manifests exist at repo root — fixes the silent drift where Claude Code plugin repos (e.g. `bborbe/coding`) shipped release tags whose manifest versions disagreed with the CHANGELOG. Pre-push guard whitelist widened dynamically to the set of files actually touched; fails closed on anything else.
