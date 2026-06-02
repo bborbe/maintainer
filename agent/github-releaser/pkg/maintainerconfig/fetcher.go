@@ -170,6 +170,10 @@ func (f *httpFetcher) doRequest(
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
+		glog.V(2).Infof(
+			"fetch .maintainer.yaml: http transport error owner=%s repo=%s ref=%s: %v",
+			owner, repo, ref, err,
+		)
 		return nil, errors.Wrapf(
 			ctx,
 			err,

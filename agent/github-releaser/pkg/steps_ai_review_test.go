@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
@@ -1103,6 +1104,12 @@ var _ = Describe("AIReviewStep", func() {
 			It(
 				"DetectManifests error + unexpected committed file → UnexpectedFileChange=true, FailedChecks contains CheckUnexpectedFileChange, UnexpectedFiles lists the file",
 				func() {
+					// chmod 0000 on Linux non-root blocks Stat of the children;
+					// skip on platforms where this is unreliable (Darwin, root containers).
+					if runtime.GOOS == "darwin" || os.Geteuid() == 0 {
+						Skip("requires unprivileged Linux for non-IsNotExist Stat failure")
+					}
+
 					workdir, err := os.MkdirTemp("", "ai-review-test-")
 					Expect(err).NotTo(HaveOccurred())
 					DeferCleanup(func() { _ = os.RemoveAll(workdir) })
