@@ -64,4 +64,28 @@ var _ = Describe("PlanOutput JSON contract", func() {
 		Expect(string(b)).NotTo(ContainSubstring(`"header_prefix_style"`))
 		Expect(string(b)).NotTo(ContainSubstring(`"bullets"`))
 	})
+
+	It("round-trips failed outcome with invalid_config details", func() {
+		in := pkg.PlanOutput{
+			Outcome:        pkg.PlanOutcomeFailed,
+			ErrorCategory:  pkg.ErrorCategoryInvalidConfig,
+			InvalidField:   "release.changelogRewrite",
+			InvalidValue:   "yes",
+			CurrentVersion: "v1.2.6",
+		}
+		b, err := json.Marshal(in)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(b)).To(ContainSubstring(`"outcome":"failed"`))
+		Expect(string(b)).To(ContainSubstring(`"error_category":"invalid_config"`))
+		Expect(string(b)).To(ContainSubstring(`"invalid_field":"release.changelogRewrite"`))
+		Expect(string(b)).To(ContainSubstring(`"invalid_value":"yes"`))
+		Expect(string(b)).To(ContainSubstring(`"current_version":"v1.2.6"`))
+		// Failure path: `changelog_rewrite` token is OMITTED (omitempty
+		// + the pointer is nil on the failure path).
+		Expect(string(b)).NotTo(ContainSubstring("changelog_rewrite"))
+		// Round-trip.
+		var out pkg.PlanOutput
+		Expect(json.Unmarshal(b, &out)).To(Succeed())
+		Expect(out).To(Equal(in))
+	})
 })

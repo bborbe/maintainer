@@ -22,6 +22,16 @@ type ResultOutput struct {
 	Tag           string            `json:"tag,omitempty"`
 	ErrorCategory git.ErrorCategory `json:"error_category,omitempty"`
 	Error         string            `json:"error,omitempty"`
+
+	// Workdir is the absolute path of the local clone created by execution.
+	// ai-review reads CHANGELOG.md and runs `git log -1 --name-only` against
+	// this path. Empty on the failure path (no clone survives).
+	Workdir string `json:"workdir,omitempty"`
+
+	// LocalTag is the annotated tag created in the local clone. ai-review
+	// checks the tag exists and points at CommitSHA before pushing. Empty
+	// on the failure path.
+	LocalTag string `json:"local_tag,omitempty"`
 }
 
 // Outcome values for ResultOutput.Outcome.

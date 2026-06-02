@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	bborbeerrors "github.com/bborbe/errors"
 )
@@ -239,6 +240,171 @@ func trimTrailingWhitespace(s string) string {
 		end--
 	}
 	return s[:end]
+}
+
+// ExtractUnreleasedBody returns the verbatim body of the ## Unreleased
+// section: every line after the `## Unreleased` heading up to (but
+// excluding) the next `## ` heading or EOF. Line endings are normalized
+// to '\n' between emitted lines (matching the RewriteUnreleasedHeader
+// line-ending convention). Leading and trailing blank lines are NOT
+// trimmed — the returned string is the raw slice of the section.
+//
+// Returns a wrapped bborbe/errors error if ## Unreleased is not present.
+// The ctx parameter is used only for error wrapping consistency.
+// No IO, deterministic. Safe for concurrent use.
+//
+// Thin wrapper around ExtractSectionBody with the heading pinned to
+// "Unreleased". Both functions share the unexported scan loop.
+func ExtractUnreleasedBody(
+	ctx context.Context,
+	content []byte,
+) (string, error) {
+	return ExtractSectionBody(ctx, content, "Unreleased")
+}
+
+// ExtractSectionBody returns the verbatim body of the first section
+// whose ## heading text matches heading (e.g. "Unreleased" or
+// "v1.2.8"): every line after that heading up to (but excluding) the
+// next `## ` heading or EOF. Line endings are normalized to '\n' between
+// emitted lines. Leading and trailing blank lines are NOT trimmed —
+// the returned string is the raw slice of the section.
+//
+// Returns a wrapped bborbe/errors error if the requested heading is
+// not present. The ctx parameter is used only for error wrapping
+// consistency. No IO, deterministic. Safe for concurrent use.
+//
+// heading is matched against the heading TEXT (the part after `## `),
+// not the full markdown line — callers can pass "Unreleased" or
+// "v1.2.8" interchangeably. On absence the error message uses the
+// literal phrase "%s header not found" so callers (and tests) can
+// match on it regardless of capitalization.
+func ExtractSectionBody(
+	ctx context.Context,
+	content []byte,
+	heading string,
+) (string, error) {
+	if len(content) == 0 {
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower(heading),
+		)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	// The bufio default 64KB token limit is plenty for CHANGELOGs.
+
+	found := false
+	var out bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !found {
+			if isHeading(line) && parseHeading(line) == heading {
+				found = true
+			}
+			continue
+		}
+		if isHeading(line) {
+			break
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		return "", bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
+	}
+	if !found {
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower(heading),
+		)
+	}
+	return out.String(), nil
+}
+
+// ReplaceUnreleasedBody returns content with the body of the "## Unreleased"
+// section replaced by newBody. The "## Unreleased" heading line itself is
+// preserved; only the lines AFTER it (and BEFORE the next "## " heading or
+// EOF) are swapped. Text before the heading and text starting at the next
+// "## " heading is preserved verbatim.
+//
+// newBody is inserted as-is. If it does not end with '\n', a single '\n' is
+// appended before the next heading line so the inserted body is followed
+// by the original separator. Line endings are normalized to '\n' on output.
+//
+// Returns a wrapped bborbe/errors error if "## Unreleased" is not present.
+// The caller (execution step) maps this to error_category: unreleased_not_found.
+//
+// The ctx parameter is used only for error wrapping consistency.
+// No IO, deterministic. Safe for concurrent use.
+func ReplaceUnreleasedBody(
+	ctx context.Context,
+	content []byte,
+	newBody string,
+) ([]byte, error) {
+	if len(content) == 0 {
+		return nil, bborbeerrors.New(
+			ctx,
+			"unreleased header not found: empty content",
+		)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	// The bufio default 64KB token limit is plenty for CHANGELOGs.
+
+	var out bytes.Buffer
+	// 0 = before the Unreleased heading; 1 = inside the Unreleased body
+	// (consuming lines until the next heading); 2 = after the Unreleased
+	// block (passing every line through verbatim).
+	state := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch state {
+		case 0:
+			if isHeading(line) && parseHeading(line) == "Unreleased" {
+				out.WriteString(line)
+				out.WriteByte('\n')
+				out.WriteString(newBody)
+				if len(newBody) == 0 || newBody[len(newBody)-1] != '\n' {
+					out.WriteByte('\n')
+				}
+				state = 1
+				continue
+			}
+			out.WriteString(line)
+			out.WriteByte('\n')
+		case 1:
+			// Inside the Unreleased body: drop everything until the next
+			// "## " heading, then transition to pass-through.
+			if isHeading(line) {
+				out.WriteString(line)
+				out.WriteByte('\n')
+				state = 2
+				continue
+			}
+			// Otherwise silently discard the old body line.
+		case 2:
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
+	}
+	if state == 0 {
+		return nil, bborbeerrors.New(ctx, "unreleased header not found")
+	}
+
+	// Preserve a trailing-newline-less input: if the original content did
+	// NOT end with '\n', drop the final '\n' we appended above.
+	result := out.Bytes()
+	if len(content) > 0 && content[len(content)-1] != '\n' && len(result) > 0 &&
+		result[len(result)-1] == '\n' {
+		result = result[:len(result)-1]
+	}
+
+	return result, nil
 }
 
 // RewriteUnreleasedHeader returns content with the "## Unreleased" line

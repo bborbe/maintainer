@@ -28,7 +28,11 @@ const changelogFileName = "CHANGELOG.md"
 
 // workdirPrefix is the os.TempDir-rooted prefix used for ephemeral clone
 // workdirs. Full path: <tempdir>/<workdirPrefix><task_identifier>/.
-// The directory is removed on every Run exit path via defer.
+// On the happy path the directory is INTENTIONALLY preserved past Run's
+// return so the next phase (ai_review) can read `git log -1 --name-only`
+// against it. The ai-review step owns workdir lifecycle for terminal
+// transitions (Approved+push done → Done, or human_review exit). The
+// failure-path defer below still removes it.
 const workdirPrefix = "github-releaser-"
 
 // executionStep implements agentlib.Step. Dependencies are constructor-injected;
@@ -58,16 +62,23 @@ func (s *executionStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool
 	return true, nil
 }
 
-// Run executes the direct-push release pipeline. Sequence:
+// Run executes the local-release pipeline. Sequence:
 //  1. Read & validate ## Plan(outcome=ready) + frontmatter
 //  2. Create ephemeral workdir under os.TempDir()
 //  3. Clone target repo via GitOps
-//  4. Read + rewrite CHANGELOG.md (## Unreleased → next header)
-//  5. Commit + annotated-tag + push
+//  4. Read + rewrite CHANGELOG.md (apply plan.RewrittenUnreleased body if
+//     plan.RewriteNeeded, then rename the header to plan.NextVersionHeader)
+//  5. Commit + annotated-tag
 //  6. Write ## Result(outcome=released) and return Done/NextPhase=ai_review
 //
+// Note: the network push happens in the ai_review step (spec 058 prompt 3),
+// not here. The local clone + tag are preserved past Run's return so
+// ai_review can read them.
+//
 // Failures at any step produce ## Result(outcome=failed) + error_category
-// and return Status=Failed (controller retry per its cap).
+// and return Status=Failed (controller retry per its cap). The workdir is
+// removed on every failure path; the happy path keeps the workdir alive
+// for ai_review.
 func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
 	plan, err := s.validatePlan(ctx, md)
 	if err != nil {
@@ -80,15 +91,21 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 	}
 
 	workdir := s.setupWorkdir(taskID)
+	// Conditional cleanup: only remove the workdir on the failure path.
+	// The happy path leaves it in place so ai_review (next phase) can
+	// read it via result.Workdir.
+	releaseSuccess := false
 	defer func() {
-		if err := os.RemoveAll(workdir); err != nil {
-			glog.Warningf("workdir cleanup failed: path=%s err=%v", workdir, err)
+		if !releaseSuccess {
+			if err := os.RemoveAll(workdir); err != nil {
+				glog.Warningf("workdir cleanup failed: path=%s err=%v", workdir, err)
+			}
 		}
 	}()
 
-	sha, tagName, failResult := s.executeDirectPush(ctx, md, workdir, plan, cloneURL, ref)
+	sha, tagName, failResult := s.executeLocalRelease(ctx, md, workdir, plan, cloneURL, ref)
 	if failResult != nil {
-		return failResult, nil // fail() already called inside executeDirectPush
+		return failResult, nil // fail() already called inside executeLocalRelease
 	}
 
 	output := ResultOutput{
@@ -96,6 +113,8 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 		Path:      ResultPathDirectPush,
 		CommitSHA: sha,
 		Tag:       tagName,
+		Workdir:   workdir,
+		LocalTag:  tagName,
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Result", output)
 	if err != nil {
@@ -103,6 +122,9 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 	}
 	md.ReplaceSection(section)
 
+	// Mark success: defer above will skip RemoveAll so the workdir (with
+	// the local commit + tag) survives until ai_review finishes.
+	releaseSuccess = true
 	return &agentlib.Result{
 		Status:    agentlib.AgentStatusDone,
 		NextPhase: string(domain.TaskPhaseAIReview),
@@ -148,7 +170,11 @@ func (s *executionStep) extractFrontmatter(
 	return cloneURL, ref, taskID, nil
 }
 
-// setupWorkdir creates a clean ephemeral workdir under os.TempDir().
+// setupWorkdir returns the canonical workdir path for the given task ID
+// and removes any stale copy from a prior run. Does NOT create the
+// directory — the subsequent ops.Clone call creates it. Stale-removal
+// failure is logged at Warning level and the path is returned anyway
+// (Clone will then fail with a more actionable error).
 func (s *executionStep) setupWorkdir(taskID string) string {
 	workdir := filepath.Join(os.TempDir(), workdirPrefix+taskID)
 	if err := os.RemoveAll(workdir); err != nil {
@@ -157,12 +183,15 @@ func (s *executionStep) setupWorkdir(taskID string) string {
 	return workdir
 }
 
-// executeDirectPush runs the clone → rewrite → commit → tag → push sequence.
+// executeLocalRelease runs the clone → (optional body rewrite) → header
+// rename → commit → tag sequence. The network push happens in the ai_review
+// step (spec 058 prompt 3), not here.
+//
 // Returns (sha, tagName, nil) on success, or ( "", "", failResult) on failure
 // where failResult is the result of calling s.fail() with the appropriate error.
 //
-//nolint:gocognit,funlen // multi-stage release pipeline with branching error paths; will be naturally split by feat/changelog-rewrite when merged
-func (s *executionStep) executeDirectPush(
+//nolint:gocognit,funlen // multi-stage release pipeline with branching error paths
+func (s *executionStep) executeLocalRelease(
 	ctx context.Context,
 	md *agentlib.Markdown,
 	workdir string,
@@ -197,7 +226,28 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 
-	rewritten, err := changelog.RewriteUnreleasedHeader(ctx, content, plan.NextVersionHeader)
+	// Optional body rewrite: only when planning flagged the body as
+	// non-conformant. Done in-memory BEFORE the header rename so the
+	// final commit is a single atomic "rewrite + rename" change.
+	rewritten := content
+	if plan.RewriteNeeded {
+		rewritten, err = changelog.ReplaceUnreleasedBody(
+			ctx,
+			content,
+			plan.RewrittenUnreleased,
+		)
+		if err != nil {
+			result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
+				errors.Wrap(ctx, err, "replace ## Unreleased body"))
+			return "", "", result
+		}
+	}
+
+	rewritten, err = changelog.RewriteUnreleasedHeader(
+		ctx,
+		rewritten,
+		plan.NextVersionHeader,
+	)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
 			errors.Wrap(ctx, err, "rewrite ## Unreleased"))
@@ -254,18 +304,16 @@ func (s *executionStep) executeDirectPush(
 		return "", "", result
 	}
 	// Pre-push guard: the release commit must touch exactly the files we
-	// rewrote (changelog + detected manifests). Fail closed BEFORE tag/push
-	// if anything else slipped in — the direct-push trust model depends on
-	// this commit being changelog+manifests-only.
+	// rewrote (changelog + detected manifests). Fail closed BEFORE tag
+	// if anything else slipped in — the release trust model depends on
+	// this commit being changelog+manifests-only. Push is no longer in
+	// this step (moved to ai_review in spec 058), but the guard still
+	// runs here so a non-conformant commit never gets a tag.
 	expectedFiles := append([]string{changelogFileName}, detectedManifests...)
 	if failResult := s.guardCommittedFiles(ctx, md, workdir, expectedFiles); failResult != nil {
 		return "", "", failResult
 	}
 	if err := s.ops.Tag(ctx, workdir, tagName, "release "+tagName); err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
-		return "", "", result
-	}
-	if err := s.ops.Push(ctx, workdir, "HEAD", "refs/tags/"+tagName); err != nil {
 		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
 		return "", "", result
 	}

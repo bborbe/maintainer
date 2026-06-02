@@ -23,6 +23,7 @@ import (
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"
 )
 
 const serviceName = "maintainer-agent-github-releaser"
@@ -106,15 +107,32 @@ func CreateAgent(
 	ghToken string,
 	env map[string]string,
 ) *agentlib.Agent {
+	// AI-review LLM is read-only — same tool policy as planning.
+	aiReviewTools := claudelib.AllowedTools{}
 	planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
 	fetcher := githubchangelog.NewHTTPFetcher(ghToken)
-	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher)
+	maintainerConfigFetcher := maintainerconfig.NewHTTPFetcher(ghToken)
+	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher, maintainerConfigFetcher)
 
 	executionOps := CreateGitOps()
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
 
 	reviewClient := githubreview.NewHTTPClient(ghToken)
-	reviewStep := releaserpkg.NewAIReviewStep(reviewClient, ghToken)
+	aiReviewRunner := CreateClaudeRunner(
+		claudeConfigDir,
+		agentDir,
+		model,
+		env,
+		aiReviewTools,
+	)
+	// Reuse the same GitOps seam as the execution step so the push of
+	// the local commit + tag goes out via the same authenticated path.
+	reviewStep := releaserpkg.NewAIReviewStep(
+		reviewClient,
+		aiReviewRunner,
+		executionOps,
+		ghToken,
+	)
 
 	return agentlib.NewAgent(
 		agentlib.NewPhase(domain.TaskPhasePlanning, planningStep),
