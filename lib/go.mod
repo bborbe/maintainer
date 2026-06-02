@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer/lib
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/bborbe/errors v1.5.13

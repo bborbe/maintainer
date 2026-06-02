@@ -8,7 +8,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -48,12 +47,9 @@ const (
 // asserts on these literals verbatim; do not rename without a spec
 // amendment.
 const (
-	CheckTagExists                = "TagExists"
-	CheckTagAtExpectedSHA         = "TagAtExpectedSHA"
-	CheckChangelogHeaderRewritten = "ChangelogHeaderRewritten"
-	CheckFaithfulness             = "Faithfulness"
-	CheckUnexpectedFileChange     = "UnexpectedFileChange"
-	CheckPush                     = "Push"
+	CheckFaithfulness         = "Faithfulness"
+	CheckUnexpectedFileChange = "UnexpectedFileChange"
+	CheckPush                 = "Push"
 )
 
 // FaithfulnessVerdict captures the semantic comparison of one entry from
@@ -119,17 +115,12 @@ type ReviewOutput struct {
 	// UnexpectedFileChange is false.
 	UnexpectedFiles []string `json:"unexpected_files,omitempty"`
 
-	// FailedChecks names the structural and semantic checks that did
-	// not pass. Stable strings — referenced by spec AC 15 assertions.
-	// One or more of: CheckTagExists, CheckTagAtExpectedSHA,
-	// CheckChangelogHeaderRewritten, CheckFaithfulness,
-	// CheckUnexpectedFileChange.
+	// FailedChecks names the semantic / local checks that did not pass.
+	// Stable strings — referenced by spec AC 15 assertions.
+	// One or more of: CheckFaithfulness, CheckUnexpectedFileChange,
+	// CheckPush.
 	FailedChecks []string `json:"failed_checks,omitempty"`
 }
-
-// changelogHeadingRE matches a level-2 markdown heading. Compiled once
-// at package load — the regex is invariant.
-var changelogHeadingRE = regexp.MustCompile(`^##\s+`)
 
 // NewAIReviewStep wires the ai_review step with its GitHub REST API
 // client, the ClaudeRunner used to invoke the faithfulness LLM, the
@@ -220,19 +211,15 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	var workdirShouldCleanup bool
 	defer s.cleanupWorkdir(result, &workdirShouldCleanup)
 
-	// (1) Structural checks — do NOT early-return on failure.
-	// Record each in failedChecks and continue so the human reviewer
-	// sees the full set of issues.
-	if err := s.runStructuralChecks(
-		ctx,
-		owner,
-		name,
-		result,
-		&checks,
-		&failedChecks,
-	); err != nil {
-		return nil, err
-	}
+	// (1) Structural checks (TagExists, TagAtExpectedSHA,
+	// ChangelogHeaderRewritten) are DISABLED on the pre-push path —
+	// they query the GitHub remote for state that only exists POST-push
+	// (push is gated on this very ai_review step per spec 058), so they
+	// always reported false on a healthy release and blocked the push.
+	// The initial check booleans stay true (no failure detected); local
+	// diff-scope + faithfulness below remain authoritative.
+	// Tracked: vault task "github-releaser structural-check pre-push misfire"
+	// for a post-push verification phase that re-enables these.
 
 	// (2) Unexpected-file-change check — local workdir inspection.
 	unexpected := s.checkUnexpectedFileChange(ctx, &checks, result, &failedChecks)
@@ -363,183 +350,6 @@ func (s *aiReviewStep) writeShortCircuit(
 		Status:    agentlib.AgentStatusDone,
 		NextPhase: "done",
 	}, nil
-}
-
-// runStructuralChecks executes the three remote structural checks
-// (TagExists, TagAtExpectedSHA, ChangelogHeaderRewritten). On any
-// non-sentinel error it returns it (controller retries). On a
-// sentinel error (tag-missing) or a check failure, the failed-check
-// name is appended to failedChecks and execution continues.
-func (s *aiReviewStep) runStructuralChecks(
-	ctx context.Context,
-	owner, name string,
-	result *ResultOutput,
-	checks *ReviewChecks,
-	failedChecks *[]string,
-) error {
-	tagSHA, err := s.verifyTagExists(ctx, owner, name, result.Tag, checks)
-	if err != nil {
-		if errors.Is(err, githubreview.ErrTagNotFound) {
-			checks.TagExists = false
-			*failedChecks = append(*failedChecks, CheckTagExists)
-			glog.V(2).Infof("ai_review: check=%s result=false: %v", CheckTagExists, err)
-		} else {
-			return errors.Wrapf(ctx, err, "ai_review: TagExists")
-		}
-	}
-
-	if tagSHA != "" {
-		s.verifyTagAtExpectedCommit(
-			ctx,
-			owner,
-			name,
-			tagSHA,
-			result.CommitSHA,
-			checks,
-			failedChecks,
-		)
-	}
-
-	s.verifyChangelogHeaderRewritten(
-		ctx,
-		owner,
-		name,
-		checks,
-		failedChecks,
-	)
-	return nil
-}
-
-// verifyTagExists calls TagExists API and records the result in
-// checks. Returns the tagSHA on success,
-// githubreview.ErrTagNotFound if the tag is missing (caller handles
-// the verdict and records the failed-check name), or a wrapped error
-// for transient failures.
-func (s *aiReviewStep) verifyTagExists(
-	ctx context.Context,
-	owner, repo, tag string,
-	checks *ReviewChecks,
-) (string, error) {
-	tagSHA, err := s.client.TagExists(ctx, owner, repo, tag)
-	if err != nil {
-		if errors.Is(err, githubreview.ErrTagNotFound) {
-			checks.TagExists = false
-			glog.V(2).Infof("ai_review: check=%s result=false: %v", CheckTagExists, err)
-			return "", githubreview.ErrTagNotFound
-		}
-		glog.V(2).Infof("ai_review: GitHub API error: %v", err)
-		return "", errors.Wrapf(ctx, err, "ai_review: TagExists")
-	}
-	glog.V(2).Infof("ai_review: check=%s result=true", CheckTagExists)
-	return tagSHA, nil
-}
-
-// verifyTagAtExpectedCommit calls ResolveTagCommit and checks the
-// returned SHA matches expectedCommit. Records the result in checks
-// and appends the failed-check name on mismatch.
-//
-// On API/transport error: records CheckTagAtExpectedSHA as failed
-// (sets check false + appends to failedChecks) and returns nil. The
-// release trust model requires fail-closed on transient errors — a
-// network blip must not leave the check passing.
-//
-// Length mismatch tolerance: the execution step writes
-// Result.CommitSHA via `git rev-parse --short HEAD` (7 chars by
-// default — pkg/git/os_exec_git_ops.go), while the GitHub API always
-// returns a full 40-char SHA. A naive `==` compare would
-// false-positive every release. We accept either string as a prefix
-// of the other to handle both directions (short stored vs full
-// stored).
-func (s *aiReviewStep) verifyTagAtExpectedCommit(
-	ctx context.Context,
-	owner, name, tagSHA, expectedCommit string,
-	checks *ReviewChecks,
-	failedChecks *[]string,
-) {
-	commitSHA, err := s.client.ResolveTagCommit(ctx, owner, name, tagSHA)
-	if err != nil {
-		checks.TagAtExpectedSHA = false
-		*failedChecks = append(*failedChecks, CheckTagAtExpectedSHA)
-		glog.V(2).Infof(
-			"ai_review: check=%s result=false: GitHub API error: %v",
-			CheckTagAtExpectedSHA,
-			err,
-		)
-		return
-	}
-	if !commitSHAMatches(commitSHA, expectedCommit) {
-		checks.TagAtExpectedSHA = false
-		*failedChecks = append(*failedChecks, CheckTagAtExpectedSHA)
-		glog.V(2).Infof(
-			"ai_review: check=%s result=false: tag points to %s, expected %s",
-			CheckTagAtExpectedSHA,
-			commitSHA,
-			expectedCommit,
-		)
-		return
-	}
-	glog.V(2).Infof("ai_review: check=%s result=true", CheckTagAtExpectedSHA)
-}
-
-// verifyChangelogHeaderRewritten calls FetchChangelog and checks that
-// the top heading is NOT "## Unreleased". Records the result in
-// checks and appends the failed-check name on mismatch.
-//
-// On API/transport error: records CheckChangelogHeaderRewritten as
-// failed (sets check false + appends to failedChecks) and returns
-// nil. The release trust model requires fail-closed on transient
-// errors — a network blip must not leave the check passing.
-func (s *aiReviewStep) verifyChangelogHeaderRewritten(
-	ctx context.Context,
-	owner, repo string,
-	checks *ReviewChecks,
-	failedChecks *[]string,
-) {
-	changelogBytes, err := s.client.FetchChangelog(ctx, owner, repo)
-	if err != nil {
-		checks.ChangelogHeaderRewritten = false
-		*failedChecks = append(*failedChecks, CheckChangelogHeaderRewritten)
-		glog.V(2).Infof(
-			"ai_review: check=%s result=false: GitHub API error: %v",
-			CheckChangelogHeaderRewritten,
-			err,
-		)
-		return
-	}
-	if !s.changelogHeaderRewritten(changelogBytes) {
-		checks.ChangelogHeaderRewritten = false
-		*failedChecks = append(*failedChecks, CheckChangelogHeaderRewritten)
-		glog.V(2).Infof("ai_review: check=%s result=false", CheckChangelogHeaderRewritten)
-		return
-	}
-	glog.V(2).Infof("ai_review: check=%s result=true", CheckChangelogHeaderRewritten)
-}
-
-// changelogHeaderRewritten returns true if the first ## heading in
-// content is NOT "## Unreleased" (i.e. the header has been rewritten
-// to a version). Splits on newlines and finds the first line matching
-// ^##\s+.
-func (s *aiReviewStep) changelogHeaderRewritten(content []byte) bool {
-	for _, line := range strings.Split(string(content), "\n") {
-		if changelogHeadingRE.MatchString(line) {
-			return strings.TrimSpace(line) != "## Unreleased"
-		}
-	}
-	return false
-}
-
-// commitSHAMatches returns true when one SHA is a prefix of the
-// other. This handles the short-vs-full length asymmetry between
-// the execution step's `git rev-parse --short HEAD` output (7 chars
-// by default) and GitHub's API which always returns the full
-// 40-char SHA. Both directions are accepted so the comparison is
-// correct regardless of which side is shorter. An empty string
-// never matches (avoids vacuous-true on missing data).
-func commitSHAMatches(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-	return strings.HasPrefix(a, b) || strings.HasPrefix(b, a)
 }
 
 // checkUnexpectedFileChange inspects the release commit's touched

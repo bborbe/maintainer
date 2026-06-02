@@ -288,104 +288,6 @@ var _ = Describe("AIReviewStep", func() {
 			})
 		})
 
-		Context("7b. Tag missing (404)", func() {
-			It("ErrTagNotFound → approved:false, status:failed, next_phase:human_review", func() {
-				fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
-				// Default FetchChangelog returns nil bytes →
-				// ChangelogHeaderRewritten check would also fail.
-				// Stub a passing response so this test isolates the
-				// tag-missing path.
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.0.0\n\n- feat\n"),
-					nil,
-				)
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(fakeClient.ResolveTagCommitCallCount()).To(Equal(0))
-				// FetchChangelog is still called — the new flow does
-				// NOT short-circuit after a structural check failure,
-				// it gathers the full set of failures.
-				Expect(fakeClient.FetchChangelogCallCount()).To(Equal(1))
-
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
-
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagExists).To(BeFalse())
-				// Other checks vacuously true (struct initialised all-true)
-				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
-				Expect(review.Checks.ChangelogHeaderRewritten).To(BeTrue())
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagExists))
-				Expect(review.Notes).To(ContainSubstring(pkg.CheckTagExists))
-			})
-		})
-
-		Context("7b-bis. Tag check returns transient 5xx error", func() {
-			It("non-sentinel error → step returns wrapped error; no ## Review written", func() {
-				fakeClient.TagExistsReturns("",
-					errors.New("TagExists: status 500: Server Error"))
-
-				md, err := agentlib.ParseMarkdown(context.Background(),
-					taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-				Expect(err).NotTo(HaveOccurred())
-				result, err := step.Run(context.Background(), md)
-
-				// 5xx → step returns nil result with wrapped error (controller retries)
-				Expect(result).To(BeNil())
-				Expect(err).NotTo(BeNil())
-				// Error chain contains the wrap message
-				Expect(err.Error()).To(ContainSubstring("ai_review: TagExists"))
-
-				// No ## Review section written on retry-able error path
-				review, err := agentlib.ExtractSection[pkg.ReviewOutput](
-					context.Background(), md, "## Review")
-				Expect(err).To(HaveOccurred())
-				Expect(review).To(BeNil())
-			})
-		})
-
-		Context("7c. Annotated tag SHA mismatch", func() {
-			It("tag exists but points to different commit → tag_at_expected_sha:false", func() {
-				fakeClient.TagExistsReturns("tag-sha-annotated", nil)
-				fakeClient.ResolveTagCommitReturns("different-commit-sha", nil)
-				// Default FetchChangelog returns nil bytes →
-				// ChangelogHeaderRewritten check would also fail.
-				// Stub a passing response so this test isolates the
-				// tag-SHA-mismatch path.
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.0.0\n\n- feat\n"),
-					nil,
-				)
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagExists).To(BeTrue())
-				Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-				Expect(review.Checks.ChangelogHeaderRewritten).To(BeTrue())
-			})
-		})
-
-		Context("7d. Lightweight tag SHA mismatch", func() {
-			It("lightweight tag points to different commit → tag_at_expected_sha:false", func() {
-				fakeClient.TagExistsReturns("tag-sha-lightweight", nil)
-				fakeClient.ResolveTagCommitReturns("different-commit-sha", nil)
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-			})
-		})
-
 		Context("7d-bis. Short-vs-full SHA equivalence (regression for prod-1)", func() {
 			// Bug observed in prod 2026-06-01: execution step writes
 			// Result.CommitSHA via `git rev-parse --short HEAD` (7 chars),
@@ -429,51 +331,6 @@ var _ = Describe("AIReviewStep", func() {
 				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
 			})
 
-			It(
-				"short prefix that does NOT match full → fails via tag-points-to error path",
-				func() {
-					short := "dcd3195"
-					// 40-char hex SHA (GitHub never returns anything else); the
-					// 7-char prefix `abc1234` does NOT match `dcd3195`.
-					full := "abc1234ffff37862f4e612a7b14c4e00af6b935"
-					fakeClient.TagExistsReturns("tag-sha", nil)
-					fakeClient.ResolveTagCommitReturns(full, nil)
-
-					result, md := runStep(taskWithResult(short, "v0.9.0", "released", tmpDir))
-
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-					// Assert the SHA-mismatch check failed (not a different
-					// failure mode) — the prod regression was silent execution of
-					// the WRONG path; this assertion proves the right one fired.
-					Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
-					Expect(review.Notes).To(ContainSubstring(pkg.CheckTagAtExpectedSHA))
-				},
-			)
-		})
-
-		Context("7e. CHANGELOG still has ## Unreleased as top heading", func() {
-			It("changelog_header_rewritten:false → status:failed", func() {
-				fakeClient.TagExistsReturns("abc123", nil)
-				fakeClient.ResolveTagCommitReturns("abc123", nil)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## Unreleased\n\n- new\n\n## v0.9.0\n\n- old"),
-					nil,
-				)
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagExists).To(BeTrue())
-				Expect(review.Checks.TagAtExpectedSHA).To(BeTrue())
-				Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
-			})
 		})
 
 		Context("7f. CHANGELOG top heading is a version (pass case)", func() {
@@ -562,23 +419,6 @@ var _ = Describe("AIReviewStep", func() {
 				Expect(result).To(BeNil())
 				Expect(err).NotTo(BeNil())
 				Expect(err.Error()).To(ContainSubstring("read frontmatter repo"))
-			})
-		})
-
-		Context("7k. Bearer token never in error strings", func() {
-			It("error string does not contain test-token", func() {
-				fakeClient.TagExistsReturns("",
-					errors.New("TagExists: status 500: Server Error"))
-
-				md, err := agentlib.ParseMarkdown(context.Background(),
-					taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-				Expect(err).NotTo(HaveOccurred())
-				result, err := step.Run(context.Background(), md)
-
-				// 5xx error returns nil result with wrapped error
-				Expect(result).To(BeNil())
-				Expect(err).NotTo(BeNil())
-				Expect(strings.Contains(err.Error(), "test-token")).To(BeFalse())
 			})
 		})
 
@@ -788,80 +628,6 @@ var _ = Describe("AIReviewStep", func() {
 			)
 		})
 
-		// Spec 058 prompt 3 — Req 10: structural checks toggle
-		// independently. Each test isolates ONE check failure.
-		Context("structural checks toggle independently", func() {
-			It("TagExists fails → approved=false, FailedChecks contains TagExists", func() {
-				fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
-				fakeClient.FetchChangelogReturns(
-					[]byte("## v1.0.0\n\n- feat\n"),
-					nil,
-				)
-				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
-
-				result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-				Expect(fakeOps.PushCallCount()).To(Equal(0))
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-				Expect(result.NextPhase).To(Equal("human_review"))
-
-				review := extractReview(md)
-				Expect(review.Approved).To(BeFalse())
-				Expect(review.Checks.TagExists).To(BeFalse())
-				Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagExists))
-			})
-
-			It(
-				"TagAtExpectedSHA fails → approved=false, FailedChecks contains TagAtExpectedSHA",
-				func() {
-					fakeClient.TagExistsReturns("tag-sha", nil)
-					fakeClient.ResolveTagCommitReturns("different-sha", nil)
-					fakeClient.FetchChangelogReturns(
-						[]byte("## v1.0.0\n\n- feat\n"),
-						nil,
-					)
-					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
-
-					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", tmpDir))
-
-					Expect(fakeOps.PushCallCount()).To(Equal(0))
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-					Expect(result.NextPhase).To(Equal("human_review"))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-					Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
-				},
-			)
-
-			It(
-				"ChangelogHeaderRewritten fails → approved=false, FailedChecks contains ChangelogHeaderRewritten",
-				func() {
-					fakeClient.TagExistsReturns("abc1234", nil)
-					fakeClient.ResolveTagCommitReturns("abc1234", nil)
-					fakeClient.FetchChangelogReturns(
-						[]byte("## Unreleased\n\n- new\n"),
-						nil,
-					)
-					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
-
-					result, md := runStep(taskWithResult("abc1234", "v1.0.0", "released", tmpDir))
-
-					Expect(fakeOps.PushCallCount()).To(Equal(0))
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-					Expect(result.NextPhase).To(Equal("human_review"))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
-					Expect(
-						review.FailedChecks,
-					).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
-				},
-			)
-		})
-
 		// Spec 058 prompt 3 — Req 11: LLM unavailable.
 		Context("ai-review LLM error", func() {
 			It("overall=unknown, approved=false, no push", func() {
@@ -953,49 +719,6 @@ var _ = Describe("AIReviewStep", func() {
 		// load-bearing contract).
 		Context("transport-error fail-closed", func() {
 			It(
-				"verifyTagAtExpectedCommit transport error sets TagAtExpectedSHA=false and appends CheckTagAtExpectedSHA",
-				func() {
-					fakeClient.TagExistsReturns("abc123", nil)
-					fakeClient.ResolveTagCommitReturns("", errors.New("connection reset by peer"))
-					fakeClient.FetchChangelogReturns(
-						[]byte("## v1.0.0\n\n- feat\n"),
-						nil,
-					)
-
-					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
-
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-					Expect(result.NextPhase).To(Equal("human_review"))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Checks.TagAtExpectedSHA).To(BeFalse())
-					Expect(review.FailedChecks).To(ContainElement(pkg.CheckTagAtExpectedSHA))
-				},
-			)
-
-			It(
-				"verifyChangelogHeaderRewritten transport error sets ChangelogHeaderRewritten=false and appends CheckChangelogHeaderRewritten",
-				func() {
-					fakeClient.TagExistsReturns("abc123", nil)
-					fakeClient.ResolveTagCommitReturns("abc123", nil)
-					fakeClient.FetchChangelogReturns(nil, errors.New("timeout"))
-
-					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
-
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-					Expect(result.NextPhase).To(Equal("human_review"))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Checks.ChangelogHeaderRewritten).To(BeFalse())
-					Expect(
-						review.FailedChecks,
-					).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
-				},
-			)
-
-			It(
 				"CommittedFiles error sets UnexpectedFileChange=true and appends CheckUnexpectedFileChange",
 				func() {
 					// Spec 059 prompt 4 — C1 fail-closed regression
@@ -1045,37 +768,6 @@ var _ = Describe("AIReviewStep", func() {
 					Expect(review.Approved).To(BeFalse())
 					Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
 					Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
-				},
-			)
-		})
-
-		// Spec 059 prompt 3 — Req 5b: rollupVerdict surfaces
-		// OverallUnknown when the LLM is unreachable AND a
-		// structural check fails. Both failed-check names must
-		// appear in FailedChecks.
-		Context("rollupVerdict: LLM unknown + structural failure", func() {
-			It(
-				"LLM unknown + tag missing → Overall=unknown, FailedChecks contains both TagExists and Faithfulness",
-				func() {
-					fakeClient.TagExistsReturns("", githubreview.ErrTagNotFound)
-					fakeClient.FetchChangelogReturns(
-						[]byte("## v1.0.0\n\n- feat\n"),
-						nil,
-					)
-					fakeRunner.RunReturns(nil, errors.New("claude unavailable"))
-
-					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", ""))
-
-					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-					Expect(result.NextPhase).To(Equal("human_review"))
-
-					review := extractReview(md)
-					Expect(review.Approved).To(BeFalse())
-					Expect(review.Overall).To(Equal(pkg.OverallUnknown))
-					Expect(review.FailedChecks).To(ContainElements(
-						pkg.CheckTagExists,
-						pkg.CheckFaithfulness,
-					))
 				},
 			)
 		})
