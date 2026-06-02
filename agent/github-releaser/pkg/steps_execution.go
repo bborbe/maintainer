@@ -160,6 +160,8 @@ func (s *executionStep) setupWorkdir(taskID string) string {
 // executeDirectPush runs the clone → rewrite → commit → tag → push sequence.
 // Returns (sha, tagName, nil) on success, or ( "", "", failResult) on failure
 // where failResult is the result of calling s.fail() with the appropriate error.
+//
+//nolint:gocognit,funlen // multi-stage release pipeline with branching error paths; will be naturally split by spec 058 (push moves out)
 func (s *executionStep) executeDirectPush(
 	ctx context.Context,
 	md *agentlib.Markdown,
@@ -222,9 +224,9 @@ func (s *executionStep) executeDirectPush(
 
 		var rewrittenManifest []byte
 		if strings.HasSuffix(manifestPath, "plugin.json") {
-			rewrittenManifest, err = plugin.BumpPluginJson(ctx, manifestContent, unprefixedVersion)
+			rewrittenManifest, err = plugin.BumpPluginJSON(ctx, manifestContent, unprefixedVersion)
 		} else if strings.HasSuffix(manifestPath, "marketplace.json") {
-			rewrittenManifest, err = plugin.BumpMarketplaceJson(ctx, manifestContent, unprefixedVersion)
+			rewrittenManifest, err = plugin.BumpMarketplaceJSON(ctx, manifestContent, unprefixedVersion)
 		} else {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 				errors.Errorf(ctx, "unsupported manifest type: %s", manifestPath))

@@ -1,10 +1,11 @@
 ---
-status: approved
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-06-02T16:16:20Z"
 generating: "2026-06-02T16:43:29Z"
+prompted: "2026-06-02T17:44:51Z"
 branch: dark-factory/changelog-rewrite-flow
 ---
 

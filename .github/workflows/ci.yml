@@ -18,6 +18,7 @@ jobs:
         module:
           - lib
           - agent/pr-reviewer
+          - agent/github-releaser
           - watcher/github-pr
           - watcher/github-build
           - watcher/github-release

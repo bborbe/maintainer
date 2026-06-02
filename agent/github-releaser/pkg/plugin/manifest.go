@@ -59,10 +59,10 @@ func DetectManifests(ctx context.Context, workdir string) ([]string, error) {
 	return result, nil
 }
 
-// BumpPluginJson rewrites the top-level "version" field in a plugin.json byte stream.
+// BumpPluginJSON rewrites the top-level "version" field in a plugin.json byte stream.
 // It validates the version parameter against semverRE before touching content.
 // All other bytes are preserved verbatim (same indentation, key order, trailing newline).
-func BumpPluginJson(ctx context.Context, content []byte, version string) ([]byte, error) {
+func BumpPluginJSON(ctx context.Context, content []byte, version string) ([]byte, error) {
 	if !semverRE.MatchString(version) {
 		return nil, bborbeerrors.Errorf(ctx,
 			"plugin.json bump rejected: version parameter %q is not a semver-shaped string",
@@ -113,10 +113,12 @@ func BumpPluginJson(ctx context.Context, content []byte, version string) ([]byte
 	return result, nil
 }
 
-// BumpMarketplaceJson rewrites metadata.version and every plugins[].version
+// BumpMarketplaceJSON rewrites metadata.version and every plugins[].version
 // in a marketplace.json byte stream. It validates the version parameter against
 // semverRE before touching content. All other bytes are preserved verbatim.
-func BumpMarketplaceJson(ctx context.Context, content []byte, version string) ([]byte, error) {
+//
+//nolint:gocognit,gocyclo,funlen // line-based JSON streamer with intentional scope state tracking; refactor candidate tracked separately
+func BumpMarketplaceJSON(ctx context.Context, content []byte, version string) ([]byte, error) {
 	if !semverRE.MatchString(version) {
 		return nil, bborbeerrors.Errorf(ctx,
 			"marketplace.json bump rejected: version parameter %q is not a semver-shaped string",
@@ -309,6 +311,8 @@ func isVersionKeyLine(line string) bool {
 
 // rewriteVersionValue replaces the value after ": " on the given line with the quoted version.
 // The line must be a "version" key line. Returns an error if the existing value is not a quoted semver.
+//
+//nolint:gocognit,funlen // single-line JSON value rewriter with embedded whitespace/quote state; refactor candidate tracked separately
 func rewriteVersionValue(
 	ctx context.Context,
 	line string,
