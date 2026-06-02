@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	bborbeerrors "github.com/bborbe/errors"
 )
@@ -251,12 +252,43 @@ func trimTrailingWhitespace(s string) string {
 // Returns a wrapped bborbe/errors error if ## Unreleased is not present.
 // The ctx parameter is used only for error wrapping consistency.
 // No IO, deterministic. Safe for concurrent use.
+//
+// Thin wrapper around ExtractSectionBody with the heading pinned to
+// "Unreleased". Both functions share the unexported scan loop.
 func ExtractUnreleasedBody(
 	ctx context.Context,
 	content []byte,
 ) (string, error) {
+	return ExtractSectionBody(ctx, content, "Unreleased")
+}
+
+// ExtractSectionBody returns the verbatim body of the first section
+// whose ## heading text matches heading (e.g. "Unreleased" or
+// "v1.2.8"): every line after that heading up to (but excluding) the
+// next `## ` heading or EOF. Line endings are normalized to '\n' between
+// emitted lines. Leading and trailing blank lines are NOT trimmed —
+// the returned string is the raw slice of the section.
+//
+// Returns a wrapped bborbe/errors error if the requested heading is
+// not present. The ctx parameter is used only for error wrapping
+// consistency. No IO, deterministic. Safe for concurrent use.
+//
+// heading is matched against the heading TEXT (the part after `## `),
+// not the full markdown line — callers can pass "Unreleased" or
+// "v1.2.8" interchangeably. On absence the error message uses the
+// literal phrase "%s header not found" so callers (and tests) can
+// match on it regardless of capitalization.
+func ExtractSectionBody(
+	ctx context.Context,
+	content []byte,
+	heading string,
+) (string, error) {
 	if len(content) == 0 {
-		return "", bborbeerrors.New(ctx, "extract unreleased body: unreleased header not found")
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower(heading),
+		)
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(content))
@@ -267,7 +299,7 @@ func ExtractUnreleasedBody(
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !found {
-			if isHeading(line) && parseHeading(line) == "Unreleased" {
+			if isHeading(line) && parseHeading(line) == heading {
 				found = true
 			}
 			continue
@@ -282,7 +314,11 @@ func ExtractUnreleasedBody(
 		return "", bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
 	}
 	if !found {
-		return "", bborbeerrors.New(ctx, "extract unreleased body: unreleased header not found")
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower(heading),
+		)
 	}
 	return out.String(), nil
 }

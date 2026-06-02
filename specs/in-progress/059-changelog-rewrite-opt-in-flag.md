@@ -1,8 +1,12 @@
 ---
+status: prompted
 tags:
-  - dark-factory
-  - spec
-status: draft
+    - dark-factory
+    - spec
+approved: "2026-06-02T18:18:03Z"
+generating: "2026-06-02T18:18:04Z"
+prompted: "2026-06-02T18:34:36Z"
+branch: dark-factory/changelog-rewrite-opt-in-flag
 ---
 
 ## Summary
@@ -31,6 +35,7 @@ After this work, every repo currently being released by github-releaser continue
 - Do NOT short-circuit the rewrite-flow when the flag is true but `## Unreleased` is already clean — planning still emits `rewrite_needed=false` (the LLM judges); this spec only gates whether the LLM is asked at all.
 - Do NOT change spec 058's behavior on flag-true repos.
 - Do NOT migrate any existing repo's `.maintainer.yaml` to set the flag — canary opt-in (`maintainer`, `go-skeleton`) is a per-repo change shipped outside this spec.
+- **Flag deprecation timeline.** The `release.changelogRewrite` flag is intended as a *permanent* per-repo opt-in, not a rollout-only knob. Repos that never want rewrite (e.g. ones with hand-curated changelogs) keep the flag absent or `false` indefinitely. Removal of the flag is explicitly out of scope and would require a separate spec with fleet migration plan. Rationale: even after fleet rollout completes, individual repos may want to disable rewrite for cause (LLM keeps mangling a stylistic choice that the repo owner prefers); a permanent opt-in respects that.
 
 ## Desired Behavior
 
@@ -64,7 +69,7 @@ After this work, every repo currently being released by github-releaser continue
 | `release.changelogRewrite: 1` (number, not boolean) | Same as above: fail-closed with `error_category=invalid_config` | Same as above | Reversible | Human fixes value to `true` or `false` |
 | `.maintainer.yaml` itself is malformed yaml (unparseable) | Existing yaml-parse error path fires — same behavior as today for `autoRelease` parse failures; no new behavior from this spec | Existing yaml-parse error surfaces on task page | Reversible | Human fixes yaml syntax (pre-existing recovery path) |
 | Ambient `master` `.maintainer.yaml` flips the flag mid-release | No effect on the in-flight release: the value at the cloned ref's tip is what binds | The in-flight task page's planning step shows the value at clone time | N/A — read-once semantics | None; next release picks up the new value |
-| Two concurrent releases from same repo, one branch has `true` and one has `false` | Each release reads the flag at its own cloned ref's tip; each behaves per its own ref's value | Each task page records its own flag value independently | N/A | None |
+| Two concurrent releases from same repo, one branch has `true` and one has `false` | Each release reads the flag at its own cloned ref's tip; each behaves per its own ref's value | Each task page records its own flag value independently — see AC #14 for the per-task-page evidence requirement | N/A | Operator inspects each task page's recorded flag value; the value at that release's cloned-ref tip is canonical; no cross-task reconciliation needed |
 
 ## Security / Abuse Cases
 
@@ -85,9 +90,13 @@ After this work, every repo currently being released by github-releaser continue
 - [ ] Planning short-circuit, flag=false: against a fixture `## Unreleased` containing a raw `git log` dump (the same noisy fixture spec 058's planning suite uses), planning emits `## Plan` JSON with `rewrite_needed=false` and no `rewritten_unreleased` field, and the planning prompt is NOT sent to the LLM (or the LLM call is verifiably skipped) — evidence: Ginkgo integration spec assertion on the parsed `## Plan` JSON plus an assertion that the LLM client mock recorded zero rewrite-prompt calls.
 - [ ] Planning rewrite enabled, flag=true, noisy `## Unreleased`: planning emits `## Plan` JSON with `rewrite_needed=true` and a `rewritten_unreleased` field — evidence: Ginkgo integration spec assertion on parsed `## Plan` JSON.
 - [ ] Planning rewrite enabled, flag=true, already-clean `## Unreleased`: planning emits `## Plan` JSON with `rewrite_needed=false` and no `rewritten_unreleased` field (the LLM judged the content clean) — evidence: Ginkgo integration spec assertion.
-- [ ] Invalid-value fail-closed: a release fired against a repo whose `.maintainer.yaml` has `release.changelogRewrite: "yes"` ends in `human_review` at the planning step, the task page contains an `## Error` block naming the field and the invalid value, no commit lands on the local clone, no tag is created locally, and `git ls-remote` against the upstream shows no new tag and no branch tip advance — evidence: task phase string == `human_review`, `## Error` block text assertion, `git rev-list --count HEAD ^origin/master` output == `0`, `git tag -l vX.Y.Z | wc -l` output == `0`, `git ls-remote` assertion.
+- [ ] Invalid-value fail-closed (phase): a release fired against a repo whose `.maintainer.yaml` has `release.changelogRewrite: "yes"` ends in `human_review` at the planning step — evidence: task phase string == `human_review`.
+- [ ] Invalid-value fail-closed (error block): same scenario, the task page contains a `## Validation` (or named error) block with `error_category=invalid_config` naming the field and the invalid value — evidence: task-page text assertion that the block exists, contains the literal token `error_category=invalid_config`, and names the field `release.changelogRewrite` and the invalid value `"yes"`.
+- [ ] Invalid-value fail-closed (no local commit): same scenario, no commit lands on the local clone — evidence: `git rev-list --count HEAD ^origin/master` output == `0`.
+- [ ] Invalid-value fail-closed (no local tag): same scenario, no tag is created locally — evidence: `git tag -l vX.Y.Z | wc -l` output == `0`.
+- [ ] Invalid-value fail-closed (no remote tag): same scenario, `git ls-remote --tags origin vX.Y.Z` returns empty output — evidence: command stdout is the empty string.
 - [ ] Missing-yaml clean run: a release fired against a repo with no `.maintainer.yaml` produces a clean planning step (no `## Error` block) and execution performs header-rename only (single commit modifies only `CHANGELOG.md`, no body changes) — evidence: task page assertion (no `## Error` block) plus `git show HEAD -- CHANGELOG.md` diff assertion showing only the `## Unreleased` → `## vX.Y.Z` header rename.
-- [ ] Task-page audit trail: the planning step's recorded output on the task page includes the resolved `release.changelogRewrite` value (`true` / `false`) used for the run — evidence: Ginkgo spec parses the planning step's task-page block and asserts the flag value field is present and matches the fixture's `.maintainer.yaml`.
+- [ ] Task-page audit trail: the planning step's recorded output on the task page includes the resolved `release.changelogRewrite` value (`true` / `false`) used for the run, and for each release the recorded value matches the value at the cloned ref's tip — concurrent releases from the same repo at different SHAs may legitimately record different values — evidence: Ginkgo spec parses the planning step's task-page block and asserts the flag value field is present and matches the `.maintainer.yaml` at the cloned ref's tip (per release task page, independently asserted).
 - [ ] Flag-read-once semantics: an integration spec mutates `.maintainer.yaml` on the source `master` ref AFTER the release has cloned the working ref; the in-flight release's planning step still records the value from the cloned ref's tip — evidence: Ginkgo integration spec assertion on the task page's recorded flag value vs. the post-mutation file content.
 - [ ] `make precommit` exits 0 in `agent/github-releaser` — evidence: exit code 0.
 

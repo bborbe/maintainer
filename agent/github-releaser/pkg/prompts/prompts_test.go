@@ -217,3 +217,90 @@ var _ = DescribeTable("ParseRewriteVerdict",
 		"",
 	),
 )
+
+var _ = Describe("ChangelogFaithfulnessPrompt", func() {
+	It("returns non-empty string", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).NotTo(BeEmpty())
+	})
+
+	It("mentions semantic faithfulness", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring("semantic faithfulness"))
+	})
+
+	It("describes silent-drop", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring("silent-drop"))
+	})
+
+	It("describes hallucinated", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring("hallucinated"))
+	})
+
+	It("contains per_entry schema", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring(`"per_entry"`))
+	})
+
+	It("contains extras schema", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring(`"extras"`))
+	})
+
+	It("contains overall schema", func() {
+		p := prompts.ChangelogFaithfulnessPrompt()
+		Expect(p).To(ContainSubstring(`"overall"`))
+	})
+})
+
+var _ = DescribeTable("ParseFaithfulnessResponse",
+	func(input string, wantOverall string, wantPerEntryLen, wantExtrasLen int, wantErrSubstr string) {
+		resp, err := prompts.ParseFaithfulnessResponse(context.Background(), input)
+		if wantErrSubstr == "" {
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.Overall).To(Equal(wantOverall))
+			Expect(resp.PerEntry).To(HaveLen(wantPerEntryLen))
+			Expect(resp.Extras).To(HaveLen(wantExtrasLen))
+		} else {
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("parse faithfulness response"))
+			Expect(err.Error()).To(ContainSubstring(wantErrSubstr))
+			Expect(resp).To(Equal(prompts.FaithfulnessLLMResponse{}))
+		}
+	},
+	Entry(
+		"plain JSON all-present → overall=pass",
+		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok"}],"extras":[],"overall":"pass"}`,
+		"pass", 1, 0, "",
+	),
+	Entry(
+		"fenced JSON with one silent-drop → overall=fail",
+		"Here is the verdict:\n\n```json\n"+
+			`{"per_entry":[{"entry":"- fix: y","verdict":"silent-drop","note":"missing"}],"extras":[],"overall":"fail"}`+"\n```\n",
+		"fail", 1, 0, "",
+	),
+	Entry(
+		"plain JSON with one extras entry → overall=fail",
+		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok"}],"extras":[{"entry":"- chore: z","verdict":"hallucinated","note":"added"}],"overall":"fail"}`,
+		"fail", 1, 1, "",
+	),
+	Entry("bad per_entry verdict errors",
+		`{"per_entry":[{"entry":"- feat: x","verdict":"maybe","note":"?"}],"extras":[],"overall":"pass"}`,
+		"", 0, 0, "per_entry[0] invalid verdict"),
+	Entry("bad extras verdict errors",
+		`{"per_entry":[],"extras":[{"entry":"- chore: z","verdict":"fictional","note":"?"}],"overall":"pass"}`,
+		"", 0, 0, "extras[0] invalid verdict"),
+	Entry("missing overall errors",
+		`{"per_entry":[],"extras":[],"overall":""}`,
+		"", 0, 0, "invalid overall value"),
+	Entry("empty input errors",
+		``,
+		"", 0, 0, "no JSON found"),
+	Entry(
+		"plain JSON with extra fields tolerated",
+		`{"per_entry":[{"entry":"- feat: x","verdict":"present","note":"ok","extra":"junk"}],"extras":[],"overall":"pass","confidence":0.9}`,
+		"pass", 1, 0, "",
+	),
+)

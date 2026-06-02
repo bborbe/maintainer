@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [058-changelog-rewrite-flow]
+summary: Extended ai-review with semantic faithfulness LLM check, unexpected-file-change diff check, push gating, and workdir cleanup ownership; added 11 new Ginkgo specs; all tests + lint + gofmt + vet pass
+container: maintainer-changelog-rewrite-exec-229-spec-058-ai-review-faithfulness-and-push-gate
+dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T16:30:08Z"
 queued: "2026-06-02T16:43:50Z"
+started: "2026-06-02T18:10:24Z"
+completed: "2026-06-02T18:37:27Z"
 ---
 
 <summary>

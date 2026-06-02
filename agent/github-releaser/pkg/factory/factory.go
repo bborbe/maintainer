@@ -92,6 +92,11 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
+// aiReviewTools is the Claude allowed-tools set for the ai-review phase.
+// Like the planning phase, ai-review is read-only verdict classification —
+// the LLM needs no tools. Mirrors planningTools for consistency.
+var aiReviewTools = claudelib.AllowedTools{}
+
 // CreateAgent assembles the planning + execution + ai_review agent.
 //
 // The three phases advance in order: planning writes ## Plan(outcome=ready),
@@ -114,7 +119,22 @@ func CreateAgent(
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
 
 	reviewClient := githubreview.NewHTTPClient(ghToken)
-	reviewStep := releaserpkg.NewAIReviewStep(reviewClient, ghToken)
+	// The ai-review LLM is read-only — same tool policy as planning.
+	aiReviewRunner := CreateClaudeRunner(
+		claudeConfigDir,
+		agentDir,
+		model,
+		env,
+		aiReviewTools,
+	)
+	// Reuse the same GitOps seam as the execution step so the push of
+	// the local commit + tag goes out via the same authenticated path.
+	reviewStep := releaserpkg.NewAIReviewStep(
+		reviewClient,
+		aiReviewRunner,
+		executionOps,
+		ghToken,
+	)
 
 	return agentlib.NewAgent(
 		agentlib.NewPhase(domain.TaskPhasePlanning, planningStep),

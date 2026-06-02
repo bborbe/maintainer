@@ -217,6 +217,146 @@ func validateRewriteVerdict(
 	return v, nil
 }
 
+//go:embed changelog_faithfulness.md
+var changelogFaithfulnessPrompt string
+
+// ChangelogFaithfulnessPrompt returns the embedded prompt that audits a
+// CHANGELOG rewrite for semantic faithfulness. The caller concatenates
+// the captured original body and the final body onto the returned string
+// before invoking Claude.
+func ChangelogFaithfulnessPrompt() string {
+	return changelogFaithfulnessPrompt
+}
+
+// FaithfulnessEntry is one row of the faithfulness verdict.
+//
+//   - In per_entry the verdict is "present" or "silent-drop".
+//   - In extras the verdict is always "hallucinated".
+//
+// The "unknown" verdict lives only at the overall level (LLM
+// unavailability) — per_entry verdicts never carry it. See
+// FaithfulnessLLMResponse.Overall for the rolled-up state.
+type FaithfulnessEntry struct {
+	Entry   string `json:"entry"`
+	Verdict string `json:"verdict"`
+	Note    string `json:"note,omitempty"`
+}
+
+// FaithfulnessLLMResponse is the typed shape of Claude's JSON response
+// to the changelog-faithfulness prompt.
+//
+//   - per_entry: one object per original user-observable change.
+//   - extras:   one object per final-body entry judged hallucinated.
+//   - overall:  "pass" when every per_entry.verdict == "present" AND
+//     extras is empty; otherwise "fail".
+type FaithfulnessLLMResponse struct {
+	PerEntry []FaithfulnessEntry `json:"per_entry"`
+	Extras   []FaithfulnessEntry `json:"extras"`
+	Overall  string              `json:"overall"`
+}
+
+// ParseFaithfulnessResponse extracts a FaithfulnessLLMResponse from
+// Claude's raw output. Uses the same three-strategy extraction as
+// ParseBumpVerdict / ParseRewriteVerdict (plain JSON, fenced ```json
+// block, last balanced {...} block). After unmarshal:
+//
+//   - overall MUST be one of {"pass", "fail"}.
+//   - per_entry[i].verdict MUST be one of {"present", "silent-drop"}.
+//   - extras[i].verdict MUST be "hallucinated".
+//
+// Errors are wrapped via github.com/bborbe/errors and always contain
+// the literal substring "parse faithfulness response" so callers can
+// grep parser failures apart from clone/git failures.
+func ParseFaithfulnessResponse(
+	ctx context.Context,
+	claudeOutput string,
+) (FaithfulnessLLMResponse, error) {
+	trimmed := strings.TrimSpace(claudeOutput)
+
+	var v FaithfulnessLLMResponse
+
+	// Strategy 1: Parse the trimmed input as a JSON object directly.
+	if err := json.Unmarshal([]byte(trimmed), &v); err == nil {
+		return validateFaithfulness(ctx, v)
+	}
+
+	// Strategy 2: Strip ```json fences.
+	stripped := strings.TrimSpace(strings.TrimSuffix(
+		strings.TrimPrefix(strings.TrimPrefix(trimmed, "```json"), "```"),
+		"```",
+	))
+	if err := json.Unmarshal([]byte(stripped), &v); err == nil {
+		return validateFaithfulness(ctx, v)
+	}
+
+	// Strategy 3: Find the last balanced {...} block in the input.
+	block, ok := lastJSONBlock(trimmed)
+	if !ok {
+		return FaithfulnessLLMResponse{}, errors.Errorf(
+			ctx,
+			"parse faithfulness response: no JSON found",
+		)
+	}
+	if err := json.Unmarshal([]byte(block), &v); err != nil {
+		return FaithfulnessLLMResponse{}, errors.Wrapf(
+			ctx,
+			err,
+			"parse faithfulness response: %s",
+			block,
+		)
+	}
+	return validateFaithfulness(ctx, v)
+}
+
+// validateFaithfulness enforces the field-level invariants for the
+// faithfulness LLM response.
+//
+//   - overall must be in {"pass", "fail"}.
+//   - per_entry[i].verdict must be in {"present", "silent-drop"}.
+//   - extras[i].verdict must be "hallucinated".
+func validateFaithfulness(
+	ctx context.Context,
+	v FaithfulnessLLMResponse,
+) (FaithfulnessLLMResponse, error) {
+	switch v.Overall {
+	case "pass", "fail":
+		// ok
+	default:
+		return FaithfulnessLLMResponse{}, errors.Errorf(
+			ctx,
+			"parse faithfulness response: invalid overall value %q (want pass|fail)",
+			v.Overall,
+		)
+	}
+	for i, e := range v.PerEntry {
+		switch e.Verdict {
+		case "present", "silent-drop":
+			// ok
+		default:
+			return FaithfulnessLLMResponse{}, errors.Errorf(
+				ctx,
+				"parse faithfulness response: per_entry[%d] invalid verdict %q (want present|silent-drop)",
+				i,
+				e.Verdict,
+			)
+		}
+	}
+	for i, e := range v.Extras {
+		switch e.Verdict {
+		case "hallucinated":
+			// ok
+		default:
+			return FaithfulnessLLMResponse{}, errors.Errorf(
+				ctx,
+				"parse faithfulness response: extras[%d] invalid verdict %q (want hallucinated)",
+				i,
+				e.Verdict,
+			)
+		}
+	}
+	return v, nil
+}
+
 // lastJSONBlock returns the last balanced {...} substring in s, or
 // "", false if none exists. Mirrors agent/pr-reviewer/pkg/steps_review.go
 // lastJSONBlock — kept private to this package to avoid an unwanted
