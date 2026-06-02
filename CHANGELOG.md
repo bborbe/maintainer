@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.31.0
 
 - feat(agent/github-releaser): add `pkg/maintainerconfig` package — fetches `.maintainer.yaml` bytes from a target GitHub repo at a ref via the contents API, mirrors the `githubchangelog.Fetcher` shape, returns the sentinel `ErrFileNotFound` (declared via `stderrors.New`, project convention) on HTTP 404 so callers can treat the absent-file case as a default-valued config. Re-exports `lib/maintainerconfig.{Config,ReleaseConfig,PrReviewerConfig,Parse}` so the planning step needs only one import. New counterfeiter mock `mocks.MaintainerConfigFetcher`; Ginkgo coverage for happy path, 404 → `ErrFileNotFound`, 500 → wrapped non-2xx error, empty owner/repo/ref, malformed JSON, unsupported encoding, bad base64, and the round-trip fetch → `Parse` integration seam
 - feat(lib): add `release.changelogRewrite` boolean field to `ReleaseConfig` in `lib/maintainerconfig` — spec-059 per-repo opt-in for the 058 LLM rewrite pipeline. Default false (omit the field, set false explicitly, or omit the `release:` block — all equivalent). Non-boolean values fail at parse time via the type system. `Parse(ctx, []byte{})` continues to return `(MaintainerConfig{}, nil)`. Ginkgo table coverage for true/false/missing-field/missing-block/empty-bytes/both-true and `It` cases for the fail-closed path on string/number values
