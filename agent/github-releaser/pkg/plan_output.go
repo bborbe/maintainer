@@ -8,9 +8,10 @@ package pkg
 // planning step writes for every release task. Round-trips with
 // agentlib.MarshalSectionTyped + agentlib.ExtractSection[PlanOutput].
 //
-// Two shapes are valid:
+// Three shapes are valid:
 //   - Outcome="ready"        — planning succeeded; Bump/NextVersion populated
 //   - Outcome="needs_input"  — precondition failure; Reason + PreconditionFailed populated
+//   - Outcome="failed"       — invalid config; ErrorCategory + InvalidField + InvalidValue populated
 //
 // No `Details map[string]any`: concrete fields only. Future fields require
 // a spec amendment.
@@ -46,12 +47,57 @@ type PlanOutput struct {
 	// RewriteNeeded is true. Execution replaces the ## Unreleased body with
 	// this text before renaming the header.
 	RewrittenUnreleased string `json:"rewritten_unreleased,omitempty"`
+
+	// ChangelogRewrite records the spec-059 per-repo opt-in flag value
+	// resolved at planning entry. *bool (not bool) so the JSON distinguishes
+	// "not resolved" from "resolved false" — the planning step ALWAYS sets
+	// this field on the happy path (no-rewrite-needed AND rewrite-needed
+	// outcomes), so a reader can audit which mode the run took. Omitted
+	// from JSON only on the failure path (outcome="failed" carries the
+	// error info instead).
+	//
+	// JSON encoding contract (load-bearing for spec AC #14 and prompt-2
+	// requirement 5a/6 evidence):
+	//   - happy path, flag false → field SET to &false → JSON emits
+	//     literal substring `"changelog_rewrite":false`
+	//   - happy path, flag true  → field SET to &true  → JSON emits
+	//     literal substring `"changelog_rewrite":true`
+	//   - failure path           → field LEFT nil     → omitempty omits
+	//     the token entirely; `changelog_rewrite` is absent from the JSON
+	ChangelogRewrite *bool `json:"changelog_rewrite,omitempty"`
+
+	// ErrorCategory names the failure category on outcome="failed". For
+	// spec 059 the only value is "invalid_config" (release.changelogRewrite
+	// is non-boolean). Future failure categories may extend this set.
+	ErrorCategory string `json:"error_category,omitempty"`
+
+	// InvalidField names the .maintainer.yaml field that failed validation.
+	// Populated on outcome="failed" only; today always "release.changelogRewrite".
+	InvalidField string `json:"invalid_field,omitempty"`
+
+	// InvalidValue captures the literal raw value that failed validation
+	// (the YAML-decoded string/number/etc., as it appeared in the file).
+	// Populated on outcome="failed" only.
+	InvalidValue string `json:"invalid_value,omitempty"`
 }
 
 // Outcome values for PlanOutput.Outcome.
 const (
 	PlanOutcomeReady      = "ready"
 	PlanOutcomeNeedsInput = "needs_input"
+	// PlanOutcomeFailed signals a hard planning-time failure that
+	// ends the task in human_review (Status=AgentStatusFailed,
+	// NextPhase=human_review). Distinct from needs_input, which
+	// keeps the task in_progress and waits for operator re-delegation.
+	// See spec 059 § Desired Behavior 5 and § AC 11/12.
+	PlanOutcomeFailed = "failed"
+)
+
+const (
+	// ErrorCategoryInvalidConfig is the only valid value for
+	// PlanOutput.ErrorCategory today. spec 059 § Failure Modes:
+	// non-boolean release.changelogRewrite.
+	ErrorCategoryInvalidConfig = "invalid_config"
 )
 
 // PreconditionFailed values. Keep in sync with spec 047 Desired Behavior 5.

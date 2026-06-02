@@ -6,6 +6,7 @@ package pkg
 
 import (
 	"context"
+	stderrors "errors"
 	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/changelog"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/prompts"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/semver"
 )
@@ -39,17 +41,27 @@ var requiredFrontmatterFields = []string{
 }
 
 // planningStep implements agentlib.Step. Fields are constructor-injected;
-// no global state, no IO outside the runner and fetcher.
+// no global state, no IO outside the runner and fetchers.
 type planningStep struct {
-	runner  claudelib.ClaudeRunner
-	fetcher githubchangelog.Fetcher
+	runner           claudelib.ClaudeRunner
+	fetcher          githubchangelog.Fetcher
+	maintainerConfig maintainerconfig.Fetcher
 }
 
-// NewPlanningStep wires the planning step with its two IO seams: the
-// Claude runner (LLM verdict) and the CHANGELOG fetcher (GitHub contents
-// API).
-func NewPlanningStep(runner claudelib.ClaudeRunner, fetcher githubchangelog.Fetcher) agentlib.Step {
-	return &planningStep{runner: runner, fetcher: fetcher}
+// NewPlanningStep wires the planning step with its three IO seams:
+//   - the Claude runner (LLM verdict for bump + rewrite)
+//   - the CHANGELOG.md fetcher (GitHub contents API)
+//   - the .maintainer.yaml fetcher (GitHub contents API, spec 059)
+func NewPlanningStep(
+	runner claudelib.ClaudeRunner,
+	fetcher githubchangelog.Fetcher,
+	maintainerConfig maintainerconfig.Fetcher,
+) agentlib.Step {
+	return &planningStep{
+		runner:           runner,
+		fetcher:          fetcher,
+		maintainerConfig: maintainerConfig,
+	}
 }
 
 // Name implements agentlib.Step.
@@ -62,13 +74,19 @@ func (s *planningStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool,
 	return true, nil
 }
 
-// Run executes the planning pipeline. Six outcomes:
+// Run executes the planning pipeline. Eight outcomes:
 //  1. Missing frontmatter        → escalate (NeedsInput, ## Plan needs_input, clear assignee)
 //  2. CHANGELOG fetch fails      → Failed (controller retries)
 //  3. P1/P2 validation fails     → escalate
 //  4. Claude verdict unparseable → Failed (controller retries)
 //  5. semver.BumpVersion fails   → escalate
-//  6. Happy path                 → Done, NextPhase = execution, ## Plan ready
+//  6. Resolve release.changelogRewrite from .maintainer.yaml at the ref's tip
+//     - ErrFileNotFound or any fetch transport error → treat as false, log V(2), continue
+//     - Parse error containing "unmarshal" → fail-closed (outcome=failed, error_category=invalid_config)
+//     - Resolved true  → run rewrite LLM call (existing 058 path)
+//     - Resolved false → SKIP rewrite LLM call, set plan.ChangelogRewrite=ptr(false), plan.RewriteNeeded=false
+//  7. Rewrite LLM call (only if step 6 returned true)
+//  8. Happy path                 → Done, NextPhase = execution, ## Plan ready
 func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
 	missingField, currentVersion, repo, cloneURL, ref := s.readRequired(md)
 	if missingField != "" {
@@ -125,7 +143,59 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		}, nil
 	}
 
-	return s.runClassification(ctx, md, currentVersion, bullets, prefixStyle, originalBody)
+	changelogRewrite, err := s.resolveChangelogRewrite(ctx, owner, name, ref)
+	if err != nil {
+		// Fail-closed: .maintainer.yaml is malformed OR contains a
+		// non-boolean release.changelogRewrite. Write a ## Plan(failed)
+		// block, set the controller to human_review, do NOT advance.
+		return s.failInvalidConfig(ctx, md, currentVersion, "release.changelogRewrite", err)
+	}
+	return s.runClassification(
+		ctx, md, currentVersion, bullets, prefixStyle, originalBody, changelogRewrite,
+	)
+}
+
+// resolveChangelogRewrite fetches .maintainer.yaml at the ref's tip and
+// returns the parsed release.changelogRewrite value, with these semantics
+// (per spec 059 § Desired Behavior and § Failure Modes):
+//
+//   - File absent (ErrFileNotFound)        → (false, nil)  // default, no error
+//   - File present, malformed YAML         → (false, wrappedErr) // fail-closed; caller maps to human_review
+//   - File present, non-boolean value      → (false, wrappedErr) // fail-closed; same
+//   - Any other fetch error (5xx, network) → (false, nil)  // treated as default; see Failure Modes row 9
+//
+// The "any other fetch error → default" rule is the spec's Failure Modes
+// "Repo has no .maintainer.yaml" + spec § Desired Behavior 6: missing-yaml
+// is treated as `false` cleanly. The spec does NOT extend fail-closed to
+// transport errors (those are usually transient GitHub flakes; the
+// operator can re-fire). Only the parse / non-boolean boundary is
+// fail-closed (a config typo on a high-trust field, per spec § Security).
+func (s *planningStep) resolveChangelogRewrite(
+	ctx context.Context,
+	owner, name, ref string,
+) (bool, error) {
+	bytes, err := s.maintainerConfig.Fetch(ctx, owner, name, ref)
+	if err != nil {
+		if stderrors.Is(err, maintainerconfig.ErrFileNotFound) {
+			glog.V(2).Infof(
+				"planning: .maintainer.yaml absent at ref=%s — using default changelogRewrite=false",
+				ref,
+			)
+			return false, nil
+		}
+		// Transport / non-404 error: log and default to false. NOT a
+		// fail-closed condition (see spec 059 § Failure Modes).
+		glog.Warningf("planning: .maintainer.yaml fetch failed (treated as default): %v", err)
+		return false, nil
+	}
+	cfg, err := maintainerconfig.Parse(ctx, bytes)
+	if err != nil {
+		// YAML parse error or non-boolean value: fail-closed. Surface the
+		// original error so the caller can include it in the human_review
+		// task-page block.
+		return false, errors.Wrapf(ctx, err, "parse .maintainer.yaml")
+	}
+	return cfg.Release.ChangelogRewrite, nil
 }
 
 func (s *planningStep) runClassification(
@@ -135,6 +205,7 @@ func (s *planningStep) runClassification(
 	bullets []string,
 	prefixStyle string,
 	originalBody string,
+	changelogRewrite bool,
 ) (*agentlib.Result, error) {
 	userMsg := strings.Join(bullets, "\n")
 	fullPrompt := prompts.BumpClassificationPrompt() + "\n\n## Bullets to classify\n\n" + userMsg
@@ -167,7 +238,7 @@ func (s *planningStep) runClassification(
 		})
 	}
 
-	rewriteVerdict, err := s.runRewrite(ctx, originalBody)
+	rewriteVerdict, err := s.resolveRewriteVerdict(ctx, originalBody, changelogRewrite)
 	if err != nil {
 		glog.V(2).Infof("planning: rewrite failed: %v", err)
 		return &agentlib.Result{
@@ -176,7 +247,48 @@ func (s *planningStep) runClassification(
 		}, nil
 	}
 
+	return s.publishPlan(
+		ctx, md, currentVersion, prefixStyle, bullets, originalBody,
+		verdict, nextNumeric, rewriteVerdict, changelogRewrite,
+	)
+}
+
+// resolveRewriteVerdict returns the rewrite verdict for the current
+// Unreleased body, gated by the spec-059 changelogRewrite flag. When the
+// flag is false the planning LLM is NOT invoked; the verdict is hard-coded
+// to RewriteNeeded=false with a tracing reasoning string. When the flag
+// is true the existing 058 rewrite pipeline runs unchanged.
+func (s *planningStep) resolveRewriteVerdict(
+	ctx context.Context,
+	originalBody string,
+	changelogRewrite bool,
+) (prompts.RewriteVerdict, error) {
+	if !changelogRewrite {
+		glog.V(2).Infof("planning: changelogRewrite=false — skipping rewrite LLM call")
+		return prompts.RewriteVerdict{
+			RewriteNeeded:       false,
+			RewrittenUnreleased: "",
+			Reasoning:           "changelogRewrite flag is false (default or explicit) — pre-058 header-rename-only behavior",
+		}, nil
+	}
+	return s.runRewrite(ctx, originalBody)
+}
+
+// publishPlan assembles the PlanOutput, marshals the ## Plan section,
+// replaces it in the markdown, and returns the Done result.
+func (s *planningStep) publishPlan(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	currentVersion, prefixStyle string,
+	bullets []string,
+	originalBody string,
+	verdict prompts.BumpVerdict,
+	nextNumeric string,
+	rewriteVerdict prompts.RewriteVerdict,
+	changelogRewrite bool,
+) (*agentlib.Result, error) {
 	header := "## " + prefixStyle + nextNumeric
+	crValue := changelogRewrite
 	output := PlanOutput{
 		Outcome:             PlanOutcomeReady,
 		Bump:                verdict.Bump,
@@ -189,6 +301,7 @@ func (s *planningStep) runClassification(
 		OriginalUnreleased:  originalBody,
 		RewriteNeeded:       rewriteVerdict.RewriteNeeded,
 		RewrittenUnreleased: rewriteVerdict.RewrittenUnreleased,
+		ChangelogRewrite:    &crValue, // pointer so JSON distinguishes resolved-false from missing
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {
@@ -275,6 +388,60 @@ func (s *planningStep) escalate(
 		Status:  agentlib.AgentStatusNeedsInput,
 		Message: e.reason,
 	}, nil
+}
+
+// failInvalidConfig writes a ## Plan(outcome=failed) section naming
+// the invalid field and the wrapped error, and returns
+// Status=AgentStatusFailed + NextPhase=human_review. The framework's
+// agent runner treats that combination as a terminal human_review
+// escalation (no retry, no advance). The task page is the audit
+// surface — a reader can grep for `error_category=invalid_config`
+// on the `## Plan` block to find the failure.
+func (s *planningStep) failInvalidConfig(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	currentVersion, field string,
+	cause error,
+) (*agentlib.Result, error) {
+	msg := ""
+	if cause != nil {
+		msg = cause.Error()
+	}
+	output := PlanOutput{
+		Outcome:        PlanOutcomeFailed,
+		ErrorCategory:  ErrorCategoryInvalidConfig,
+		InvalidField:   field,
+		InvalidValue:   extractInvalidValue(msg),
+		CurrentVersion: currentVersion,
+	}
+	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "marshal ## Plan section (failed)")
+	}
+	md.ReplaceSection(section)
+	glog.V(2).Infof("planning: invalid config: field=%s err=%v", field, cause)
+	return &agentlib.Result{
+		Status:    agentlib.AgentStatusFailed,
+		NextPhase: string(domain.TaskPhaseHumanReview),
+		Message:   "invalid .maintainer.yaml: " + field + ": " + msg,
+	}, nil
+}
+
+// extractInvalidValue pulls the raw bad value out of the wrapped
+// parse error message so it lands verbatim in the task-page block.
+// The yaml.v3 error format is e.g.
+//
+//	"yaml: unmarshal errors: line 2: cannot unmarshal !!str `yes` into bool"
+//
+// We surface the offending token; on parse-format drift, fall back
+// to the full error string so the field is never blank.
+func extractInvalidValue(msg string) string {
+	if i := strings.Index(msg, "`"); i >= 0 {
+		if j := strings.Index(msg[i+1:], "`"); j >= 0 {
+			return msg[i+1 : i+1+j]
+		}
+	}
+	return msg
 }
 
 // readRequired pulls the five required frontmatter fields. Returns the

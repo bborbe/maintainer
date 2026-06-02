@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [059-changelog-rewrite-opt-in-flag]
+summary: Wired pkg/maintainerconfig.Fetcher into planning step; PlanOutput extended with 4 fields and 2 constants; 11 new Ginkgo tests added; 13 existing test fixtures rewired for new NewPlanningStep signature; make precommit exits 0
+container: maintainer-changelog-rewrite-exec-231-spec-059-planning-flag-gating-and-fail-closed
+dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T18:30:00Z"
 queued: "2026-06-02T18:59:48Z"
+started: "2026-06-02T19:11:56Z"
+completed: "2026-06-02T19:39:14Z"
 branch: dark-factory/changelog-rewrite-opt-in-flag
 ---
 

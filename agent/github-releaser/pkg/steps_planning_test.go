@@ -6,7 +6,7 @@ package pkg_test
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +21,21 @@ import (
 	"github.com/bborbe/maintainer/agent/github-releaser/mocks"
 	pkg "github.com/bborbe/maintainer/agent/github-releaser/pkg"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/factory"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"
 )
+
+// withChangelogRewriteTrue returns a MaintainerConfigFetcher mock whose
+// Fetch returns a YAML byte slice with `release.changelogRewrite: true`.
+// spec 059: tests that expect the 058 rewrite pipeline to run must use
+// this helper so the planning step resolves the flag as true.
+func withChangelogRewriteTrue() *mocks.MaintainerConfigFetcher {
+	m := &mocks.MaintainerConfigFetcher{}
+	m.FetchReturns(
+		[]byte("release:\n  changelogRewrite: true\n"),
+		nil,
+	)
+	return m
+}
 
 var _ = Describe("steps_planning", func() {
 	Describe("PlanningStep", func() {
@@ -38,7 +52,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+				)
+				// maintainerConfigFetcher mock returns nil/nil by default — yields changelogRewrite=false via Parse(empty) contract.
 
 				taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-001\n---\n\n# release task\n"
 
@@ -78,7 +97,12 @@ var _ = Describe("steps_planning", func() {
 					fakeFetcher.FetchReturns(badChangelog, nil)
 					fakeRunner := &mocks.ClaudeRunnerMock{} // not called on escalation
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						&mocks.MaintainerConfigFetcher{},
+					)
+					// maintainerConfigFetcher mock returns nil/nil by default — never reached on P1 escalation.
 
 					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.2.6\ntask_identifier: gh-release-bborbe-maintainer-master-001\n---\n\n# release task\n"
 
@@ -123,7 +147,12 @@ var _ = Describe("steps_planning", func() {
 				func() {
 					fakeFetcher := &mocks.Fetcher{}
 					fakeRunner := &mocks.ClaudeRunnerMock{}
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						&mocks.MaintainerConfigFetcher{},
+					)
+					// maintainerConfigFetcher mock returns nil/nil by default — never reached on missing-frontmatter.
 
 					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-001\n---\n"
 					// clone_url intentionally missing
@@ -148,10 +177,15 @@ var _ = Describe("steps_planning", func() {
 		Context("fetch error", func() {
 			It("fetcher transport error → Status=Failed", func() {
 				fakeFetcher := &mocks.Fetcher{}
-				fakeFetcher.FetchReturns(nil, errors.New("dial tcp: connection refused"))
+				fakeFetcher.FetchReturns(nil, stderrors.New("dial tcp: connection refused"))
 				fakeRunner := &mocks.ClaudeRunnerMock{}
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+				)
+				// maintainerConfigFetcher mock returns nil/nil by default — never reached on CHANGELOG fetch error.
 
 				taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-001\n---\n"
 
@@ -170,7 +204,12 @@ var _ = Describe("steps_planning", func() {
 				fakeRunner := &mocks.ClaudeRunnerMock{}
 				fakeRunner.RunReturns(&claudelib.ClaudeResult{Result: "not-json-at-all"}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+				)
+				// maintainerConfigFetcher mock returns nil/nil by default — yields changelogRewrite=false (no rewrite call).
 
 				taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-001\n---\n"
 
@@ -194,7 +233,12 @@ var _ = Describe("steps_planning", func() {
 						nil,
 					)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						&mocks.MaintainerConfigFetcher{},
+					)
+					// maintainerConfigFetcher mock returns nil/nil by default — never reached on bad current_version (escalation after bump).
 
 					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: garbage\ntask_identifier: gh-release-001\n---\n"
 
@@ -221,7 +265,12 @@ var _ = Describe("steps_planning", func() {
 					fakeFetcher.FetchReturns([]byte("## Unreleased\n\n## v1.0.0\n\n- old\n"), nil)
 					fakeRunner := &mocks.ClaudeRunnerMock{}
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						&mocks.MaintainerConfigFetcher{},
+					)
+					// maintainerConfigFetcher mock returns nil/nil by default — never reached on P2 escalation.
 
 					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.0.0\ntask_identifier: gh-release-001\n---\n"
 
@@ -252,7 +301,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+				)
+				// maintainerConfigFetcher mock returns nil/nil by default — yields changelogRewrite=false (no rewrite call).
 
 				taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-001\n---\n\n# release task\n\n## Plan\n\n```json\n{\"outcome\":\"stale\"}\n```\n"
 
@@ -304,7 +358,8 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"all bullets already conform"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.Run(context.Background(), md)
@@ -340,7 +395,8 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+					// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -385,7 +441,8 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- feat: add foo\n","reasoning":"added missing feat: prefix"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.Run(context.Background(), md)
@@ -421,7 +478,8 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: routine dependency updates\n","reasoning":"folded 10 adjacent chore bump lines into one entry"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+					// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -465,7 +523,8 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.Run(context.Background(), md)
@@ -488,6 +547,462 @@ var _ = Describe("steps_planning", func() {
 				expected := "\n" + noisyBody
 				Expect(plan.OriginalUnreleased).To(Equal(expected))
 			})
+		})
+
+		// spec 059 — the release.changelogRewrite opt-in flag in
+		// .maintainer.yaml gates the 058 rewrite LLM call. The
+		// maintainerConfigFetcher mock is wired per test to exercise
+		// the four resolved values (false, true, network-error,
+		// parse-error) plus the three "absent config" cases (404, nil
+		// bytes, no release: block). Each It asserts the LLM call
+		// count, the resolved PlanOutput.ChangelogRewrite value, and
+		// the marshaled JSON encoding contract.
+		Context("changelogRewrite opt-in flag", func() {
+			const taskMD = "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-059\n---\n\n# release task\n"
+			cleanChangelog := []byte(
+				"## Unreleased\n\n- feat: add foo\n- fix: bar\n\n## v1.7.7\n\n- old\n",
+			)
+			noisyChangelog := []byte(
+				"## Unreleased\n\n" +
+					"- abc1234 2026-05-12 foo author — bump foo\n" +
+					"- def5678 2026-05-13 bar author — update docs\n" +
+					"- 9abc012 2026-05-14 baz author — internal rename\n" +
+					"\n## v1.7.7\n\n- old\n",
+			)
+
+			It(
+				"flag absent (file 404) → rewrite_needed=false, LLM not called for rewrite, PlanOutput.ChangelogRewrite is *false",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(nil, maintainerconfig.ErrFileNotFound)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					// Only the bump LLM call — the rewrite call was skipped.
+					Expect(fakeRunner.RunCallCount()).To(Equal(1))
+					Expect(maintainerFetcher.FetchCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal("ready"))
+					Expect(plan.RewriteNeeded).To(BeFalse())
+					Expect(plan.RewrittenUnreleased).To(BeEmpty())
+					Expect(plan.ChangelogRewrite).NotTo(BeNil())
+					Expect(*plan.ChangelogRewrite).To(BeFalse())
+
+					// JSON encoding contract: happy-path false → field SET
+					// to &false → JSON emits literal `false` (json.MarshalIndent
+					// inserts a space, so the substring is `"changelog_rewrite": false`).
+					section, ok := md.FindSection("## Plan")
+					Expect(ok).To(BeTrue())
+					Expect(section.Body).To(MatchRegexp(`"changelog_rewrite":\s*false`))
+				},
+			)
+
+			It(
+				"Fetch returns (nil, nil): empty bytes → Parse zero config → default false, rewrite LLM not called",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(nil, nil)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					Expect(fakeRunner.RunCallCount()).To(Equal(1))
+					Expect(maintainerFetcher.FetchCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.RewriteNeeded).To(BeFalse())
+					Expect(*plan.ChangelogRewrite).To(BeFalse())
+				},
+			)
+
+			It(
+				"flag absent (file present, no release: block) → rewrite_needed=false, rewrite LLM not called",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						[]byte("prReviewer:\n  autoApprove: true\n"),
+						nil,
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.RewriteNeeded).To(BeFalse())
+					Expect(*plan.ChangelogRewrite).To(BeFalse())
+				},
+			)
+
+			It("flag explicit false → rewrite_needed=false, rewrite LLM not called", func() {
+				maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+				maintainerFetcher.FetchReturns(
+					[]byte("release:\n  changelogRewrite: false\n"),
+					nil,
+				)
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(noisyChangelog, nil)
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturns(&claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(),
+					md,
+					"## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.RewriteNeeded).To(BeFalse())
+				Expect(*plan.ChangelogRewrite).To(BeFalse())
+			})
+
+			It("flag true + noisy Unreleased → rewrite_needed=true, rewrite LLM IS called", func() {
+				maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+				maintainerFetcher.FetchReturns(
+					[]byte("release:\n  changelogRewrite: true\n"),
+					nil,
+				)
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(noisyChangelog, nil)
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+				fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				Expect(fakeRunner.RunCallCount()).To(Equal(2))
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(),
+					md,
+					"## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.RewriteNeeded).To(BeTrue())
+				Expect(plan.RewrittenUnreleased).NotTo(BeEmpty())
+				Expect(*plan.ChangelogRewrite).To(BeTrue())
+
+				// JSON encoding contract: happy-path true → field SET
+				// to &true → JSON emits literal `true` (json.MarshalIndent
+				// inserts a space, so the substring is `"changelog_rewrite": true`).
+				section, ok := md.FindSection("## Plan")
+				Expect(ok).To(BeTrue())
+				Expect(section.Body).To(MatchRegexp(`"changelog_rewrite":\s*true`))
+			})
+
+			It(
+				"flag true + clean Unreleased → rewrite_needed=false (LLM judges clean), rewrite LLM IS called",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						[]byte("release:\n  changelogRewrite: true\n"),
+						nil,
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(cleanChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"already clean"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+					Expect(fakeRunner.RunCallCount()).To(Equal(2))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.RewriteNeeded).To(BeFalse())
+					Expect(plan.RewrittenUnreleased).To(BeEmpty())
+					Expect(*plan.ChangelogRewrite).To(BeTrue())
+				},
+			)
+
+			It(
+				"network error on .maintainer.yaml fetch → treated as default false, NOT fail-closed",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						nil,
+						stderrors.New("dial tcp: connection refused"),
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					// Planning succeeded (NOT fail-closed).
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					// Rewrite LLM call was skipped.
+					Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal("ready"))
+					Expect(plan.RewriteNeeded).To(BeFalse())
+					Expect(*plan.ChangelogRewrite).To(BeFalse())
+				},
+			)
+
+			It(
+				"invalid value: string \"foo\" → outcome=failed, error_category=invalid_config, human_review",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						[]byte("release:\n  changelogRewrite: \"foo\"\n"),
+						nil,
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{} // never called
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+
+					// Fail-closed: no LLM call, AgentStatusFailed + human_review.
+					Expect(fakeRunner.RunCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+					Expect(result.Message).To(ContainSubstring("release.changelogRewrite"))
+					Expect(result.Message).To(ContainSubstring("foo"))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal("failed"))
+					Expect(plan.ErrorCategory).To(Equal("invalid_config"))
+					Expect(plan.InvalidField).To(Equal("release.changelogRewrite"))
+					Expect(plan.InvalidValue).To(Equal("foo"))
+
+					// Failure path: `changelog_rewrite` token is OMITTED from
+					// the JSON (pointer is nil + omitempty).
+					section, ok := md.FindSection("## Plan")
+					Expect(ok).To(BeTrue())
+					Expect(section.Body).NotTo(ContainSubstring("changelog_rewrite"))
+				},
+			)
+
+			It(
+				"invalid value: number 1 → outcome=failed, error_category=invalid_config, human_review",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						[]byte("release:\n  changelogRewrite: 1\n"),
+						nil,
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(fakeRunner.RunCallCount()).To(Equal(0))
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal("failed"))
+					Expect(plan.ErrorCategory).To(Equal("invalid_config"))
+					Expect(plan.InvalidField).To(Equal("release.changelogRewrite"))
+					Expect(plan.InvalidValue).To(Equal("1"))
+				},
+			)
+
+			It(
+				"task page audit trail: PlanOutput.ChangelogRewrite is the resolved value, not the file content",
+				func() {
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(
+						[]byte("release:\n  changelogRewrite: true\n"),
+						nil,
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n","reasoning":"ok"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					_, err = step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+
+					// Audit-trail invariant: the JSON value is the BOOLEAN
+					// `true`, not the string "true". Go's pointer-encoded
+					// bool emits a literal `true` token in JSON.
+					Expect(plan.ChangelogRewrite).NotTo(BeNil())
+					Expect(*plan.ChangelogRewrite).To(BeTrue())
+
+					section, ok := md.FindSection("## Plan")
+					Expect(ok).To(BeTrue())
+					Expect(section.Body).To(MatchRegexp(`"changelog_rewrite":\s*true`))
+					// Negative: the value is NOT quoted.
+					Expect(section.Body).NotTo(MatchRegexp(`"changelog_rewrite":\s*"true"`))
+				},
+			)
+
+			It(
+				"flag-read-once: mutating the mock mid-run does not affect the in-flight planning step",
+				func() {
+					callCount := 0
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchCalls(
+						func(_ context.Context, _ string, _ string, _ string) ([]byte, error) {
+							callCount++
+							if callCount == 1 {
+								return []byte("release:\n  changelogRewrite: true\n"), nil
+							}
+							return []byte("release:\n  changelogRewrite: false\n"), nil
+						},
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(noisyChangelog, nil)
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n","reasoning":"ok"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					_, err = step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+
+					// The first call's value (true) is what was resolved —
+					// the spec's flag-read-once semantics. A subsequent
+					// mutation of the file (simulated here by returning
+					// different bytes on call 2) has no effect on the
+					// already-resolved planning step.
+					Expect(maintainerFetcher.FetchCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(*plan.ChangelogRewrite).To(BeTrue())
+				},
+			)
 		})
 	})
 })
@@ -595,7 +1110,12 @@ task_identifier: gh-release-bborbe-maintainer-master-spec048
 				fakeFetcher.FetchReturns(badChangelog, nil)
 				fakeRunner := &mocks.ClaudeRunnerMock{} // never called on P1
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher)
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+				)
+				// maintainerConfigFetcher mock returns nil/nil by default — never reached on P1 escalation.
 				agent := agentlib.NewAgent(agentlib.NewPhase(domain.TaskPhasePlanning, step))
 
 				// Use the real FileResultDeliverer + passthrough generator —

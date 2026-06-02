@@ -23,6 +23,7 @@ import (
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubchangelog"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/githubreview"
+	"github.com/bborbe/maintainer/agent/github-releaser/pkg/maintainerconfig"
 )
 
 const serviceName = "maintainer-agent-github-releaser"
@@ -113,7 +114,8 @@ func CreateAgent(
 ) *agentlib.Agent {
 	planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
 	fetcher := githubchangelog.NewHTTPFetcher(ghToken)
-	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher)
+	maintainerConfigFetcher := maintainerconfig.NewHTTPFetcher(ghToken)
+	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher, maintainerConfigFetcher)
 
 	executionOps := CreateGitOps()
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
