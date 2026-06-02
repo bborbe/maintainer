@@ -89,7 +89,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 
 	Context("happy path", func() {
 		It(
-			"clones, rewrites, commits, tags, pushes; writes ## Result(released); returns Done/NextPhase=ai_review",
+			"clones, rewrites, commits, tags (no push); writes ## Result(released); returns Done/NextPhase=ai_review",
 			func() {
 				fakeOps := &gitmocks.GitOps{}
 
@@ -114,7 +114,6 @@ task_identifier: gh-release-bborbe-example-master-049a
 				}
 				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "test-token")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
@@ -128,12 +127,14 @@ task_identifier: gh-release-bborbe-example-master-049a
 				// All GitOps methods called exactly once. CommittedFiles in
 				// particular proves the pre-push guard is invoked on the happy
 				// path — if guardCommittedFiles were dropped from
-				// executeDirectPush this assertion (not Tag/Push) would catch it.
+				// executeLocalRelease this assertion (not Tag) would catch it.
 				Expect(fakeOps.CloneCallCount()).To(Equal(1))
 				Expect(fakeOps.CommitCallCount()).To(Equal(1))
 				Expect(fakeOps.CommittedFilesCallCount()).To(Equal(1))
 				Expect(fakeOps.TagCallCount()).To(Equal(1))
-				Expect(fakeOps.PushCallCount()).To(Equal(1))
+				// Push has moved out of execution; the local tag is held
+				// until ai_review (next phase) pushes it.
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
 
 				// Tag name + message verbatim from plan.next_version_header[3:].
 				_, _, tagName, tagMsg := fakeOps.TagArgsForCall(0)
@@ -155,6 +156,8 @@ task_identifier: gh-release-bborbe-example-master-049a
 				Expect(got.Path).To(Equal("direct-push"))
 				Expect(got.CommitSHA).To(Equal("abc1234"))
 				Expect(got.Tag).To(Equal("v1.2.8"))
+				Expect(got.LocalTag).To(Equal("v1.2.8"))
+				Expect(got.Workdir).NotTo(BeEmpty())
 				Expect(string(got.ErrorCategory)).To(BeEmpty())
 
 				// Clone URL had token injected.
@@ -166,57 +169,18 @@ task_identifier: gh-release-bborbe-example-master-049a
 		)
 	})
 
-	Context("protected_branch_rejected", func() {
-		It(
-			"Push fails with GH006 → Result(failed, error_category=protected_branch_rejected); Status=Failed; Tag was called",
-			func() {
-				fakeOps := &gitmocks.GitOps{}
-				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
-					writeChangelog(workdir)
-					return nil
-				}
-				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
-					return "def5678", nil
-				}
-				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
-				fakeOps.TagReturns(nil)
-				// Realistic GH006 protected-branch error from `git push`.
-				fakeOps.PushReturns(errors.Errorf(
-					context.Background(),
-					"git push: remote: error: GH006: Protected branch update failed for refs/heads/master. remote: error: At least 1 approving review is required",
-				))
-
-				step := pkg.NewExecutionStep(fakeOps, "")
-				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
-				Expect(err).NotTo(HaveOccurred())
-
-				result, err := step.Run(context.Background(), md)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
-
-				// Tag + Push were called (proves failure surfaces post-tag, not pre-commit).
-				Expect(fakeOps.TagCallCount()).To(Equal(1))
-				Expect(fakeOps.PushCallCount()).To(Equal(1))
-
-				got, err := agentlib.ExtractSection[pkg.ResultOutput](
-					context.Background(),
-					md,
-					"## Result",
-				)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(got.Outcome).To(Equal("failed"))
-				Expect(string(got.ErrorCategory)).To(Equal("protected_branch_rejected"))
-				Expect(got.CommitSHA).To(BeEmpty())
-				Expect(got.Tag).To(BeEmpty())
-			},
-		)
-	})
+	// MOVED: push failure tests now live in the ai-review push-gating spec (spec 058 prompt 3).
+	//
+	// The Context("protected_branch_rejected", ...) block that previously lived
+	// here exercised Push returns → Status=Failed. Push has moved out of
+	// execution into ai-review; the same failure surface will be re-tested in
+	// the ai-review push-gating prompt (next prompt). See spec 058 prompt 3.
 
 	Context("pre-push guard (CommittedFiles)", func() {
-		// The guard is the primary security assertion of the direct-push
-		// trust model: a release commit must change ONLY CHANGELOG.md. These
-		// specs prove it fails closed — Tag and Push are NEVER reached when
-		// the committed file set is wrong or unobtainable.
+		// The guard is the primary security assertion of the release trust
+		// model: a release commit must change ONLY CHANGELOG.md. These
+		// specs prove it fails closed — Tag is NEVER reached when the
+		// committed file set is wrong or unobtainable.
 		runGuard := func(committed []string, committedErr error) (*agentlib.Result, *gitmocks.GitOps, *agentlib.Markdown) {
 			fakeOps := &gitmocks.GitOps{}
 			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
@@ -228,7 +192,6 @@ task_identifier: gh-release-bborbe-example-master-049a
 			}
 			fakeOps.CommittedFilesReturns(committed, committedErr)
 			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
 
 			step := pkg.NewExecutionStep(fakeOps, "")
 			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
@@ -256,22 +219,22 @@ task_identifier: gh-release-bborbe-example-master-049a
 			Expect(got.Tag).To(BeEmpty())
 		}
 
-		It("extra files → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+		It("extra files → Status=Failed, error_category=unexpected_diff, no tag", func() {
 			result, fakeOps, md := runGuard([]string{"CHANGELOG.md", "config.yml"}, nil)
 			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 			assertFailClosed(fakeOps, md, "unexpected_diff")
 		})
 
-		It("empty file list → Status=Failed, error_category=unexpected_diff, no tag/push", func() {
+		It("empty file list → Status=Failed, error_category=unexpected_diff, no tag", func() {
 			// git diff-tree can legitimately return no files (e.g. a root
-			// commit); len(files)!=1 must still fail closed, not push blindly.
+			// commit); len(files)!=1 must still fail closed, not tag blindly.
 			result, fakeOps, md := runGuard([]string{}, nil)
 			Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
 			assertFailClosed(fakeOps, md, "unexpected_diff")
 		})
 
 		It(
-			"wrong single file → Status=Failed, error_category=unexpected_diff, no tag/push",
+			"wrong single file → Status=Failed, error_category=unexpected_diff, no tag",
 			func() {
 				result, fakeOps, md := runGuard([]string{"main.go"}, nil)
 				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
@@ -279,7 +242,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 			},
 		)
 
-		It("CommittedFiles error → Status=Failed, error_category=unknown, no tag/push", func() {
+		It("CommittedFiles error → Status=Failed, error_category=unknown, no tag", func() {
 			result, fakeOps, md := runGuard(
 				nil,
 				errors.Errorf(context.Background(), "git diff-tree boom"),
@@ -289,13 +252,11 @@ task_identifier: gh-release-bborbe-example-master-049a
 		})
 	})
 
-	Context("workdir cleanup observability", func() {
-		// The cleanup-failure path is hard to trigger from a unit test
-		// (would require an unwritable parent dir). This test instead
-		// asserts the log message constant is in source so the
-		// observability AC grep is satisfied AND the defer block does
-		// run on the happy path (proven by stat).
-		It("removes the workdir after Run completes", func() {
+	Context("workdir lifetime", func() {
+		// Failure path: workdir is removed by the cleanup defer.
+		// The pre-prompt behavior (always-cleanup defer) is preserved on
+		// failure so we don't leak tmpdirs when Clone / Commit / Tag fails.
+		It("removes the workdir on the failure path", func() {
 			fakeOps := &gitmocks.GitOps{}
 			capturedWorkdir := ""
 			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
@@ -304,7 +265,7 @@ task_identifier: gh-release-bborbe-example-master-049a
 				return nil
 			}
 			fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
-				return "abc1234", nil
+				return "", errors.Errorf(context.Background(), "commit boom")
 			}
 			step := pkg.NewExecutionStep(fakeOps, "")
 			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
@@ -317,7 +278,272 @@ task_identifier: gh-release-bborbe-example-master-049a
 			_, statErr := os.Stat(capturedWorkdir)
 			Expect(
 				os.IsNotExist(statErr),
-			).To(BeTrue(), "workdir %s should be removed after Run", capturedWorkdir)
+			).To(BeTrue(), "workdir %s should be removed on failure", capturedWorkdir)
+		})
+
+		// Happy path: workdir survives Run's return so ai-review can
+		// read it. See the "does NOT push and workdir survives" spec
+		// below for the full assertion.
+	})
+
+	Context("happy-path workdir + no-push", func() {
+		It("does NOT push and workdir survives execution return", func() {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+			fakeOps.TagReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "")
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+
+			got, err := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md,
+				"## Result",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.Workdir).NotTo(BeEmpty())
+			Expect(got.LocalTag).To(Equal("v1.2.8"))
+
+			// Register cleanup IMMEDIATELY after parsing so the
+			// Ginkgo DeferCleanup fires even on subsequent assertion
+			// failure. A trailing os.RemoveAll in the spec body would
+			// be skipped on assertion failure and leak tmpdirs in CI.
+			DeferCleanup(func() {
+				_ = os.RemoveAll(got.Workdir)
+			})
+
+			_, statErr := os.Stat(got.Workdir)
+			Expect(
+				os.IsNotExist(statErr),
+			).To(BeFalse(), "workdir %s should survive Run's return", got.Workdir)
+
+			// Push was not invoked from the execution step.
+			Expect(fakeOps.PushCallCount()).To(Equal(0))
+		})
+	})
+
+	Context("rewrite_needed", func() {
+		const rewriteTaskMD = `---
+status: in_progress
+phase: execution
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/example
+clone_url: https://github.com/bborbe/example.git
+ref: master
+current_version: v1.2.7
+task_identifier: gh-release-bborbe-example-master-rewrite
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "patch",
+  "reasoning": "fix-only batch",
+  "current_version": "v1.2.7",
+  "next_version": "1.2.8",
+  "next_version_header": "## v1.2.8",
+  "header_prefix_style": "v",
+  "bullets": ["feat: cleaned"],
+  "rewrite_needed": true,
+  "rewritten_unreleased": "- feat: cleaned\n"
+}
+` + "```" + `
+`
+
+		const noRewriteTaskMD = `---
+status: in_progress
+phase: execution
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/example
+clone_url: https://github.com/bborbe/example.git
+ref: master
+current_version: v1.2.7
+task_identifier: gh-release-bborbe-example-master-norewrite
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "patch",
+  "reasoning": "fix-only batch",
+  "current_version": "v1.2.7",
+  "next_version": "1.2.8",
+  "next_version_header": "## v1.2.8",
+  "header_prefix_style": "v",
+  "bullets": ["feat: original"],
+  "rewrite_needed": false,
+  "rewritten_unreleased": ""
+}
+` + "```" + `
+`
+
+		writeNoisyChangelog := func(workdir string) {
+			Expect(os.MkdirAll(workdir, 0o750)).To(Succeed())
+			content := []byte(
+				"# Changelog\n\n## Unreleased\n\n- raw commit line one\n- raw commit line two\n\n## v1.2.6\n\n- old\n",
+			)
+			Expect(
+				os.WriteFile(filepath.Join(workdir, "CHANGELOG.md"), content, 0o600),
+			).To(Succeed())
+		}
+
+		writeOriginalChangelog := func(workdir string) {
+			Expect(os.MkdirAll(workdir, 0o750)).To(Succeed())
+			content := []byte(
+				"# Changelog\n\n## Unreleased\n\n- feat: original\n\n## v1.2.6\n\n- old\n",
+			)
+			Expect(
+				os.WriteFile(filepath.Join(workdir, "CHANGELOG.md"), content, 0o600),
+			).To(Succeed())
+		}
+
+		It(
+			"rewrite_needed=true: ## Unreleased body is replaced before header rename",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeNoisyChangelog(workdir)
+					return nil
+				}
+				// Single commit covering BOTH the body rewrite AND the
+				// header rename. If the body replacement ran as a
+				// separate commit this assertion would catch it
+				// (CommitCallCount would be 2, not 1).
+				fakeOps.CommitStub = func(_ context.Context, workdir, _ string, _ ...string) (string, error) {
+					content, readErr := os.ReadFile(filepath.Join(workdir, "CHANGELOG.md"))
+					Expect(readErr).NotTo(HaveOccurred())
+					bytes := string(content)
+					Expect(bytes).To(ContainSubstring("- feat: cleaned"))
+					Expect(bytes).NotTo(ContainSubstring("raw commit line one"))
+					Expect(bytes).NotTo(ContainSubstring("## Unreleased"))
+					Expect(bytes).To(ContainSubstring("## v1.2.8"))
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), rewriteTaskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				Expect(fakeOps.CommitCallCount()).To(Equal(1))
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
+			},
+		)
+
+		It(
+			"rewrite_needed=false: ## Unreleased body is preserved, only header is renamed",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeOriginalChangelog(workdir)
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, workdir, _ string, _ ...string) (string, error) {
+					content, readErr := os.ReadFile(filepath.Join(workdir, "CHANGELOG.md"))
+					Expect(readErr).NotTo(HaveOccurred())
+					bytes := string(content)
+					Expect(bytes).To(ContainSubstring("- feat: original"))
+					Expect(bytes).NotTo(ContainSubstring("## Unreleased"))
+					Expect(bytes).To(ContainSubstring("## v1.2.8"))
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), noRewriteTaskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				Expect(fakeOps.CommitCallCount()).To(Equal(1))
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
+			},
+		)
+	})
+
+	Context("re-fire idempotency", func() {
+		// A second invocation of Run against the same ## Plan MUST
+		// produce exactly one new commit ahead of origin/master and
+		// exactly one tag named vX.Y.Z on the local clone. The
+		// contract "no duplicate" is enforced at the local-filesystem
+		// layer by setupWorkdir's RemoveAll; this test asserts the
+		// mock counts to prove the re-fire path is exercised
+		// end-to-end without invoking Push.
+		It("re-fire produces no duplicate commit and no duplicate tag", func() {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+			fakeOps.TagReturns(nil)
+
+			step := pkg.NewExecutionStep(fakeOps, "")
+
+			// First invocation.
+			md1, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			result1, err := step.Run(context.Background(), md1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result1.Status).To(Equal(agentlib.AgentStatusDone))
+			got1, err := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md1,
+				"## Result",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				_ = os.RemoveAll(got1.Workdir)
+			})
+
+			// Second invocation against the same taskMD.
+			md2, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			result2, err := step.Run(context.Background(), md2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result2.Status).To(Equal(agentlib.AgentStatusDone))
+			got2, err := agentlib.ExtractSection[pkg.ResultOutput](
+				context.Background(),
+				md2,
+				"## Result",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() {
+				_ = os.RemoveAll(got2.Workdir)
+			})
+
+			Expect(fakeOps.CloneCallCount()).To(Equal(2))
+			Expect(fakeOps.CommitCallCount()).To(Equal(2))
+			Expect(fakeOps.TagCallCount()).To(Equal(2))
+			Expect(fakeOps.PushCallCount()).To(Equal(0))
 		})
 	})
 
@@ -361,7 +587,6 @@ task_identifier: gh-release-bborbe-example-master-ssh
 			fakeOps.CommitReturns("abc1234", nil)
 			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
 
 			step := pkg.NewExecutionStep(fakeOps, "test-token")
 			md, err := agentlib.ParseMarkdown(context.Background(), sshTaskMD)
@@ -404,7 +629,6 @@ ref: master
 			fakeOps.CommitReturns("abc1234", nil)
 			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
 
 			step := pkg.NewExecutionStep(fakeOps, "") // empty token → injectToken is a no-op
 			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
@@ -661,7 +885,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					nil,
 				)
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "test-token")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
@@ -677,7 +900,7 @@ task_identifier: gh-release-bborbe-example-master-plugin
 				).To(Equal([]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"}))
 
 				Expect(fakeOps.TagCallCount()).To(Equal(1))
-				Expect(fakeOps.PushCallCount()).To(Equal(1))
+				Expect(fakeOps.PushCallCount()).To(Equal(0))
 
 				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
 					context.Background(),
@@ -706,7 +929,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					nil,
 				)
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
@@ -742,7 +964,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					nil,
 				)
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
@@ -767,7 +988,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 			}
 			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
 			fakeOps.TagReturns(nil)
-			fakeOps.PushReturns(nil)
 
 			step := pkg.NewExecutionStep(fakeOps, "")
 			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
@@ -786,7 +1006,7 @@ task_identifier: gh-release-bborbe-example-master-plugin
 		})
 
 		It(
-			"CommittedFiles returns unexpected file → Result(failed, error_category=unexpected_diff); Tag NOT called; Push NOT called",
+			"CommittedFiles returns unexpected file → Result(failed, error_category=unexpected_diff); Tag NOT called",
 			func() {
 				fakeOps := &gitmocks.GitOps{}
 				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
@@ -806,7 +1026,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					nil,
 				)
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
@@ -833,7 +1052,7 @@ task_identifier: gh-release-bborbe-example-master-plugin
 		)
 
 		It(
-			"plugin.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called; Push NOT called",
+			"plugin.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called",
 			func() {
 				fakeOps := &gitmocks.GitOps{}
 				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
@@ -852,7 +1071,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					return nil
 				}
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
@@ -881,7 +1099,7 @@ task_identifier: gh-release-bborbe-example-master-plugin
 		)
 
 		It(
-			"DetectManifests I/O error → Result(failed, error_category=unknown); Commit/Tag/Push not called",
+			"DetectManifests I/O error → Result(failed, error_category=unknown); Commit/Tag not called",
 			func() {
 				// chmod 0000 on Linux non-root blocks Stat of the children;
 				// skip on platforms where this is unreliable (Darwin, root containers).
@@ -937,7 +1155,7 @@ task_identifier: gh-release-bborbe-example-master-plugin
 		)
 
 		It(
-			"marketplace.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called; Push NOT called",
+			"marketplace.json is malformed JSON → Result(failed, error_category=plugin_manifest_invalid); Commit NOT called; Tag NOT called",
 			func() {
 				fakeOps := &gitmocks.GitOps{}
 				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
@@ -956,7 +1174,6 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					return nil
 				}
 				fakeOps.TagReturns(nil)
-				fakeOps.PushReturns(nil)
 
 				step := pkg.NewExecutionStep(fakeOps, "")
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)

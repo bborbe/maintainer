@@ -252,3 +252,98 @@ var _ = Describe("ExtractUnreleasedBody", func() {
 			[]byte{}),
 	)
 })
+
+var _ = Describe("ReplaceUnreleasedBody", func() {
+	DescribeTable(
+		"replaces ## Unreleased body with newBody; preserves text before/after",
+		func(input []byte, newBody string, expected []byte) {
+			got, err := changelog.ReplaceUnreleasedBody(
+				context.Background(),
+				input,
+				newBody,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(got)).To(Equal(string(expected)))
+		},
+		Entry(
+			"typical replacement preserves text before and after",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- raw commit line one\n- raw commit line two\n\n## v1.0.0\n\n- initial\n",
+			),
+			"- feat: cleaned\n",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n- feat: cleaned\n## v1.0.0\n\n- initial\n",
+			),
+		),
+		Entry(
+			"empty new body produces just the heading + blank line + next heading",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- raw line\n\n## v1.0.0\n\n- initial\n",
+			),
+			"",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n## v1.0.0\n\n- initial\n",
+			),
+		),
+		Entry(
+			"newBody without trailing \\n gets a single \\n appended before the next heading",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n\n- raw line\n\n## v1.0.0\n\n- initial\n",
+			),
+			"- feat: cleaned",
+			[]byte(
+				"# Changelog\n\n## Unreleased\n- feat: cleaned\n## v1.0.0\n\n- initial\n",
+			),
+		),
+		Entry(
+			"newBody already ends with \\n is not double-newlined",
+			[]byte(
+				"## Unreleased\n\n- raw line\n\n## v1.0.0\n",
+			),
+			"- feat: cleaned\n",
+			[]byte(
+				"## Unreleased\n- feat: cleaned\n## v1.0.0\n",
+			),
+		),
+		Entry(
+			"## Unreleased at end of file with newBody inserts cleanly",
+			[]byte("# Changelog\n\n## Unreleased\n"),
+			"- feat: cleaned\n",
+			[]byte("# Changelog\n\n## Unreleased\n- feat: cleaned\n"),
+		),
+		Entry(
+			"input without trailing newline preserves that property",
+			[]byte("## Unreleased\n\n- raw line\n"),
+			"- feat: cleaned\n",
+			[]byte("## Unreleased\n- feat: cleaned\n"),
+		),
+		Entry(
+			"first occurrence of ## Unreleased is replaced; later duplicate is left alone",
+			[]byte(
+				"## Unreleased\n\n- a\n\n## v1.0.0\n\n## Unreleased\n\n- b\n",
+			),
+			"- feat: cleaned\n",
+			[]byte(
+				"## Unreleased\n- feat: cleaned\n## v1.0.0\n\n## Unreleased\n\n- b\n",
+			),
+		),
+	)
+
+	DescribeTable("returns a wrapped error when ## Unreleased is absent",
+		func(input []byte) {
+			_, err := changelog.ReplaceUnreleasedBody(
+				context.Background(),
+				input,
+				"- feat: cleaned\n",
+			)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unreleased header not found"))
+		},
+		Entry("no ## Unreleased heading returns error",
+			[]byte("# Changelog\n\n## v1.0.0\n\n- initial\n")),
+		Entry("nil content returns error",
+			nil),
+		Entry("empty content returns error",
+			[]byte{}),
+	)
+})
