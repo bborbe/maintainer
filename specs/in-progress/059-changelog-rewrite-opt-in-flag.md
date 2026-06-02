@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-02T18:18:03Z"
 generating: "2026-06-02T18:18:04Z"
 prompted: "2026-06-02T18:34:36Z"
+verifying: "2026-06-02T19:39:14Z"
 branch: dark-factory/changelog-rewrite-opt-in-flag
 ---
 
