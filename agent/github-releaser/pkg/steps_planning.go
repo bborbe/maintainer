@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"strings"
 
 	agentlib "github.com/bborbe/agent/lib"
@@ -109,6 +110,8 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	}
 	_ = cloneURL // currently unused by planning; future execution step will use it
 
+	cachedBump, cachedReasoning := s.readCachedBump(ctx, md)
+
 	changelogBytes, err := s.fetcher.Fetch(ctx, owner, name, ref)
 	if err != nil {
 		glog.V(2).Infof("planning: fetch CHANGELOG.md failed: %v", err)
@@ -143,7 +146,7 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		}, nil
 	}
 
-	changelogRewrite, err := s.resolveChangelogRewrite(ctx, owner, name, ref)
+	changelogRewrite, fetchWarning, err := s.resolveChangelogRewrite(ctx, owner, name, ref)
 	if err != nil {
 		// Fail-closed: .maintainer.yaml is malformed OR contains a
 		// non-boolean release.changelogRewrite. Write a ## Plan(failed)
@@ -151,18 +154,53 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		return s.failInvalidConfig(ctx, md, currentVersion, "release.changelogRewrite", err)
 	}
 	return s.runClassification(
-		ctx, md, currentVersion, bullets, prefixStyle, originalBody, changelogRewrite,
+		ctx,
+		md,
+		currentVersion,
+		bullets,
+		prefixStyle,
+		originalBody,
+		changelogRewrite,
+		cachedBump,
+		cachedReasoning,
+		fetchWarning,
 	)
+}
+
+// readCachedBump returns the bump verdict from a prior partial run (e.g.
+// a re-fire after the rewrite LLM transiently failed). Empty on a fresh
+// run or when the prior plan was outcome=needs_input/failed (those don't
+// carry a real bump). When set, runClassification skips the bump LLM call
+// and reuses verdict+reasoning verbatim.
+//
+// ExtractSection error is non-fatal — a fresh task page has no ## Plan
+// section yet; that is the common case.
+func (s *planningStep) readCachedBump(
+	ctx context.Context,
+	md *agentlib.Markdown,
+) (string, string) {
+	prior, perr := agentlib.ExtractSection[PlanOutput](ctx, md, "## Plan")
+	if perr != nil {
+		return "", ""
+	}
+	if prior.Outcome != PlanOutcomeReady || prior.Bump == "" {
+		return "", ""
+	}
+	glog.V(2).Infof(
+		"planning: reusing cached bump=%s from prior ## Plan (skipping bump LLM)",
+		prior.Bump,
+	)
+	return prior.Bump, prior.Reasoning
 }
 
 // resolveChangelogRewrite fetches .maintainer.yaml at the ref's tip and
 // returns the parsed release.changelogRewrite value, with these semantics
 // (per spec 059 § Desired Behavior and § Failure Modes):
 //
-//   - File absent (ErrFileNotFound)        → (false, nil)  // default, no error
-//   - File present, malformed YAML         → (false, wrappedErr) // fail-closed; caller maps to human_review
-//   - File present, non-boolean value      → (false, wrappedErr) // fail-closed; same
-//   - Any other fetch error (5xx, network) → (false, nil)  // treated as default; see Failure Modes row 9
+//   - File absent (ErrFileNotFound)        → (false, "", nil)  // default, no warning
+//   - File present, malformed YAML         → (false, "", wrappedErr) // fail-closed; caller maps to human_review
+//   - File present, non-boolean value      → (false, "", wrappedErr) // fail-closed; same
+//   - Any other fetch error (5xx, network) → (false, "<warning>", nil)  // treated as default; warning surfaced on plan
 //
 // The "any other fetch error → default" rule is the spec's Failure Modes
 // "Repo has no .maintainer.yaml" + spec § Desired Behavior 6: missing-yaml
@@ -170,10 +208,16 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 // transport errors (those are usually transient GitHub flakes; the
 // operator can re-fire). Only the parse / non-boolean boundary is
 // fail-closed (a config typo on a high-trust field, per spec § Security).
+//
+// The middle-return value is a non-fatal warning string surfaced on the
+// ## Plan task-page block so a repo that opted into rewrite is not
+// silently downgraded on a transient flake — operators can grep
+// PlanOutput.ConfigFetchWarning to confirm. Empty on the happy path
+// and on the legitimate-absent (404) path.
 func (s *planningStep) resolveChangelogRewrite(
 	ctx context.Context,
 	owner, name, ref string,
-) (bool, error) {
+) (bool, string, error) {
 	bytes, err := s.maintainerConfig.Fetch(ctx, owner, name, ref)
 	if err != nil {
 		if stderrors.Is(err, maintainerconfig.ErrFileNotFound) {
@@ -181,21 +225,59 @@ func (s *planningStep) resolveChangelogRewrite(
 				"planning: .maintainer.yaml absent at ref=%s — using default changelogRewrite=false",
 				ref,
 			)
-			return false, nil
+			return false, "", nil
 		}
 		// Transport / non-404 error: log and default to false. NOT a
 		// fail-closed condition (see spec 059 § Failure Modes).
 		glog.Warningf("planning: .maintainer.yaml fetch failed (treated as default): %v", err)
-		return false, nil
+		return false, fmt.Sprintf(
+			".maintainer.yaml fetch failed (treated as default changelogRewrite=false): %s",
+			err.Error(),
+		), nil
 	}
 	cfg, err := maintainerconfig.Parse(ctx, bytes)
 	if err != nil {
 		// YAML parse error or non-boolean value: fail-closed. Surface the
 		// original error so the caller can include it in the human_review
 		// task-page block.
-		return false, errors.Wrapf(ctx, err, "parse .maintainer.yaml")
+		return false, "", errors.Wrapf(ctx, err, "parse .maintainer.yaml")
 	}
-	return cfg.Release.ChangelogRewrite, nil
+	return cfg.Release.ChangelogRewrite, "", nil
+}
+
+// resolveBumpVerdict returns the bump verdict either from a prior cached
+// ## Plan (M2 cache) or by issuing a fresh LLM call. On runner or parse
+// error it returns a non-nil *agentlib.Result carrying AgentStatusFailed
+// so the caller can short-circuit cleanly.
+func (s *planningStep) resolveBumpVerdict(
+	ctx context.Context,
+	bullets []string,
+	cachedBump, cachedReasoning string,
+) (prompts.BumpVerdict, *agentlib.Result) {
+	if cachedBump != "" {
+		glog.V(2).Infof("planning: skipping bump LLM call (cached bump=%s)", cachedBump)
+		return prompts.BumpVerdict{Bump: cachedBump, Reasoning: cachedReasoning}, nil
+	}
+	userMsg := strings.Join(bullets, "\n")
+	fullPrompt := prompts.BumpClassificationPrompt() +
+		"\n\n## Bullets to classify\n\n" + userMsg
+	runResult, err := s.runner.Run(ctx, fullPrompt)
+	if err != nil {
+		glog.V(2).Infof("planning: claude runner failed: %v", err)
+		return prompts.BumpVerdict{}, &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "claude run: " + err.Error(),
+		}
+	}
+	v, err := prompts.ParseBumpVerdict(ctx, runResult.Result)
+	if err != nil {
+		glog.V(2).Infof("planning: parse verdict failed: %v", err)
+		return prompts.BumpVerdict{}, &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: "parse bump verdict: " + err.Error(),
+		}
+	}
+	return v, nil
 }
 
 func (s *planningStep) runClassification(
@@ -206,26 +288,17 @@ func (s *planningStep) runClassification(
 	prefixStyle string,
 	originalBody string,
 	changelogRewrite bool,
+	cachedBump, cachedReasoning string,
+	fetchWarning string,
 ) (*agentlib.Result, error) {
-	userMsg := strings.Join(bullets, "\n")
-	fullPrompt := prompts.BumpClassificationPrompt() + "\n\n## Bullets to classify\n\n" + userMsg
-
-	runResult, err := s.runner.Run(ctx, fullPrompt)
-	if err != nil {
-		glog.V(2).Infof("planning: claude runner failed: %v", err)
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: "claude run: " + err.Error(),
-		}, nil
-	}
-
-	verdict, err := prompts.ParseBumpVerdict(ctx, runResult.Result)
-	if err != nil {
-		glog.V(2).Infof("planning: parse verdict failed: %v", err)
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: "parse bump verdict: " + err.Error(),
-		}, nil
+	verdict, result := s.resolveBumpVerdict(
+		ctx,
+		bullets,
+		cachedBump,
+		cachedReasoning,
+	)
+	if result != nil {
+		return result, nil
 	}
 
 	nextNumeric, err := semver.BumpVersion(ctx, currentVersion, verdict.Bump)
@@ -240,7 +313,28 @@ func (s *planningStep) runClassification(
 
 	rewriteVerdict, err := s.resolveRewriteVerdict(ctx, originalBody, changelogRewrite)
 	if err != nil {
-		glog.V(2).Infof("planning: rewrite failed: %v", err)
+		// Persist the bump verdict via publishPlan before returning the
+		// failure. A re-fire (M2 cache) needs the prior ## Plan to
+		// carry the bump verdict so the bump LLM call is NOT re-issued
+		// on retry. Without this, a transient rewrite-LLM failure
+		// would cause every re-fire to re-run the bump classification.
+		glog.V(2).
+			Infof("planning: rewrite failed: %v — publishing partial plan for re-fire cache", err)
+		if _, perr := s.publishPlan(
+			ctx,
+			md,
+			currentVersion,
+			prefixStyle,
+			bullets,
+			originalBody,
+			verdict,
+			nextNumeric,
+			prompts.RewriteVerdict{},
+			changelogRewrite,
+			fetchWarning,
+		); perr != nil {
+			return nil, errors.Wrap(ctx, perr, "publish partial plan (rewrite failure)")
+		}
 		return &agentlib.Result{
 			Status:  agentlib.AgentStatusFailed,
 			Message: err.Error(),
@@ -248,8 +342,17 @@ func (s *planningStep) runClassification(
 	}
 
 	return s.publishPlan(
-		ctx, md, currentVersion, prefixStyle, bullets, originalBody,
-		verdict, nextNumeric, rewriteVerdict, changelogRewrite,
+		ctx,
+		md,
+		currentVersion,
+		prefixStyle,
+		bullets,
+		originalBody,
+		verdict,
+		nextNumeric,
+		rewriteVerdict,
+		changelogRewrite,
+		fetchWarning,
 	)
 }
 
@@ -286,6 +389,7 @@ func (s *planningStep) publishPlan(
 	nextNumeric string,
 	rewriteVerdict prompts.RewriteVerdict,
 	changelogRewrite bool,
+	fetchWarning string,
 ) (*agentlib.Result, error) {
 	header := "## " + prefixStyle + nextNumeric
 	crValue := changelogRewrite
@@ -302,6 +406,7 @@ func (s *planningStep) publishPlan(
 		RewriteNeeded:       rewriteVerdict.RewriteNeeded,
 		RewrittenUnreleased: rewriteVerdict.RewrittenUnreleased,
 		ChangelogRewrite:    &crValue, // pointer so JSON distinguishes resolved-false from missing
+		ConfigFetchWarning:  fetchWarning,
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {

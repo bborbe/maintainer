@@ -50,11 +50,6 @@ var _ = Describe("Parse", func() {
 				Release:    maintainerconfig.ReleaseConfig{AutoRelease: true},
 				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
 			}),
-		Entry("unknown top-level key ignored, no error",
-			"build-fix:\n  enabled: true\nprReviewer:\n  autoApprove: true\n",
-			maintainerconfig.MaintainerConfig{
-				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
-			}),
 		Entry("release.changelogRewrite: true -> ChangelogRewrite true",
 			"release:\n  changelogRewrite: true\n",
 			maintainerconfig.MaintainerConfig{
@@ -102,6 +97,36 @@ var _ = Describe("Parse", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("unknown top-level field rejected", func() {
+		_, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("build-fix:\n  enabled: true\nprReviewer:\n  autoApprove: true\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(err.Error()).To(ContainSubstring("not found"))
+	})
+
+	It("typo in nested release field rejected", func() {
+		// changelogRwrite is the canonical typo from PR-36 review.
+		_, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("release:\n  changelogRwrite: true\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(err.Error()).To(ContainSubstring("not found"))
+	})
+
+	It("typo in top-level prReviewer key rejected", func() {
+		_, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("prRevierer:\n  autoApprove: true\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 	})
 
 	It("release.changelogRewrite: non-bool string value -> wrapped error", func() {

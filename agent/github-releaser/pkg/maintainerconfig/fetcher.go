@@ -11,7 +11,9 @@ package maintainerconfig
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -43,6 +45,12 @@ var Parse = libmaintainerconfig.Parse
 // survive typical transient latency, low enough to fail the planning
 // step within the controller's per-step budget.
 const fetchTimeout = 15 * time.Second
+
+// maxConfigBodyBytes caps how many bytes the fetcher will read from the
+// GitHub contents API response. .maintainer.yaml is realistically a few
+// hundred bytes; 1 MiB is ~3000x that and still bounds malicious or
+// misconfigured upstreams from exhausting agent memory.
+const maxConfigBodyBytes = 1 << 20 // 1 MiB
 
 // Fetcher reads .maintainer.yaml bytes from a remote GitHub repo at a ref.
 // Implementations MUST be safe for concurrent use. Returned bytes are the
@@ -187,9 +195,14 @@ func (f *httpFetcher) doRequest(
 }
 
 func (f *httpFetcher) readBody(ctx context.Context, resp *http.Response) ([]byte, error) {
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(nil, resp.Body, maxConfigBodyBytes))
 	if err != nil {
-		return nil, errors.Wrapf(ctx, err, "fetch .maintainer.yaml: read body")
+		return nil, errors.Wrapf(
+			ctx,
+			err,
+			"fetch .maintainer.yaml: read body (cap=%d bytes)",
+			maxConfigBodyBytes,
+		)
 	}
 	return body, nil
 }
@@ -208,16 +221,19 @@ func (f *httpFetcher) checkStatus(
 		return ErrFileNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Truncate body for log safety.
-		preview := string(body)
-		if len(preview) > 200 {
-			preview = preview[:200]
-		}
+		// Body is redacted: a 5xx body from GitHub / a proxy can contain
+		// internal paths, header echoes, or partial stack traces. Surface
+		// the status code (operator-actionable) and a short SHA-256
+		// fingerprint (so two reports of the same body can be correlated
+		// without exposing the bytes).
+		sum := sha256.Sum256(body)
+		fingerprint := hex.EncodeToString(sum[:])[:8]
 		return errors.Errorf(
 			ctx,
-			"fetch .maintainer.yaml: status %d: %s",
+			"fetch .maintainer.yaml: status %d body_sha256_prefix=%s body_bytes=%d",
 			resp.StatusCode,
-			preview,
+			fingerprint,
+			len(body),
 		)
 	}
 	glog.V(2).Infof(

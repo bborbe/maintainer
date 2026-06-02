@@ -66,6 +66,16 @@ type PlanOutput struct {
 	//     the token entirely; `changelog_rewrite` is absent from the JSON
 	ChangelogRewrite *bool `json:"changelog_rewrite,omitempty"`
 
+	// ConfigFetchWarning records a non-fatal .maintainer.yaml fetch failure
+	// that the planning step recovered from by using the default
+	// changelogRewrite=false. Populated only when the fetch errored with
+	// something OTHER than ErrFileNotFound (transport, DNS, 5xx, timeout).
+	// Operators reading the task page can grep this field to confirm
+	// whether a repo that opted into rewrite was silently downgraded.
+	// Empty on the happy path (file present) and on the legitimate-absent
+	// path (404 → ErrFileNotFound).
+	ConfigFetchWarning string `json:"config_fetch_warning,omitempty"`
+
 	// ErrorCategory names the failure category on outcome="failed". For
 	// spec 059 the only value is "invalid_config" (release.changelogRewrite
 	// is non-boolean). Future failure categories may extend this set.

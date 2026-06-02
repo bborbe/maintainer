@@ -994,6 +994,59 @@ var _ = Describe("AIReviewStep", func() {
 					).To(ContainElement(pkg.CheckChangelogHeaderRewritten))
 				},
 			)
+
+			It(
+				"CommittedFiles error sets UnexpectedFileChange=true and appends CheckUnexpectedFileChange",
+				func() {
+					// Spec 059 prompt 4 — C1 fail-closed regression
+					// guard. Prior to the fix, a transient
+					// CommittedFiles error left the check silently
+					// passing; a single git blip could let an
+					// unexpected-file commit land without the human
+					// reviewer being alerted.
+					//
+					// Use a real on-disk workdir so the
+					// result.Workdir != "" short-circuit is bypassed
+					// and the CommittedFiles call actually fires.
+					workdir, err := os.MkdirTemp("", "ai-review-test-")
+					Expect(err).NotTo(HaveOccurred())
+					DeferCleanup(func() { _ = os.RemoveAll(workdir) })
+
+					Expect(os.WriteFile(
+						filepath.Join(workdir, "CHANGELOG.md"),
+						[]byte("## v1.0.0\n\n- feat\n"),
+						0o600,
+					)).To(Succeed())
+
+					// Two structural checks pass: tag exists at expected
+					// SHA + changelog header is rewritten. Only the
+					// CommittedFiles path needs to fail.
+					fakeClient.TagExistsReturns("abc123", nil)
+					fakeClient.ResolveTagCommitReturns("abc123", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					fakeOps.CommittedFilesReturns(
+						nil,
+						errors.New("git: lstat workdir: no such file or directory"),
+					)
+					// Drive checkFaithfulness to OverallUnknown so the
+					// assertion on output.Approved = false is not
+					// contaminated by a pass-path artifact.
+					fakeRunner.RunReturns(nil, errors.New("claude unavailable"))
+
+					result, md := runStep(taskWithResult("abc123", "v1.0.0", "released", workdir))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.NextPhase).To(Equal("human_review"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
+				},
+			)
 		})
 
 		// Spec 059 prompt 3 — Req 5b: rollupVerdict surfaces

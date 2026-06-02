@@ -548,9 +548,12 @@ func commitSHAMatches(a, b string) bool {
 // appends the failed-check name.
 //
 // Returns the diff (committed - expected) for the UnexpectedFiles
-// output slice. On workdir or git error the check is skipped
-// silently and an empty diff is returned — the operator triage path
-// is covered by the structural checks in that case.
+// output slice. On workdir-empty short-circuit the check is skipped
+// silently and an empty diff is returned. On CommittedFiles error
+// the check fails closed: checks.UnexpectedFileChange=true,
+// CheckUnexpectedFileChange appended to failedChecks, empty diff
+// returned. The release trust model requires fail-closed on
+// transient errors — a git blip must not leave the check passing.
 //
 // sameStringSet is the same helper used by steps_execution.go
 // (guardCommittedFiles). It is package-private, so we reference it
@@ -568,9 +571,13 @@ func (s *aiReviewStep) checkUnexpectedFileChange(
 	}
 	files, err := s.ops.CommittedFiles(ctx, result.Workdir)
 	if err != nil {
-		// Transient / missing workdir → controller retries; not a
-		// semantic check failure.
-		glog.Warningf("ai_review: CommittedFiles failed: %v", err)
+		checks.UnexpectedFileChange = true
+		*failedChecks = append(*failedChecks, CheckUnexpectedFileChange)
+		glog.V(2).Infof(
+			"ai_review: check=%s result=false: CommittedFiles error: %v",
+			CheckUnexpectedFileChange,
+			err,
+		)
 		return nil
 	}
 	// The expected set: CHANGELOG.md + detected plugin manifests.

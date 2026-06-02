@@ -13,9 +13,18 @@
 //
 // Adding the next bot (build-fix, dep-pin, …) is a one-field edit to
 // MaintainerConfig — every consumer imports this one type, so there is
-// never a divergent copy of the file's shape. Unknown top-level keys are
-// tolerated by design (yaml.Unmarshal ignores fields it does not know),
-// which is the forward-compat behavior the spec mandates.
+// never a divergent copy of the file's shape.
+//
+// Unknown fields (top-level OR nested) are REJECTED at parse time
+// (yaml.NewDecoder + KnownFields(true)). This catches typos like
+// `changelogRwrite` or `prRevierer` that would otherwise produce a
+// silent default-false config — a high-trust .maintainer.yaml is
+// load-bearing for release gating, so a typo must fail loudly. To
+// add a new bot's namespace, extend MaintainerConfig with the new
+// field FIRST (one PR), then deploy the bot (next PR); the brief
+// window between the two is the only time a forward-incompat
+// .maintainer.yaml would error, and it errors loudly rather than
+// silently downgrading.
 //
 // Parse does NO I/O — fetching the bytes is each consumer's job (the
 // watcher fetches via the GitHub API; the agent reads the cloned workDir
@@ -23,6 +32,7 @@
 package maintainerconfig
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/bborbe/errors"
@@ -70,7 +80,16 @@ type PrReviewerConfig struct {
 // (NOT a silent zero-value) so callers can fail loudly.
 func Parse(ctx context.Context, content []byte) (MaintainerConfig, error) {
 	var cfg MaintainerConfig
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
+	if len(content) == 0 {
+		// Preserve the existing "empty bytes -> zero-value, nil" contract
+		// (asserted by maintainerconfig_test.go lines 29-31 and 87-89).
+		// yaml.NewDecoder(empty).Decode would return io.EOF; the explicit
+		// short-circuit keeps the contract crisp.
+		return cfg, nil
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(content))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
 		return MaintainerConfig{}, errors.Wrap(ctx, err, "unmarshal .maintainer.yaml")
 	}
 	return cfg, nil

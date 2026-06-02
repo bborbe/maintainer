@@ -1,10 +1,12 @@
 ---
-status: executing
+status: completed
+summary: Applied all six PR-36 review fixes (C1 fail-closed CommittedFiles, M1 MaxBytesReader cap, M2 bump cache, M3 SHA-256 redaction, M4 config_fetch_warning surfacing, M5 strict YAML decoding) with regression tests; both precommit suites exit 0.
 container: maintainer-changelog-rewrite-exec-233-fail-closed-ai-review-checks-and-config-hardening
 dark-factory-version: v0.174.1-dirty
 created: "2026-06-02T20:30:00Z"
 queued: "2026-06-02T21:00:42Z"
 started: "2026-06-02T21:00:44Z"
+completed: "2026-06-02T21:17:37Z"
 ---
 
 <summary>

@@ -72,6 +72,46 @@ var _ = Describe("httpFetcher", func() {
 		Expect(data).To(BeNil())
 	})
 
+	It("500 response with sensitive body returns redacted error", func() {
+		secret := "/internal/path/credentials.json missing — uid=42"
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(secret))
+		}))
+		defer server.Close()
+
+		fetcher := maintainerconfig.NewHTTPFetcherForTest("", server.URL)
+		_, err := fetcher.Fetch(ctx, "bborbe", "maintainer", "master")
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("status 500"))
+		Expect(err.Error()).To(ContainSubstring("body_sha256_prefix="))
+		Expect(err.Error()).To(ContainSubstring("body_bytes="))
+		// CRITICAL: the raw body bytes MUST NOT leak into the error.
+		Expect(err.Error()).NotTo(ContainSubstring("/internal/path"))
+		Expect(err.Error()).NotTo(ContainSubstring("credentials.json"))
+		Expect(err.Error()).NotTo(ContainSubstring("uid=42"))
+	})
+
+	It("oversize body rejected with cap in error", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			// Write 2 MiB of data — exceeds the 1 MiB cap. Shape doesn't
+			// matter; MaxBytesReader trips before JSON parse.
+			big := make([]byte, 2<<20)
+			_, _ = w.Write(big)
+		}))
+		defer server.Close()
+
+		fetcher := maintainerconfig.NewHTTPFetcherForTest("", server.URL)
+		data, err := fetcher.Fetch(ctx, "bborbe", "maintainer", "master")
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("read body"))
+		Expect(err.Error()).To(ContainSubstring("cap="))
+		Expect(data).To(BeNil())
+	})
+
 	It("empty owner rejected with descriptive error", func() {
 		server := httptest.NewServer(
 			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),

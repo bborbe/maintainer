@@ -549,6 +549,209 @@ var _ = Describe("steps_planning", func() {
 			})
 		})
 
+		// spec 059 prompt 4 — Req M2: re-fire after a transient
+		// rewrite-LLM failure must reuse the cached bump verdict so
+		// the bump LLM call is NOT re-invoked. The cache lives in
+		// the prior ## Plan section — the controller persists the
+		// task page between fires and the next fire reads it fresh.
+		//
+		// The test models the production round-trip via Marshal +
+		// ParseMarkdown to obtain a fresh *Markdown for Run #2, NOT
+		// a re-used in-memory one. In-memory re-use would prove
+		// nothing about the on-disk round-trip.
+		Context("bump verdict cache (re-fire after rewrite LLM transient failure)", func() {
+			const taskMD = "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-m2\n---\n\n# release task\n"
+
+			It(
+				"re-fire after rewrite failure reuses cached bump verdict across write+reload",
+				func() {
+					ctx := context.Background()
+					fixture := "## Unreleased\n\n- feat: add foo\n\n## v1.7.7\n\n- old\n"
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns([]byte(fixture), nil)
+
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					// Run #1: bump LLM call (#0) succeeds, rewrite LLM call (#1) fails.
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat detected"}`,
+					}, nil)
+					fakeRunner.RunReturnsOnCall(1, nil, stderrors.New("rewrite transient"))
+					// Run #2: ONLY the rewrite LLM should fire (call index 2).
+					// Bump LLM call must NOT be invoked again — the cache short-circuits it.
+					fakeRunner.RunReturnsOnCall(2, &claudelib.ClaudeResult{
+						Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"already conforms"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue())
+
+					// Run #1 — fresh task page.
+					md1, err := agentlib.ParseMarkdown(ctx, taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					res1, err := step.Run(ctx, md1)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(res1.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(
+						fakeRunner.RunCallCount(),
+					).To(Equal(2))
+					// bump + rewrite both fired in Run #1
+
+					// CRITICAL: model the production round-trip. The controller
+					// persists the task page after each fire and the next
+					// fire reads it fresh — re-using the in-memory `md1` would
+					// not prove the cache survives the on-disk round-trip.
+					// Serialize via (*Markdown).Marshal then re-parse via
+					// ParseMarkdown to obtain a fresh *Markdown for Run #2.
+					serialized, err := md1.Marshal(ctx)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(serialized).To(ContainSubstring("## Plan"))
+					// json.MarshalIndent (used by MarshalSectionTyped) inserts
+					// a space after `:` so the actual on-disk form is
+					// `"bump": "minor"` — assert on that.
+					Expect(serialized).To(ContainSubstring(`"bump": "minor"`))
+
+					md2, err := agentlib.ParseMarkdown(ctx, serialized)
+					Expect(err).NotTo(HaveOccurred())
+
+					// Sanity: the re-parsed plan section MUST carry bump=minor —
+					// this is the precondition the cache lookup depends on. If
+					// this fails, the M2 design needs revisiting (the cache
+					// cannot survive the round-trip).
+					prior, perr := agentlib.ExtractSection[pkg.PlanOutput](ctx, md2, "## Plan")
+					Expect(perr).NotTo(HaveOccurred())
+					Expect(prior.Bump).To(Equal("minor"))
+
+					// Run #2 — fresh *Markdown re-parsed from serialized form.
+					// Expect Done and ONLY ONE additional LLM call (the rewrite
+					// retry). Total = 3, proving bump LLM was NOT re-fired.
+					res2, err := step.Run(ctx, md2)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(res2.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(
+						fakeRunner.RunCallCount(),
+					).To(Equal(3))
+					// +1 rewrite only; bump NOT re-fired
+
+					// Defensive: confirm the third runner call was the rewrite
+					// prompt, not a re-issued bump prompt. Use RunArgsForCall(2)
+					// to inspect.
+					_, promptArg := fakeRunner.RunArgsForCall(2)
+					Expect(promptArg).To(ContainSubstring("rewrite"))
+				},
+			)
+		})
+
+		// spec 059 prompt 4 — Req M4: surface .maintainer.yaml transport
+		// fetch failures on the task page (config_fetch_warning) so a
+		// repo that opted into rewrite is not silently downgraded on a
+		// transient flake. Three specs:
+		//   - non-404 fetch error → warning populated, ChangelogRewrite=false
+		//   - happy path → warning empty
+		//   - 404 (ErrFileNotFound) → warning empty (legitimate-absent)
+		Context("config_fetch_warning surfacing", func() {
+			const taskMD = "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-m4\n---\n\n# release task\n"
+			fixture := "## Unreleased\n\n- feat: add foo\n\n## v1.7.7\n\n- old\n"
+
+			It(
+				"non-404 .maintainer.yaml fetch error surfaces config_fetch_warning on plan and logs glog.Warningf",
+				func() {
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns([]byte(fixture), nil)
+
+					// .maintainer.yaml fetcher returns a transport error (not ErrFileNotFound).
+					fakeMaintainerCfg := &mocks.MaintainerConfigFetcher{}
+					fakeMaintainerCfg.FetchReturns(
+						nil,
+						stderrors.New("dial tcp api.github.com:443: connection refused"),
+					)
+
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat detected"}`,
+					}, nil)
+					// Rewrite LLM should NOT fire because changelogRewrite resolves to false.
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					// Only the bump LLM fired (no rewrite — flag defaulted to false).
+					Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(), md, "## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal(pkg.PlanOutcomeReady))
+					Expect(plan.ConfigFetchWarning).NotTo(BeEmpty())
+					Expect(
+						plan.ConfigFetchWarning,
+					).To(ContainSubstring(".maintainer.yaml fetch failed"))
+					Expect(plan.ConfigFetchWarning).To(ContainSubstring("connection refused"))
+					// ChangelogRewrite resolved to default false.
+					Expect(plan.ChangelogRewrite).NotTo(BeNil())
+					Expect(*plan.ChangelogRewrite).To(BeFalse())
+				},
+			)
+
+			It("happy path leaves config_fetch_warning empty", func() {
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns([]byte(fixture), nil)
+
+				fakeMaintainerCfg := &mocks.MaintainerConfigFetcher{}
+				fakeMaintainerCfg.FetchReturns(
+					[]byte("release:\n  autoRelease: true\n"),
+					nil,
+				)
+
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturns(&claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(), md, "## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.ConfigFetchWarning).To(BeEmpty())
+			})
+
+			It(
+				"ErrFileNotFound leaves config_fetch_warning empty (legitimate-absent file is not a warning)",
+				func() {
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns([]byte(fixture), nil)
+
+					fakeMaintainerCfg := &mocks.MaintainerConfigFetcher{}
+					fakeMaintainerCfg.FetchReturns(nil, maintainerconfig.ErrFileNotFound)
+
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg)
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+					_, err = step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(), md, "## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.ConfigFetchWarning).To(BeEmpty())
+				},
+			)
+		})
+
 		// spec 059 — the release.changelogRewrite opt-in flag in
 		// .maintainer.yaml gates the 058 rewrite LLM call. The
 		// maintainerConfigFetcher mock is wired per test to exercise
