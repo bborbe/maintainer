@@ -25,6 +25,7 @@ var _ = Describe("CreateAgentProvider", func() {
 			claudelib.ClaudeModel("sonnet"),
 			"",
 			map[string]string{},
+			false,
 		)
 	})
 
@@ -52,6 +53,7 @@ var _ = Describe("CreateAgentProvider", func() {
 			claudelib.ClaudeModel("sonnet"),
 			"",
 			map[string]string{},
+			false,
 		)
 		Expect(agent).NotTo(BeNil())
 		// The agent-lib does not expose the phase list on *Agent; the

@@ -92,6 +92,44 @@ make run-dummy-task       # generates a sample task file, runs it, writes result
 
 Useful for iterating on prompts (`pkg/prompts/workflow.md`, `pkg/prompts/output-format.md`) and allowed-tool config without a cluster round-trip.
 
+## github-releaser
+
+Pattern B Job agent that watches a repo's `## Unreleased` and, when non-empty, classifies the bullets as `patch` / `minor` / `major`, rewrites the CHANGELOG header to `## vN+1.x.x`, commits, tags, and pushes directly to master. Three phases (planning → execution → ai_review). Triggered by the [github-release watcher](watcher/github-release) and the `/trigger` admin endpoint.
+
+Config `~/.config/maintainer/github-releaser.yaml` mirrors `.maintainer.yaml` knobs (per-repo `release.autoRelease` etc.); see `agent/github-releaser/README.md` for the service-level walkthrough.
+
+### Major-bump guard (spec 060)
+
+The agent will **never** auto-release a `major` semver bump without an explicit opt-in. The guard fires in the planning phase, after Claude classifies the bump. Trip condition: `bump=major` AND `release.allowMajorBump=false` (or absent) AND `--allow-major` is unset. On trip the planning step writes `## Plan` with `outcome: needs_input` and `precondition_failed: major_bump_not_allowed`, clears `assignee`, sets `previous_assignee: github-releaser-agent`, and returns `Status: NeedsInput` — no silent downgrade, no auto-retry, no advance.
+
+Two levers, used independently or together:
+
+1. **Per-repo opt-in (durable).** Commit `release.allowMajorBump: true` to the target repo's `.maintainer.yaml`:
+
+   ```yaml
+   # .maintainer.yaml
+   release:
+     allowMajorBump: true   # opt in to automatic major-version releases
+   ```
+
+   Default is `false` — omit the field, set it `false` explicitly, or omit the `release:` block; all three are equivalent. Per-repo scope; survives re-fires; the YAML is the authoritative policy for that repo.
+
+2. **Per-run override (transient).** Re-fire the agent with `--allow-major=true` on the binary, or `ALLOW_MAJOR=true` in the env. The CLI flag propagates through `application` → `BuildEnv` → the planning step. When the override fires, the planning step emits a `glog.V(2)` line containing the literal `--allow-major override` so `kubectl logs` greps surface operator overrides.
+
+Either lever alone is sufficient; both can be set. `patch` and `minor` verdicts are unaffected — the guard is a no-op on those.
+
+#### Why this guard exists
+
+The bump classifier is prefix-based (`feat:` → minor, `BREAKING CHANGE` → major, everything else → patch). It has a known false-negative class of bug: a `refactor:` bullet that is semantically a breaking library rename (e.g. `refactor(lib): rename TaskTypeClaude → TaskTypeLLM`) reads as `patch` under the rules, yet downstream consumers see an incompatible API. The classifier itself cannot catch every case — prefix rules are a moving target. The guard catches the *symmetric* case: when the classifier *does* emit `major` (whether from a hidden `BREAKING CHANGE:` body line in a `refactor:` bullet or a real breaking change), the operator confirms once before tag + push. The cost of a single wrong major release is high (downstream consumers break under their semver discipline; the fix-forward is a manual revert) — the guard turns that into a one-time human ack.
+
+#### Re-delegating a tripped task
+
+When the guard trips, the task lands with `assignee: ""` and a `## Plan` block naming the cited bullets and the would-be next version. Two ways to re-delegate:
+
+1. **Flip the YAML opt-in and re-set the assignee.** Commit `release.allowMajorBump: true` to the target repo's `.maintainer.yaml`, push, then in the task file re-set `assignee: github-releaser-agent`. The next poll cycle (or manual `/trigger`) re-fires the agent with the durable opt-in in effect.
+
+2. **Re-fire the Job with the CLI override.** Re-create the Job (or set `ALLOW_MAJOR=true` on the controller's spawn env) without editing the target repo's config. The override is transient — it covers the in-flight run only; the next run still needs the YAML opt-in (or another override) to release a major.
+
 ## Layout
 
 ```

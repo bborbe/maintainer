@@ -90,6 +90,30 @@ var _ = Describe("Parse", func() {
 					ChangelogRewrite: true,
 				},
 			}),
+		Entry("release.allowMajorBump: true -> AllowMajorBump true",
+			"release:\n  allowMajorBump: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease:      false,
+					ChangelogRewrite: false,
+					AllowMajorBump:   true,
+				},
+			}),
+		Entry("release: present but no allowMajorBump field -> AllowMajorBump false (default)",
+			"release:\n  autoRelease: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease:      true,
+					ChangelogRewrite: false,
+					AllowMajorBump:   false,
+				},
+			}),
+		Entry("no release: block -> AllowMajorBump false",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				Release:    maintainerconfig.ReleaseConfig{AllowMajorBump: false},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {
@@ -156,6 +180,20 @@ var _ = Describe("Parse", func() {
 		cfg, err := maintainerconfig.Parse(
 			ctx,
 			[]byte("release:\n  changelogRewrite: 1\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("release.allowMajorBump: non-bool -> strict error", func() {
+		// yaml.v3 coerces the YAML-truthy strings "yes"/"on"/"true" to bool
+		// and "no"/"off"/"false" to bool (per the YAML 1.2 spec), so a
+		// truthy string is NOT a load-bearing invalid-value test. A
+		// non-truthy string ("foo") IS rejected by the type system.
+		cfg, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("release:\n  allowMajorBump: \"foo\"\n"),
 		)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
