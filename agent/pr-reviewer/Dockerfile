@@ -8,8 +8,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -mod=vendor -ldflags "-s" -a -in
 CMD ["/bin/bash"]
 
 FROM ${DOCKER_REGISTRY}/alpine:3.23 AS alpine
+ARG ASTGREP_VERSION=latest
 RUN apk --no-cache add ca-certificates curl bash nodejs npm github-cli git \
- && npm install -g --omit=dev --no-optional @anthropic-ai/claude-code \
+ && npm install -g --omit=dev --no-optional \
+      @anthropic-ai/claude-code \
+      @ast-grep/cli@${ASTGREP_VERSION} \
  && npm cache clean --force \
  && apk del npm \
  && rm -rf /root/.npm /tmp/*
