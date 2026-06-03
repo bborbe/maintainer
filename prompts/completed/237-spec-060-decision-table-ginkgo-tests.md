@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [060-github-releaser-major-bump-guard]
+summary: Updated 29 existing NewPlanningStep call sites to 4-arg signature and added 4 spec-060 Ginkgo cases (trip / repo-opt-in / CLI-flag / minor no-op) with regression-bullet fixture; make test exits 0 with 87.3% coverage on pkg/...
+container: maintainer-major-bump-guard-exec-237-spec-060-decision-table-ginkgo-tests
+dark-factory-version: v0.175.0
 created: "2026-06-03T15:05:00Z"
 queued: "2026-06-03T14:34:36Z"
+started: "2026-06-03T14:52:53Z"
+completed: "2026-06-03T15:00:54Z"
 branch: dark-factory/github-releaser-major-bump-guard
 ---
 
