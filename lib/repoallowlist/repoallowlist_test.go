@@ -140,26 +140,24 @@ var _ = Describe("IsAllowed", func() {
 		),
 	)
 
-	It("order independence: include-then-exclude equals exclude-then-include", func() {
-		orderingA := []string{
-			"github.com/bborbe/*",
-			"!github.com/bborbe/go-skeleton",
-		}
-		orderingB := []string{
-			"!github.com/bborbe/go-skeleton",
-			"github.com/bborbe/*",
-		}
-		for _, target := range []string{
-			"github.com/bborbe/go-skeleton",
-			"github.com/bborbe/maintainer",
-			"github.com/other/repo",
-		} {
+	DescribeTable("order independence: include-then-exclude equals exclude-then-include",
+		func(target string) {
+			orderingA := []string{
+				"github.com/bborbe/*",
+				"!github.com/bborbe/go-skeleton",
+			}
+			orderingB := []string{
+				"!github.com/bborbe/go-skeleton",
+				"github.com/bborbe/*",
+			}
 			Expect(repoallowlist.IsAllowed(orderingA, target)).To(
 				Equal(repoallowlist.IsAllowed(orderingB, target)),
-				"target=%s", target,
 			)
-		}
-	})
+		},
+		Entry("excluded target", "github.com/bborbe/go-skeleton"),
+		Entry("included target", "github.com/bborbe/maintainer"),
+		Entry("unrelated target", "github.com/other/repo"),
+	)
 })
 
 var _ = Describe("Validate", func() {

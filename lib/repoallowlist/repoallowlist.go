@@ -46,40 +46,30 @@ func IsAllowed(allowlist []string, target string) bool {
 	if target == "" {
 		return false
 	}
-	includes, excludes, sawExclude := parseAllowlist(allowlist)
-	includeMatched := anyMatches(includes, target)
-	excludeMatched := anyMatches(excludes, target)
-	if !sawExclude {
-		return includeMatched
+	includes, excludes := parseAllowlist(allowlist)
+	if len(excludes) == 0 {
+		return anyMatches(includes, target)
 	}
-	return (len(includes) == 0 || includeMatched) && !excludeMatched
+	if anyMatches(excludes, target) {
+		return false
+	}
+	return len(includes) == 0 || anyMatches(includes, target)
 }
 
 // parseAllowlist splits the allowlist into includes and excludes, logging
-// malformed entries via glog. sawExclude reports whether any '!'-prefixed
-// entry was seen (well-formed or not); this drives the IsAllowed branch
-// that distinguishes "no include matched" from "no includes were present".
-func parseAllowlist(allowlist []string) (includes []string, excludes []string, sawExclude bool) {
+// malformed entries via glog. Malformed entries are dropped from both slices
+// — if a list contains only malformed '!'-prefixed entries, excludes is
+// empty and IsAllowed falls through to include-only semantics.
+func parseAllowlist(allowlist []string) (includes []string, excludes []string) {
 	for _, entry := range allowlist {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue
 		}
 		original := entry
-		isExclude := false
-		if entry[0] == '!' {
-			isExclude = true
-			entry = entry[1:]
-		}
+		isExclude := entry[0] == '!'
 		if isExclude {
-			sawExclude = true
-		}
-		if entry == "" {
-			glog.Errorf(
-				"repoallowlist: malformed entry %q: must have exactly 3 path segments (host/owner/repo)",
-				original,
-			)
-			continue
+			entry = entry[1:]
 		}
 		if _, reason := classifyKind(entry); reason != "" {
 			glog.Errorf("repoallowlist: malformed entry %q: %s", original, reason)
@@ -91,7 +81,7 @@ func parseAllowlist(allowlist []string) (includes []string, excludes []string, s
 			includes = append(includes, entry)
 		}
 	}
-	return includes, excludes, sawExclude
+	return includes, excludes
 }
 
 // anyMatches reports whether any entry in the slice matches the target
