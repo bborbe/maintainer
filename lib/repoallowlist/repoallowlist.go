@@ -19,6 +19,23 @@ import (
 // If target is empty and the allowlist is non-empty, returns false.
 // Malformed or invalid wildcard entries are logged with glog.Errorf and skipped.
 //
+// A leading '!' on an entry (immediately after TrimSpace, with no whitespace
+// between '!' and the entry body) marks the entry as an exclusion. Example:
+// "!github.com/bborbe/go-skeleton" excludes go-skeleton.
+//
+// A target is allowed iff (includes is empty OR any include matches the
+// target) AND (no exclude matches the target). Excludes always override
+// includes — if both match, the target is rejected.
+//
+// An exclude-only allowlist (no include entries) means "allow everything
+// except the excluded entries" — the canonical allow-all-except case.
+//
+// Example:
+//
+//	includes: github.com/bborbe/*
+//	excludes: !github.com/bborbe/go-skeleton
+//	→ allows every bborbe repo except go-skeleton.
+//
 // No ctx parameter: malformed-entry errors are logged via glog and discarded;
 // they never escape the function, so there is nothing for ctx to enrich.
 // Validate carries the ctx since it returns the error to the caller.
@@ -29,25 +46,60 @@ func IsAllowed(allowlist []string, target string) bool {
 	if target == "" {
 		return false
 	}
+	includes, excludes, sawExclude := parseAllowlist(allowlist)
+	includeMatched := anyMatches(includes, target)
+	excludeMatched := anyMatches(excludes, target)
+	if !sawExclude {
+		return includeMatched
+	}
+	return (len(includes) == 0 || includeMatched) && !excludeMatched
+}
+
+// parseAllowlist splits the allowlist into includes and excludes, logging
+// malformed entries via glog. sawExclude reports whether any '!'-prefixed
+// entry was seen (well-formed or not); this drives the IsAllowed branch
+// that distinguishes "no include matched" from "no includes were present".
+func parseAllowlist(allowlist []string) (includes []string, excludes []string, sawExclude bool) {
 	for _, entry := range allowlist {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue
 		}
-		kind, reason := classifyKind(entry)
-		if reason != "" {
-			glog.Errorf("repoallowlist: malformed entry %q: %s", entry, reason)
+		original := entry
+		isExclude := false
+		if entry[0] == '!' {
+			isExclude = true
+			entry = entry[1:]
+		}
+		if isExclude {
+			sawExclude = true
+		}
+		if entry == "" {
+			glog.Errorf(
+				"repoallowlist: malformed entry %q: must have exactly 3 path segments (host/owner/repo)",
+				original,
+			)
 			continue
 		}
-		switch kind {
-		case "literal":
-			if entry == target {
-				return true
-			}
-		case "wildcard":
-			if matchWildcard(entry, target) {
-				return true
-			}
+		if _, reason := classifyKind(entry); reason != "" {
+			glog.Errorf("repoallowlist: malformed entry %q: %s", original, reason)
+			continue
+		}
+		if isExclude {
+			excludes = append(excludes, entry)
+		} else {
+			includes = append(includes, entry)
+		}
+	}
+	return includes, excludes, sawExclude
+}
+
+// anyMatches reports whether any entry in the slice matches the target
+// using the shared literal-or-wildcard dispatch.
+func anyMatches(entries []string, target string) bool {
+	for _, e := range entries {
+		if matchesEntry(e, target) {
+			return true
 		}
 	}
 	return false
@@ -57,6 +109,10 @@ func IsAllowed(allowlist []string, target string) bool {
 // Returns nil if the allowlist is empty/nil or all entries are valid.
 // Returns an aggregate error listing every malformed entry found.
 // Whitespace-only and empty entries are silently skipped (not malformed).
+// A leading '!' on an entry marks it as an exclusion; the well-formedness
+// check runs on the post-'!' portion of the entry, but the aggregated
+// error message names the ORIGINAL '!'-prefixed entry so the operator
+// sees what they wrote.
 func Validate(ctx context.Context, allowlist []string) error {
 	var errs []error
 	for _, entry := range allowlist {
@@ -64,10 +120,14 @@ func Validate(ctx context.Context, allowlist []string) error {
 		if entry == "" {
 			continue
 		}
+		original := entry
+		if entry[0] == '!' {
+			entry = entry[1:]
+		}
 		if _, reason := classifyKind(entry); reason != "" {
 			errs = append(
 				errs,
-				errors.Errorf(ctx, "repoallowlist: malformed entry %q: %s", entry, reason),
+				errors.Errorf(ctx, "repoallowlist: malformed entry %q: %s", original, reason),
 			)
 		}
 	}
@@ -108,4 +168,20 @@ func matchWildcard(entry, target string) bool {
 		return false
 	}
 	return entrySegments[0] == targetSegments[0] && entrySegments[1] == targetSegments[1]
+}
+
+// matchesEntry reports whether the (already-validated) entry matches the
+// target. The entry must be a non-empty, well-formed "host/owner/repo"
+// or "host/owner/*" — classifyKind has already accepted it. Both literal
+// (host/owner/repo) and wildcard (host/owner/*) shapes are dispatched
+// identically for includes and excludes.
+func matchesEntry(entry, target string) bool {
+	kind, _ := classifyKind(entry)
+	switch kind {
+	case "literal":
+		return entry == target
+	case "wildcard":
+		return matchWildcard(entry, target)
+	}
+	return false
 }
