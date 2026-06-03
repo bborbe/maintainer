@@ -10,6 +10,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 - feat(agent/pr-reviewer): install `@ast-grep/cli` in the alpine image so the `bborbe/coding` plugin's new dispatcher (Step 4a invokes the ast-grep-runner agent) can resolve the `sg` / `ast-grep` binary. Without it, the reviewer's Claude run loops on `sg --version` checks until the job hits `activeDeadlineSeconds` (observed on bborbe/coding#34). Mirrors the `claude-yolo` PR #8 fix that closed the same gap for the dark-factory image. `ARG ASTGREP_VERSION=latest` so we can pin a version later without changing the install line shape
+- fix(agent/pr-reviewer): drop `--omit=dev --no-optional` from the npm install line so `@ast-grep/cli`'s platform-specific native-binary package (`@ast-grep/cli-linux-{x64,arm64}`) gets fetched. Without it, `postinstall.js` fails with "Failed to locate @ast-grep/cli native binary." Same install shape as the claude-yolo Dockerfile
 
 ## v0.31.0
 

@@ -9,8 +9,14 @@ CMD ["/bin/bash"]
 
 FROM ${DOCKER_REGISTRY}/alpine:3.23 AS alpine
 ARG ASTGREP_VERSION=latest
+# @ast-grep/cli is a wrapper that requires its platform-specific
+# binary package (@ast-grep/cli-linux-{x64,arm64}) as an optional
+# dependency — installing with --no-optional makes postinstall.js
+# fail "Failed to locate @ast-grep/cli native binary." Drop both
+# --omit=dev and --no-optional so the platform binary is fetched.
+# Same shape as claude-yolo Dockerfile.
 RUN apk --no-cache add ca-certificates curl bash nodejs npm github-cli git \
- && npm install -g --omit=dev --no-optional \
+ && npm install -g \
       @anthropic-ai/claude-code \
       @ast-grep/cli@${ASTGREP_VERSION} \
  && npm cache clean --force \
