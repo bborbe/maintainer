@@ -1,11 +1,13 @@
 ---
-status: prompted
+status: completed
 tags:
     - dark-factory
     - spec
 approved: "2026-06-03T12:54:47Z"
 generating: "2026-06-03T13:05:52Z"
 prompted: "2026-06-03T13:11:32Z"
+verifying: "2026-06-03T17:37:03Z"
+completed: "2026-06-03T17:37:05Z"
 branch: dark-factory/github-releaser-major-bump-guard
 ---
 
