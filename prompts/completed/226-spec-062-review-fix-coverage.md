@@ -1,7 +1,6 @@
 ---
 status: rejected
-rejectedReason: "orphan failed prompt from sibling spec 056 on feature/plugin-version-bump branch — moved on feat/changelog-rewrite to unblock 058 queue"
-spec: [056-plugin-version-bump]
+spec: ["062"]
 container: maintainer-plugin-version-bump-exec-226-spec-056-review-fix-coverage
 dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"
