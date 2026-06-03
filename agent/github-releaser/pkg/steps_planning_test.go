@@ -366,7 +366,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"all bullets already conform"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					withChangelogRewriteTrue(),
+					false,
+				) // spec 060
 				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
@@ -403,7 +408,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						withChangelogRewriteTrue(),
+						false,
+					) // spec 060
 					// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
@@ -449,7 +459,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- feat: add foo\n","reasoning":"added missing feat: prefix"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					withChangelogRewriteTrue(),
+					false,
+				) // spec 060
 				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
@@ -486,7 +501,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: routine dependency updates\n","reasoning":"folded 10 adjacent chore bump lines into one entry"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						withChangelogRewriteTrue(),
+						false,
+					) // spec 060
 					// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
@@ -531,7 +551,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					withChangelogRewriteTrue(),
+					false,
+				) // spec 060
 				// spec 059: opt-in flag true → 058 rewrite pipeline runs.
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
@@ -590,7 +615,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"already conforms"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, withChangelogRewriteTrue(), false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						withChangelogRewriteTrue(),
+						false,
+					) // spec 060
 
 					// Run #1 — fresh task page.
 					md1, err := agentlib.ParseMarkdown(ctx, taskMD)
@@ -678,7 +708,12 @@ var _ = Describe("steps_planning", func() {
 					}, nil)
 					// Rewrite LLM should NOT fire because changelogRewrite resolves to false.
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						fakeMaintainerCfg,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -718,7 +753,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg, false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					fakeMaintainerCfg,
+					false,
+				) // spec 060
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				_, err = step.Run(context.Background(), md)
@@ -745,7 +785,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, fakeMaintainerCfg, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						fakeMaintainerCfg,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = step.Run(context.Background(), md)
@@ -793,7 +838,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -837,7 +887,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -873,7 +928,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -906,7 +966,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					maintainerFetcher,
+					false,
+				) // spec 060
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.Run(context.Background(), md)
@@ -941,7 +1006,12 @@ var _ = Describe("steps_planning", func() {
 					Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n- docs: update docs\n- refactor: internal rename\n","reasoning":"reframed raw git log lines"}`,
 				}, nil)
 
-				step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					maintainerFetcher,
+					false,
+				) // spec 060
 				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.Run(context.Background(), md)
@@ -986,7 +1056,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":false,"rewritten_unreleased":"","reasoning":"already clean"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -1022,7 +1097,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"bump":"minor","reasoning":"feat: stub"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -1056,7 +1136,12 @@ var _ = Describe("steps_planning", func() {
 					fakeFetcher.FetchReturns(noisyChangelog, nil)
 					fakeRunner := &mocks.ClaudeRunnerMock{} // never called
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -1100,7 +1185,12 @@ var _ = Describe("steps_planning", func() {
 					fakeFetcher.FetchReturns(noisyChangelog, nil)
 					fakeRunner := &mocks.ClaudeRunnerMock{}
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					result, err := step.Run(context.Background(), md)
@@ -1141,7 +1231,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n","reasoning":"ok"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = step.Run(context.Background(), md)
@@ -1192,7 +1287,12 @@ var _ = Describe("steps_planning", func() {
 						Result: `{"rewrite_needed":true,"rewritten_unreleased":"- chore: bump foo\n","reasoning":"ok"}`,
 					}, nil)
 
-					step := pkg.NewPlanningStep(fakeRunner, fakeFetcher, maintainerFetcher, false) // spec 060
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false,
+					) // spec 060
 					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
 					Expect(err).NotTo(HaveOccurred())
 					_, err = step.Run(context.Background(), md)

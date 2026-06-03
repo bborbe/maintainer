@@ -113,7 +113,12 @@ func CreateAgent(
 	planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
 	fetcher := githubchangelog.NewHTTPFetcher(ghToken)
 	maintainerConfigFetcher := maintainerconfig.NewHTTPFetcher(ghToken)
-	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher, maintainerConfigFetcher, allowMajor)
+	planningStep := releaserpkg.NewPlanningStep(
+		planningRunner,
+		fetcher,
+		maintainerConfigFetcher,
+		allowMajor,
+	)
 
 	executionOps := CreateGitOps()
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)

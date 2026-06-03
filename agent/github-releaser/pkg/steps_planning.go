@@ -151,7 +151,12 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		}, nil
 	}
 
-	changelogRewrite, allowMajorBump, fetchWarning, err := s.resolveMaintainerConfig(ctx, owner, name, ref)
+	changelogRewrite, allowMajorBump, fetchWarning, err := s.resolveMaintainerConfig(
+		ctx,
+		owner,
+		name,
+		ref,
+	)
 	if err != nil {
 		// Fail-closed: .maintainer.yaml is malformed OR contains a
 		// non-boolean release.changelogRewrite. Write a ## Plan(failed)
@@ -326,44 +331,60 @@ func (s *planningStep) runClassification(
 		})
 	}
 
-	// Spec 060 major-bump guard. Decision table (FROZEN):
-	//   bump=major + allowMajorBumpConfig==true  → proceed (repo opted in)
-	//   bump=major + s.allowMajor==true           → proceed (CLI override; log audit)
-	//   bump=major + neither                      → TRIP (escalate, log audit)
-	//   bump=patch/minor (any)                    → proceed (no guard)
-	// On TRIP, the precondition_failed token written to ## Plan is the
-	// literal "major_bump_not_allowed" (PreconditionMajorBumpNotAllowed);
-	// operators grep the task page for that token to find this run.
-	if verdict.Bump == "major" && !allowMajorBumpConfig && !s.allowMajor {
-		glog.V(2).Infof(
-			"planning: major bump not allowed: bump=major, allowMajorBumpConfig=%t, allowMajorFlag=%t, reasoning=%q",
-			allowMajorBumpConfig, s.allowMajor, verdict.Reasoning,
-		)
-		header := "## " + prefixStyle + nextNumeric
-		return s.escalate(ctx, md, escalation{
-			reason:               "major bump not allowed: " + verdict.Reasoning,
-			preconditionFailed:   PreconditionMajorBumpNotAllowed,
-			currentVersion:       currentVersion,
-			nextVersion:          nextNumeric,
-			nextVersionHeader:    header,
-			bump:                 verdict.Bump,
-			bullets:              bullets,
-			reasoning:            verdict.Reasoning,
-			allowMajorBumpConfig: allowMajorBumpConfig,
-			allowMajorBumpFlag:   s.allowMajor,
-		})
+	// Spec 060 major-bump guard. Decision table is enforced inside
+	// applyMajorBumpGuard (see GoDoc on that helper).
+	guardResult, gerr := s.applyMajorBumpGuard(
+		ctx,
+		md,
+		verdict,
+		allowMajorBumpConfig,
+		currentVersion,
+		nextNumeric,
+		prefixStyle,
+		bullets,
+	)
+	if gerr != nil {
+		return nil, gerr
 	}
-	if verdict.Bump == "major" && s.allowMajor && !allowMajorBumpConfig {
-		glog.V(2).Infof("planning: --allow-major override accepted for major bump")
+	if guardResult != nil {
+		return guardResult, nil
 	}
 
+	return s.resolveRewriteAndPublish(
+		ctx,
+		md,
+		currentVersion,
+		bullets,
+		prefixStyle,
+		originalBody,
+		verdict,
+		nextNumeric,
+		changelogRewrite,
+		fetchWarning,
+	)
+}
+
+// resolveRewriteAndPublish runs the rewrite verdict (gated by
+// changelogRewrite) and publishes the plan. On rewrite failure it
+// publishes a partial plan (with bump verdict populated, rewrite
+// verdict zero) BEFORE returning Failed — the M2 re-fire cache
+// needs the prior ## Plan to carry the bump verdict so the bump
+// LLM call is NOT re-issued on retry. Without this, a transient
+// rewrite-LLM failure would cause every re-fire to re-run bump
+// classification.
+func (s *planningStep) resolveRewriteAndPublish(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	currentVersion string,
+	bullets []string,
+	prefixStyle, originalBody string,
+	verdict prompts.BumpVerdict,
+	nextNumeric string,
+	changelogRewrite bool,
+	fetchWarning string,
+) (*agentlib.Result, error) {
 	rewriteVerdict, err := s.resolveRewriteVerdict(ctx, originalBody, changelogRewrite)
 	if err != nil {
-		// Persist the bump verdict via publishPlan before returning the
-		// failure. A re-fire (M2 cache) needs the prior ## Plan to
-		// carry the bump verdict so the bump LLM call is NOT re-issued
-		// on retry. Without this, a transient rewrite-LLM failure
-		// would cause every re-fire to re-run the bump classification.
 		glog.V(2).
 			Infof("planning: rewrite failed: %v — publishing partial plan for re-fire cache", err)
 		if _, perr := s.publishPlan(
@@ -400,6 +421,70 @@ func (s *planningStep) runClassification(
 		changelogRewrite,
 		fetchWarning,
 	)
+}
+
+// applyMajorBumpGuard evaluates the spec 060 decision table on the
+// Claude bump verdict + the two opt-in flag sources (target repo's
+// .maintainer.yaml `release.allowMajorBump` and the per-run
+// `--allow-major` / `ALLOW_MAJOR` CLI flag). The decision table is
+// FROZEN per spec 060 § Desired Behavior 3; any change here MUST
+// update the spec table AND the spec's acceptance criteria first.
+//
+//	| bump  | allowMajorBumpConfig | allowMajor (flag) | result                            |
+//	|-------|----------------------|-------------------|-----------------------------------|
+//	| major | false                | false             | TRIP → NeedsInput (escalate)      |
+//	| major | true                 | *                 | proceed (repo opted in)           |
+//	| major | false                | true              | proceed + glog.V(2) override log  |
+//	| other | *                    | *                 | proceed (no-op for guard)         |
+//
+// On TRIP the function returns the escalation Result (s.escalate
+// writes the needs_input ## Plan block, clears assignee, sets
+// previous_assignee=github-releaser-agent). On proceed it returns
+// (nil, nil) so the caller advances to the rewrite verdict /
+// publishPlan step. The override-path glog line is emitted as a
+// side-effect of the proceed branch (no control-flow impact — it is
+// an audit trail for kubectl-logs greps).
+//
+// The preconditionFailed token on TRIP is the literal
+// "major_bump_not_allowed" (PreconditionMajorBumpNotAllowed);
+// operators grep the task page for that token to find this run.
+func (s *planningStep) applyMajorBumpGuard(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	verdict prompts.BumpVerdict,
+	allowMajorBumpConfig bool,
+	currentVersion, nextNumeric, prefixStyle string,
+	bullets []string,
+) (*agentlib.Result, error) {
+	if verdict.Bump != "major" {
+		return nil, nil
+	}
+	if allowMajorBumpConfig {
+		return nil, nil
+	}
+	if s.allowMajor {
+		// CLI override; repo has not opted in. Log audit line and proceed.
+		glog.V(2).Infof("planning: --allow-major override accepted for major bump")
+		return nil, nil
+	}
+	// TRIP: bump=major, no opt-in from either source.
+	glog.V(2).Infof(
+		"planning: major bump not allowed: bump=major, allowMajorBumpConfig=%t, allowMajorFlag=%t, reasoning=%q",
+		allowMajorBumpConfig, s.allowMajor, verdict.Reasoning,
+	)
+	header := "## " + prefixStyle + nextNumeric
+	return s.escalate(ctx, md, escalation{
+		reason:               "major bump not allowed: " + verdict.Reasoning,
+		preconditionFailed:   PreconditionMajorBumpNotAllowed,
+		currentVersion:       currentVersion,
+		nextVersion:          nextNumeric,
+		nextVersionHeader:    header,
+		bump:                 verdict.Bump,
+		bullets:              bullets,
+		reasoning:            verdict.Reasoning,
+		allowMajorBumpConfig: allowMajorBumpConfig,
+		allowMajorBumpFlag:   s.allowMajor,
+	})
 }
 
 // resolveRewriteVerdict returns the rewrite verdict for the current
@@ -503,11 +588,11 @@ type escalation struct {
 	// paths pass zero values; the major-bump guard trip case
 	// populates all of them so the operator sees the would-be
 	// release shape on the task page.
-	nextVersion         string
-	nextVersionHeader   string
-	bump                string
-	bullets             []string
-	reasoning           string
+	nextVersion          string
+	nextVersionHeader    string
+	bump                 string
+	bullets              []string
+	reasoning            string
 	allowMajorBumpConfig bool
 	allowMajorBumpFlag   bool
 }
@@ -530,15 +615,15 @@ func (s *planningStep) escalate(
 	e escalation,
 ) (*agentlib.Result, error) {
 	output := PlanOutput{
-		Outcome:             PlanOutcomeNeedsInput,
-		Reason:              e.reason,
-		PreconditionFailed:  e.preconditionFailed,
-		CurrentVersion:      e.currentVersion,
-		NextVersion:         e.nextVersion,
-		NextVersionHeader:   e.nextVersionHeader,
-		Bump:                e.bump,
-		Bullets:             e.bullets,
-		Reasoning:           e.reasoning,
+		Outcome:              PlanOutcomeNeedsInput,
+		Reason:               e.reason,
+		PreconditionFailed:   e.preconditionFailed,
+		CurrentVersion:       e.currentVersion,
+		NextVersion:          e.nextVersion,
+		NextVersionHeader:    e.nextVersionHeader,
+		Bump:                 e.bump,
+		Bullets:              e.bullets,
+		Reasoning:            e.reasoning,
 		AllowMajorBumpConfig: e.allowMajorBumpConfig,
 		AllowMajorBumpFlag:   e.allowMajorBumpFlag,
 	}

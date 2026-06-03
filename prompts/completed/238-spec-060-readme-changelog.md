@@ -1,9 +1,17 @@
 ---
-status: approved
+status: rejected
+originalStatus: failed
 spec: [060-github-releaser-major-bump-guard]
+container: maintainer-major-bump-guard-exec-238-spec-060-readme-changelog
+dark-factory-version: v0.175.0
 created: "2026-06-03T15:05:00Z"
 queued: "2026-06-03T14:34:37Z"
+started: "2026-06-03T15:00:56Z"
+completed: "2026-06-03T15:07:34Z"
 branch: dark-factory/github-releaser-major-bump-guard
+lastFailReason: 'validate completion report: completion report status: partial'
+rejected: "2026-06-03T15:10:38Z"
+rejected_reason: Blocked on funlen lint violation from prompt 236 guard-logic work (pre-existing). Deliverable (README + CHANGELOG docs) is rolled into fix-up prompt 239 which extracts the major-bump guard helper to clear funlen and commits the docs in one pass.
 ---
 
 <summary>
