@@ -1551,6 +1551,55 @@ var _ = Describe("steps_planning", func() {
 					Expect(plan.Bump).To(Equal("minor"))
 					Expect(plan.NextVersion).To(Equal("1.8.0"))
 				})
+
+				It("patch bump unaffected by guard", func() {
+					// Same shape as the minor no-op case, but with bump=patch.
+					// Spec 060 § Desired Behavior 3 says the guard fires only
+					// on `major`; this asserts the condition is the blanket
+					// `!= "major"` and not `== "minor"` (a regression that
+					// would silently let patch bumps trip).
+					maintainerFetcher := &mocks.MaintainerConfigFetcher{}
+					maintainerFetcher.FetchReturns(nil, nil)
+
+					cleanChangelog := []byte(
+						"## Unreleased\n\n- fix: typo\n\n## v1.7.7\n\n- old\n",
+					)
+					fakeFetcher := &mocks.Fetcher{}
+					fakeFetcher.FetchReturns(cleanChangelog, nil)
+
+					fakeRunner := &mocks.ClaudeRunnerMock{}
+					fakeRunner.RunReturns(&claudelib.ClaudeResult{
+						Result: `{"bump":"patch","reasoning":"fix: stub"}`,
+					}, nil)
+
+					step := pkg.NewPlanningStep(
+						fakeRunner,
+						fakeFetcher,
+						maintainerFetcher,
+						false, // spec 060: per-run override OFF
+					)
+
+					taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v1.7.7\ntask_identifier: gh-release-bborbe-maintainer-master-spec060-patch\n---\n\n# release task\n"
+
+					md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+					Expect(err).NotTo(HaveOccurred())
+
+					result, err := step.Run(context.Background(), md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("execution"))
+					Expect(maintainerFetcher.FetchCallCount()).To(Equal(1))
+
+					plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+						context.Background(),
+						md,
+						"## Plan",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(plan.Outcome).To(Equal("ready"))
+					Expect(plan.Bump).To(Equal("patch"))
+					Expect(plan.NextVersion).To(Equal("1.7.8"))
+				})
 			})
 		})
 	})
