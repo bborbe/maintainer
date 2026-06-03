@@ -140,8 +140,9 @@ var _ = Describe("IsAllowed", func() {
 		),
 	)
 
-	DescribeTable("order independence: include-then-exclude equals exclude-then-include",
-		func(target string) {
+	DescribeTable(
+		"order independence: include-then-exclude equals exclude-then-include AND matches the expected result",
+		func(target string, expected bool) {
 			orderingA := []string{
 				"github.com/bborbe/*",
 				"!github.com/bborbe/go-skeleton",
@@ -150,13 +151,14 @@ var _ = Describe("IsAllowed", func() {
 				"!github.com/bborbe/go-skeleton",
 				"github.com/bborbe/*",
 			}
-			Expect(repoallowlist.IsAllowed(orderingA, target)).To(
-				Equal(repoallowlist.IsAllowed(orderingB, target)),
-			)
+			resultA := repoallowlist.IsAllowed(orderingA, target)
+			resultB := repoallowlist.IsAllowed(orderingB, target)
+			Expect(resultA).To(Equal(resultB))
+			Expect(resultA).To(Equal(expected))
 		},
-		Entry("excluded target", "github.com/bborbe/go-skeleton"),
-		Entry("included target", "github.com/bborbe/maintainer"),
-		Entry("unrelated target", "github.com/other/repo"),
+		Entry("excluded target", "github.com/bborbe/go-skeleton", false),
+		Entry("included target", "github.com/bborbe/maintainer", true),
+		Entry("unrelated target", "github.com/other/repo", false),
 	)
 })
 
