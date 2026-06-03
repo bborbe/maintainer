@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.34.0
 
 - feat(lib/repoallowlist): allow `!`-prefix entries as exclusions — a target is allowed iff `(includes empty OR any include matches) AND (no exclude matches)`. Excludes always override includes; an exclude-only allowlist means allow-all-except. Existing `IsAllowed` / `Validate` signatures unchanged; consumer services pick up the new semantics with zero code change (spec 061)
 
