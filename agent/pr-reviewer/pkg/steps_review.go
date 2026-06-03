@@ -238,7 +238,7 @@ func (s *reviewStep) callVerifier(ctx context.Context, md *agentlib.Markdown) *V
 	result := s.verifier.VerifyReview(ctx, VerifyRequest{
 		PR:             *prInfo,
 		HeadSHA:        headSHA,
-		ExpectedStates: []string{"APPROVED", "CHANGES_REQUESTED", "COMMENTED"},
+		ExpectedStates: []string{"APPROVED", "CHANGES_REQUESTED"},
 	})
 
 	if result.Found {

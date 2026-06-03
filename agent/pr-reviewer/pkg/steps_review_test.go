@@ -320,6 +320,20 @@ prior verdict body
 				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
 				Expect(result.NextPhase).To(Equal("done"))
 			})
+
+			It("passes ExpectedStates without COMMENTED (spec 060 regression guard)", func() {
+				content := "---\nref: abc123\n---\n\nReview the PR at " + prURL + "\n\n" +
+					"## Review\n\nsome content\n\n" +
+					"## Diagnostics\n\n" + "```yaml\nclass: transient\n```\n"
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(verifier.VerifyReviewCallCount()).To(Equal(1))
+				_, verifyReq := verifier.VerifyReviewArgsForCall(0)
+				Expect(verifyReq.ExpectedStates).To(ConsistOf("APPROVED", "CHANGES_REQUESTED"))
+				Expect(verifyReq.ExpectedStates).NotTo(ContainElement("COMMENTED"))
+			})
 		})
 
 		Context("verification runs and fails", func() {
