@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.33.1
 
 - fix(agent/pr-reviewer): verdict now decides the GitHub review event — `approve` always maps to `APPROVE` and `request-changes` always maps to `REQUEST_CHANGES`, regardless of the per-repo `autoApprove` config. The `autoApprove` flag remains as a config field/YAML key for operator tooling; it no longer downgrades a verdict. The verifier's fresh-review allow-list at the call site in `pkg/steps_review.go` drops `COMMENTED` so a stale `COMMENTED` review at the head SHA is correctly treated as a non-match. Branch protection's "approving review" requirement is now satisfied on docs-only PRs with `autoApprove=false`.
 
