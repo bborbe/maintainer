@@ -156,9 +156,8 @@ var _ = Describe("PrPoster", func() {
 		},
 		Entry("approve+autoApprove:true → APPROVE",
 			pkg.VerdictApprove, true, "APPROVE", "APPROVED", ""),
-		Entry("approve+autoApprove:false → COMMENT",
-			pkg.VerdictApprove, false, "COMMENT", "COMMENTED",
-			"auto-approve disabled for this repo"),
+		Entry("approve+autoApprove:false → APPROVE (post-fix contract — spec 060)",
+			pkg.VerdictApprove, false, "APPROVE", "APPROVED", ""),
 		Entry("request-changes → REQUEST_CHANGES",
 			pkg.VerdictRequestChanges, false, "REQUEST_CHANGES", "CHANGES_REQUESTED", ""),
 	)

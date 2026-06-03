@@ -119,4 +119,23 @@ var _ = Describe("ReviewVerifier", func() {
 			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
 		})
 	})
+
+	Context("allow-list excludes COMMENTED for fresh review (spec 060)", func() {
+		It("returns Found:false when only allowed state is COMMENTED", func() {
+			// GitHub returns a COMMENTED review (the only kind the pre-fix
+			// poster ever produced for verdict approve + autoApprove:false).
+			body := reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "COMMENTED"))
+			fakeClient.DoStub = func(_ *http.Request) (*http.Response, error) {
+				return makeHTTPResp(200, body), nil
+			}
+			result := verifier.VerifyReview(ctx, req("COMMENTED"))
+			Expect(result.Found).To(BeFalse())
+			Expect(result.Outcome).To(Equal("failed"))
+			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
+			Expect(
+				result.Attempt,
+			).To(Equal(2))
+			// parity with existing "review absent both attempts" — phantom-POST exhausts retries
+		})
+	})
 })
