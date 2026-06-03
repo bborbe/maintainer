@@ -653,3 +653,35 @@ repos:
 		})
 	})
 })
+
+var _ = Describe("ExpandHome", func() {
+	It("expands ~ to home directory", func() {
+		home := os.Getenv("HOME")
+		result := pkg.ExpandHome("~/some/path")
+		Expect(result).To(Equal(filepath.Join(home, "some/path")))
+	})
+
+	It("returns input unchanged when no ~ prefix", func() {
+		Expect(pkg.ExpandHome("/absolute/path")).To(Equal("/absolute/path"))
+	})
+
+	It("handles empty string", func() {
+		Expect(pkg.ExpandHome("")).To(Equal(""))
+	})
+})
+
+var _ = Describe("normalizeURL", func() {
+	DescribeTable(
+		"normalizes URLs",
+		func(input, want string) {
+			Expect(pkg.NormalizeURLForTest(input)).To(Equal(want))
+		},
+		Entry("strips trailing slash", "https://github.com/", "https://github.com"),
+		Entry("lowercases host", "https://GITHUB.COM/owner/repo", "https://github.com/owner/repo"),
+		Entry(
+			"returns input unchanged",
+			"https://github.com/owner/repo",
+			"https://github.com/owner/repo",
+		),
+	)
+})

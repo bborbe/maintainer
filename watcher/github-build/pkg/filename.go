@@ -15,23 +15,39 @@ const DefaultMaxTitleLen = 200
 
 // computeBuildTitle returns the human-readable title for a build-failure task.
 // Format: "Build Failure {provider} - {slugifySegment(owner)}-{slugifySegment(repo)} - {sha7}"
+// When taskSuffix is non-empty, appends " - <suffix>" (before maxTitle cap if needed).
 // The returned string MUST NOT include the .md extension; the controller appends it.
-func computeBuildTitle(provider, owner, repo, episodeSHA string, maxTitle int) string {
+func computeBuildTitle(
+	provider, owner, repo, episodeSHA string,
+	maxTitle int,
+	taskSuffix string,
+) string {
 	sha7 := episodeSHA
 	if len(sha7) > 7 {
 		sha7 = sha7[:7]
 	}
 	ownerRepo := slugifySegment(owner) + "-" + slugifySegment(repo)
 	title := "Build Failure " + provider + " - " + ownerRepo + " - " + sha7
-	if len(title) > maxTitle {
-		glog.Warningf(
-			"build task title exceeds max length: len=%d max=%d — truncating",
-			len(title),
-			maxTitle,
-		)
-		title = title[:maxTitle]
+	var suffixPart string
+	if taskSuffix != "" {
+		suffixPart = " - " + taskSuffix
 	}
-	return title
+	if len(title)+len(suffixPart) > maxTitle {
+		glog.Warningf(
+			"build task title exceeds max length: len=%d max=%d suffix=%q — truncating to preserve suffix",
+			len(title)+len(suffixPart),
+			maxTitle,
+			taskSuffix,
+		)
+		budget := maxTitle - len(suffixPart)
+		if budget < 0 {
+			budget = 0
+		}
+		if len(title) > budget {
+			title = title[:budget]
+		}
+	}
+	return title + suffixPart
 }
 
 // slugifySegment converts s to a filesystem-safe lowercase segment.

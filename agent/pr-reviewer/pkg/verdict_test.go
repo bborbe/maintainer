@@ -816,3 +816,88 @@ var _ = Describe("ParseVerdict normalisation regression (spec-030)", func() {
 		Expect(result.Reason).To(Equal("no verdict block"))
 	})
 })
+
+var _ = Describe("ParseVerdict end-anchored window regression (long verdict block)", func() {
+	// Reproduces the maintainer PR #29 inversion (2026-05-30): the reviewer
+	// emitted a well-formed `"verdict": "approve"` block, but the block's long
+	// `comments` array pushed the "verdict" KEY ~60 lines above the closing
+	// brace — outside the old key-line 50-line window — so the parser returned
+	// "no verdict block", fail-closed to request-changes, and posted a false
+	// CHANGES_REQUESTED on a PR the bot actually approved. The fix anchors the
+	// window on the block's CLOSING brace (which sits at the end of the review
+	// per the execution output-format spec) and walks back unbounded to the
+	// matching open brace, so block length no longer drops a present verdict.
+
+	// longVerdictBlock builds a fenced JSON verdict block whose "verdict" key is
+	// pushed `commentCount * 5` lines above the closing brace by the comments
+	// array, with ≥3 prose lines before the fence.
+	longVerdictBlock := func(verdict string, commentCount int) string {
+		var b strings.Builder
+		b.WriteString(
+			"# Code Review\n\nNarrative line 1.\nNarrative line 2.\nNarrative line 3.\n\n",
+		)
+		b.WriteString("```json\n{\n")
+		b.WriteString(`  "verdict": "` + verdict + `",` + "\n")
+		b.WriteString(`  "summary": "Well-scoped change; only nits flagged.",` + "\n")
+		b.WriteString(`  "comments": [` + "\n")
+		for i := 0; i < commentCount; i++ {
+			comma := ","
+			if i == commentCount-1 {
+				comma = ""
+			}
+			b.WriteString("    {\n")
+			b.WriteString(`      "file": "prompts/completed/stale.md",` + "\n")
+			b.WriteString(`      "line": 1,` + "\n")
+			b.WriteString(`      "severity": "nit",` + "\n")
+			b.WriteString(`      "message": "stale prompt file"` + "\n")
+			b.WriteString("    }" + comma + "\n")
+		}
+		b.WriteString("  ]\n}\n```")
+		return b.String()
+	}
+
+	It("parses approve when the verdict key is >50 lines above a near-end closing brace", func() {
+		reviewText := longVerdictBlock("approve", 20)
+		// Sanity: the verdict key really is outside the trailing 50-line window.
+		lines := strings.Split(reviewText, "\n")
+		verdictLine := -1
+		for i, l := range lines {
+			if strings.Contains(l, `"verdict"`) {
+				verdictLine = i
+			}
+		}
+		Expect(verdictLine).NotTo(Equal(-1), "generated block must contain a verdict key")
+		Expect(len(lines)-verdictLine).To(BeNumerically(">", 50),
+			"test setup must push the verdict key beyond the 50-line window")
+
+		result := pkg.ParseVerdict(reviewText)
+		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+		// Pin the exact regression symptom: the block was FOUND and parsed, not
+		// silently dropped and fail-closed (which would read "no verdict block").
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
+	})
+
+	It("finds a verdict block sitting just past the 50-line boundary", func() {
+		// commentCount=11 → ~55 comment lines: closing brace within the window,
+		// verdict key just outside the old 50-line cap.
+		result := pkg.ParseVerdict(longVerdictBlock("approve", 11))
+		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
+	})
+
+	It("still maps a long request-changes block to RequestChanges via the block", func() {
+		result := pkg.ParseVerdict(longVerdictBlock("request-changes", 20))
+		Expect(result.Verdict).To(Equal(pkg.VerdictRequestChanges))
+		// Must come from the parsed block, not from fail-closed "no verdict block".
+		Expect(result.Reason).NotTo(Equal("no verdict block"))
+	})
+
+	It("matches the outer brace despite balanced braces inside a string value", func() {
+		reviewText := "# Review\n\nProse line.\n\n```json\n{\n" +
+			`  "verdict": "approve",` + "\n" +
+			`  "reason": "use map[string]struct{}{} and {} sparingly"` + "\n" +
+			"}\n```"
+		result := pkg.ParseVerdict(reviewText)
+		Expect(result.Verdict).To(Equal(pkg.VerdictApprove))
+	})
+})

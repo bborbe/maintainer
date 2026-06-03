@@ -79,3 +79,40 @@ gomodtidy:
 			echo "go mod tidy {}"; \
 			(cd "{}" && go mod tidy && go run -mod=mod github.com/shoenig/go-modtool -w fmt go.mod) \
 		'
+
+# gocommit: Commit only if dirty, run precommit, soft reset on failure.
+.PHONY: gocommit
+gocommit:
+	@for dir in `pwd`/lib $$(find `pwd` \( -name lib -o -name vendor \) -prune -o -name go.mod -exec dirname "{}" \; | sort); do \
+		cd "$${dir}" && \
+		echo "precommit + commit started for $${dir}" && \
+		((git diff --quiet -- . && git diff --cached --quiet -- . && test -z "$$(git ls-files --others --exclude-standard -- .)" && \
+		echo "nothing changed => skip") || \
+		(make precommit && \
+		git add -- . && \
+		(git diff --cached --quiet -- . && \
+		echo "nothing changed after precommit => skip" || \
+		(git commit -m"make precommit of $${dir}" -- . && \
+		echo "precommit + commit completed for $${dir}"))) || \
+		(git reset -- . && \
+		echo "precommit + commit failed for $${dir}")) \
+	done
+
+.PHONY: fix
+fix:
+	@for dir in $$(find `pwd` -type d -name vendor -prune -o -name go.mod -exec dirname "{}" \; | grep -v '^$$'); do \
+		cd $${dir}; \
+		echo "fix $${dir}"; \
+		go get \
+		github.com/IBM/sarama@latest \
+		github.com/bborbe/agent/lib@latest \
+		github.com/bborbe/argument/v2@latest \
+		github.com/bborbe/badgerkv@latest \
+		github.com/bborbe/boltkv@latest \
+		github.com/bborbe/kv@latest \
+		github.com/bborbe/memorykv@latest \
+		github.com/containerd/containerd@latest \
+		github.com/go-git/go-git/v5@latest \
+		golang.org/x/crypto@latest \
+		golang.org/x/net@latest; \
+	done

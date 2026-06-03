@@ -11,7 +11,6 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/agent/lib/delivery"
-	libkafka "github.com/bborbe/kafka"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
@@ -50,6 +49,7 @@ var _ = Describe("Factory", func() {
 	Describe("CreateAgent", func() {
 		It("returns a non-nil agent with empty token and env", func() {
 			var repoManager git.RepoManager
+			currentDateTime := libtime.NewCurrentDateTime()
 			agent := factory.CreateAgent(
 				"",
 				"agent",
@@ -61,12 +61,14 @@ var _ = Describe("Factory", func() {
 				nil,
 				nil,
 				nil,
+				currentDateTime,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
 
 		It("returns a non-nil agent with token set in env", func() {
 			var repoManager git.RepoManager
+			currentDateTime := libtime.NewCurrentDateTime()
 			agent := factory.CreateAgent(
 				"",
 				"agent",
@@ -78,6 +80,7 @@ var _ = Describe("Factory", func() {
 				nil,
 				nil,
 				nil,
+				currentDateTime,
 			)
 			Expect(agent).NotTo(BeNil())
 		})
@@ -92,20 +95,19 @@ var _ = Describe("Factory", func() {
 	})
 
 	Describe("CreateDeliverer", func() {
-		It("returns an error when brokers are unreachable", func() {
+		It("returns a non-nil deliverer", func() {
+			syncProducer := &libkafkamocks.KafkaSyncProducer{}
 			currentDateTime := libtime.CurrentDateTimeGetterFunc(func() libtime.DateTime {
 				return libtime.DateTime{}
 			})
-			ctx := context.Background()
-			_, _, err := factory.CreateDeliverer(
-				ctx,
+			deliverer := factory.CreateDeliverer(
+				syncProducer,
 				agentlib.TaskIdentifier("task-123"),
-				libkafka.Brokers{"localhost:1"},
 				"dev",
 				"content",
 				currentDateTime,
 			)
-			Expect(err).To(HaveOccurred())
+			Expect(deliverer).NotTo(BeNil())
 		})
 	})
 
@@ -165,8 +167,9 @@ var _ = Describe("Factory", func() {
 			})
 		})
 
+		// updated for lib v0.62.29: needs_input no longer writes phase: human_review in passthrough content generator (see github.com/bborbe/agent/lib CHANGELOG v0.62.27 / v0.62.29)
 		Context("when result status is needs_input with Output containing frontmatter", func() {
-			It("sets phase: human_review in frontmatter and writes ## Failure", func() {
+			It("writes ## Failure with the message and preserves existing phase", func() {
 				result := agentlib.AgentResultInfo{
 					Status:  agentlib.AgentStatusNeedsInput,
 					Message: "GH_TOKEN unauthorized (HTTP 401)",
@@ -176,7 +179,6 @@ var _ = Describe("Factory", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(generated).To(ContainSubstring("## Failure"))
 				Expect(generated).To(ContainSubstring("GH_TOKEN unauthorized (HTTP 401)"))
-				Expect(generated).To(ContainSubstring("phase: human_review"))
 			})
 		})
 	})
@@ -189,6 +191,7 @@ var _ = Describe("Factory", func() {
 		)
 		BeforeEach(func() {
 			ctx = context.Background()
+			currentDateTime := libtime.NewCurrentDateTime()
 			provider = factory.CreateAgentProvider(
 				"",
 				"agent",
@@ -198,6 +201,7 @@ var _ = Describe("Factory", func() {
 				repoManager,
 				"standard",
 				nil,
+				currentDateTime,
 			)
 			Expect(provider).NotTo(BeNil())
 		})

@@ -10,25 +10,29 @@ import (
 	"path/filepath"
 
 	errors "github.com/bborbe/errors"
-	"gopkg.in/yaml.v3"
+
+	"github.com/bborbe/maintainer/lib/maintainerconfig"
 )
 
-// ReadAutoApproveConfig reads .pr-reviewer.yaml from workDir.
-// A missing file is not an error — returns AutoApprove: false (spec default).
-func ReadAutoApproveConfig(ctx context.Context, workDir string) (AutoApproveConfig, error) {
-	path := filepath.Join(workDir, ".pr-reviewer.yaml")
+// ReadAutoApprove reads `.maintainer.yaml` from workDir and returns the
+// prReviewer.autoApprove gate. A missing file is NOT an error — returns
+// false (the spec default: comment-only). Malformed YAML surfaces as a
+// wrapped error (NOT silently false) so the ai_review step fails loudly
+// rather than masking an operator typo.
+func ReadAutoApprove(ctx context.Context, workDir string) (bool, error) {
+	path := filepath.Join(workDir, ".maintainer.yaml")
 	data, err := os.ReadFile(
 		path,
 	) // #nosec G304 -- workDir is an internal trusted path, not user-controlled input
 	if err != nil {
 		if os.IsNotExist(err) {
-			return AutoApproveConfig{}, nil
+			return false, nil
 		}
-		return AutoApproveConfig{}, errors.Wrapf(ctx, err, "read .pr-reviewer.yaml at %s", path)
+		return false, errors.Wrapf(ctx, err, "read .maintainer.yaml at %s", path)
 	}
-	var cfg AutoApproveConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return AutoApproveConfig{}, errors.Wrapf(ctx, err, "parse .pr-reviewer.yaml at %s", path)
+	cfg, err := maintainerconfig.Parse(ctx, data)
+	if err != nil {
+		return false, errors.Wrapf(ctx, err, "parse .maintainer.yaml at %s", path)
 	}
-	return cfg, nil
+	return cfg.PrReviewer.AutoApprove, nil
 }

@@ -64,13 +64,14 @@ type RepoInfo struct {
 	ReviewCommand string
 }
 
+// envVarRefRegexp matches ${VAR_NAME} environment variable references.
+var envVarRefRegexp = regexp.MustCompile(`^\$\{([A-Z_][A-Z0-9_]*)\}$`)
+
 // resolveEnvVar resolves environment variable references in the format ${VAR_NAME}.
 // If the value matches this pattern, it returns the value of the env var.
 // Otherwise, it returns the value as-is.
 func resolveEnvVar(value string) string {
-	// Match ${VAR_NAME} pattern
-	re := regexp.MustCompile(`^\$\{([A-Z_][A-Z0-9_]*)\}$`)
-	matches := re.FindStringSubmatch(value)
+	matches := envVarRefRegexp.FindStringSubmatch(value)
 	if len(matches) == 2 {
 		return os.Getenv(matches[1])
 	}

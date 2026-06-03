@@ -10,6 +10,7 @@ import (
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	"github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"
 
@@ -24,18 +25,29 @@ type RunConfig struct {
 	AgentDir        claudelib.AgentDir
 	Model           claudelib.ClaudeModel
 	GHToken         string
-	ReposPath       string
-	WorkPath        string
-	ReviewMode      string
-	RepoAllowlist   []string                // host-qualified repos the agent may clone
-	AuthSetup       githubauth.Configurator // pod: real gh-auth-setup; local-CLI: noop
-	Phase           domain.TaskPhase
-	TaskContent     string
-	Deliverer       agentlib.ResultDeliverer
+	// Anthropic-compatible alt-provider routing (e.g. MiniMax). When BaseURL +
+	// AuthToken are non-empty they are injected into the claude subprocess env;
+	// Model is mirrored into ANTHROPIC_MODEL there for parity with the --model flag.
+	AnthropicBaseURL   string
+	AnthropicAuthToken string
+	ReposPath          string
+	WorkPath           string
+	ReviewMode         string
+	RepoAllowlist      []string                // host-qualified repos the agent may clone
+	AuthSetup          githubauth.Configurator // pod: real gh-auth-setup; local-CLI: noop
+	Phase              domain.TaskPhase
+	TaskContent        string
+	Deliverer          agentlib.ResultDeliverer
+	// BotLogin is the GitHub bot login used by githubposter. When non-empty it
+	// is injected into the env map as BOT_GITHUB_LOGIN so ResolveBotLogin
+	// picks it up instead of the DefaultBotLogin fallback.
+	BotLogin string
 	// Agent overrides the agent used for execution. If nil, CreateAgent is called.
 	// Set by main.go after dispatching via CreateAgentProvider. cmd/run-task leaves
 	// this nil so CreateAgent is used for backward compatibility.
 	Agent *agentlib.Agent
+	// CurrentDateTime is the time source injected into step structs and poster/verifier.
+	CurrentDateTime libtime.CurrentDateTimeGetter
 }
 
 // RunAgent performs the shared startup + execution flow for the maintainer-agent-pr-reviewer binary.
@@ -51,7 +63,7 @@ type RunConfig struct {
 //  4. Run the requested phase against the supplied task content
 func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	workdirCfg := git.WorkdirConfig{ReposPath: cfg.ReposPath, WorkPath: cfg.WorkPath}
-	repoManager := git.NewRepoManager(workdirCfg)
+	repoManager := git.NewRepoManager(workdirCfg, cfg.GHToken)
 	if err := repoManager.PruneAllWorktrees(ctx); err != nil {
 		glog.Warningf("startup worktree prune: %v", err)
 	}
@@ -64,19 +76,31 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 	}
 
 	if err := cfg.AuthSetup.Setup(ctx); err != nil {
-		return nil, errors.Wrap(ctx, err, "github auth setup failed")
+		return nil, deliverStartupFailure(ctx, cfg.Deliverer, err, "github auth setup failed")
 	}
 
 	env := map[string]string{}
 	if cfg.GHToken != "" {
 		env["GH_TOKEN"] = cfg.GHToken
 	}
+	if cfg.AnthropicBaseURL != "" {
+		env["ANTHROPIC_BASE_URL"] = cfg.AnthropicBaseURL
+	}
+	if cfg.AnthropicAuthToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = cfg.AnthropicAuthToken
+	}
+	if cfg.Model != "" {
+		env["ANTHROPIC_MODEL"] = cfg.Model.String()
+	}
+	if cfg.BotLogin != "" {
+		env["BOT_GITHUB_LOGIN"] = cfg.BotLogin
+	}
 
 	agent := cfg.Agent
 	if agent == nil {
 		botLogin := ResolveBotLogin(env)
-		poster := CreatePrPoster(cfg.GHToken, botLogin)
-		verifier := CreateReviewVerifier(cfg.GHToken, botLogin)
+		poster := CreatePrPoster(cfg.GHToken, botLogin, cfg.CurrentDateTime)
+		verifier := CreateReviewVerifier(cfg.GHToken, botLogin, cfg.CurrentDateTime)
 		agent = CreateAgent(
 			cfg.ClaudeConfigDir,
 			cfg.AgentDir,
@@ -88,7 +112,36 @@ func RunAgent(ctx context.Context, cfg RunConfig) (*agentlib.Result, error) {
 			cfg.RepoAllowlist,
 			poster,
 			verifier,
+			cfg.CurrentDateTime,
 		)
 	}
 	return agent.Run(ctx, cfg.Phase, cfg.TaskContent, cfg.Deliverer)
+}
+
+// deliverStartupFailure wraps err with msg, publishes a Failed result via
+// deliverer so the passthrough content generator splices the wrapped error
+// into the task's ## Failure section, and returns the wrapped error so the
+// caller can still propagate (process exit, metrics, etc.).
+//
+// Without the delivery step, early-startup errors (auth setup, plugin install)
+// exit the pod non-zero and only "Job has reached the specified backoff limit"
+// surfaces in the OpenClaw task body — operators cannot diagnose without
+// racing pod TTL for `kubectl logs`.
+//
+// Delivery errors are logged but do NOT replace the original startup error in
+// the returned chain; the original cause is what operators need to see.
+func deliverStartupFailure(
+	ctx context.Context,
+	deliverer agentlib.ResultDeliverer,
+	err error,
+	msg string,
+) error {
+	wrapped := errors.Wrap(ctx, err, msg)
+	if delivErr := deliverer.DeliverResult(ctx, agentlib.AgentResultInfo{
+		Status:  agentlib.AgentStatusFailed,
+		Message: wrapped.Error(),
+	}); delivErr != nil {
+		glog.Warningf("deliver startup failure %q: %v", msg, delivErr)
+	}
+	return wrapped
 }

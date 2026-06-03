@@ -13,6 +13,56 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("resolveAuth", func() {
+	ctx := context.Background()
+
+	It("returns error when App credentials are not configured", func() {
+		// Ensure App credentials are unset
+		GinkgoT().Setenv("APP_ID", "")
+		GinkgoT().Setenv("INSTALLATION_ID", "")
+		GinkgoT().Setenv("PEM_KEY", "")
+
+		app := &application{}
+		client, err := app.resolveAuth(ctx)
+		Expect(err).To(HaveOccurred())
+		Expect(client).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("APP_ID"))
+		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+	})
+
+	It("returns partial-config error when only APP_ID is set", func() {
+		GinkgoT().Setenv("APP_ID", "123")
+		GinkgoT().Setenv("INSTALLATION_ID", "")
+		GinkgoT().Setenv("PEM_KEY", "")
+
+		app := &application{}
+		client, err := app.resolveAuth(ctx)
+		Expect(err).To(HaveOccurred())
+		Expect(client).To(BeNil())
+		Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
+		Expect(err.Error()).To(ContainSubstring("INSTALLATION_ID"))
+		Expect(err.Error()).To(ContainSubstring("PEM_KEY"))
+		Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+	})
+
+	It(
+		"returns partial-config error when APP_ID + INSTALLATION_ID are set but PEM_KEY is missing",
+		func() {
+			GinkgoT().Setenv("APP_ID", "123")
+			GinkgoT().Setenv("INSTALLATION_ID", "456")
+			GinkgoT().Setenv("PEM_KEY", "")
+
+			app := &application{}
+			client, err := app.resolveAuth(ctx)
+			Expect(err).To(HaveOccurred())
+			Expect(client).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("partial GitHub App config"))
+			Expect(err.Error()).To(ContainSubstring("PEM_KEY"))
+			Expect(err.Error()).NotTo(ContainSubstring("GH_TOKEN"))
+		},
+	)
+})
+
 var _ = DescribeTable("parseMaxPRAge",
 	func(raw string, expected libtime.Duration, expectError bool, errContains string) {
 		ctx := context.Background()

@@ -11,6 +11,7 @@ import (
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -28,6 +29,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		repoManager = &mocks.RepoManager{}
+		currentDateTime := libtime.NewCurrentDateTime()
 		step = pkg.NewCheckoutExecutionStep(
 			repoManager,
 			"",
@@ -38,6 +40,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 			"standard",
 			nil,
 			nil,
+			currentDateTime,
 		)
 	})
 
@@ -48,18 +51,51 @@ var _ = Describe("checkoutExecutionStep", func() {
 	})
 
 	Describe("ShouldRun", func() {
-		DescribeTable("decides based on existing ## Review section",
-			func(content string, expected bool) {
+		// ShouldRun always returns true. Idempotency for the "## Review
+		// already present" case is enforced inside Run (skip clone+claude,
+		// publish NextPhase=ai_review). The previous "skip if ## Review
+		// present" guard silently dropped the routing decision on retrigger.
+		DescribeTable("always returns true so the routing decision is never skipped",
+			func(content string) {
 				md, err := agentlib.ParseMarkdown(ctx, content)
 				Expect(err).NotTo(HaveOccurred())
 				result, err := step.ShouldRun(ctx, md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(Equal(expected))
+				Expect(result).To(BeTrue())
 			},
-			Entry("no review section", "# PR Review\n\nsome text", true),
-			Entry("review section present", "# PR Review\n\n## Review\n\n{}", false),
-			Entry("empty content", "", true),
+			Entry("no review section", "# PR Review\n\nsome text"),
+			Entry("review section present", "# PR Review\n\n## Review\n\n{}"),
+			Entry("empty content", ""),
 		)
+	})
+
+	Describe("Run — retrigger with existing ## Review (advance without re-cloning)", func() {
+		// Reproduces the pattern from the trading#136 planning incident,
+		// but in the execution phase: a previous trigger wrote ## Review,
+		// next phase failed for any reason, controller reset trigger_count,
+		// new pod runs execution. With the old skip-via-ShouldRun the routing
+		// decision was dropped. The fix is to always run but short-circuit
+		// to NextPhase=ai_review when ## Review is already in the body.
+		It("publishes NextPhase=ai_review without invoking the repo manager or runner", func() {
+			md, err := agentlib.ParseMarkdown(ctx, `---
+clone_url: https://github.com/bborbe/maintainer.git
+ref: abc123
+base_ref: main
+task_identifier: 00000000-0000-0000-0000-000000000001
+---
+# PR Review
+
+## Review
+
+prior review body
+`)
+			Expect(err).NotTo(HaveOccurred())
+			result, err := step.Run(ctx, md)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+			Expect(result.NextPhase).To(Equal("ai_review"))
+			Expect(repoManager.EnsureWorktreeCallCount()).To(Equal(0))
+		})
 	})
 
 	Describe("Run", func() {
@@ -246,6 +282,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 
 			Context("when allowlist is empty", func() {
 				It("proceeds to EnsureWorktree (allow-all behavior)", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithEmpty := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -256,6 +293,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						nil,
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -269,6 +307,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 
 			Context("when allowlist is non-empty and clone_url matches", func() {
 				It("proceeds to EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -279,6 +318,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -292,6 +332,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 
 			Context("when allowlist is non-empty and clone_url does NOT match", func() {
 				It("returns NeedsInput and does not call EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -302,6 +343,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						[]string{"github.com/bborbe/other-repo"},
 						nil,
+						currentDateTime,
 					)
 					const nonMatchingTask = "---\nclone_url: https://github.com/bborbe/maintainer.git\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 
@@ -318,6 +360,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 
 			Context("when allowlist contains a wildcard and clone_url matches the owner", func() {
 				It("permits the clone (wildcard match)", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithWildcard := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -328,6 +371,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						[]string{"github.com/bborbe/*"},
 						nil,
+						currentDateTime,
 					)
 					repoManager.EnsureWorktreeReturns("", fmt.Errorf("stop here"))
 
@@ -346,6 +390,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 
 			Context("when allowlist is non-empty and clone_url is unparseable", func() {
 				It("returns Failed (not NeedsInput) and does not call EnsureWorktree", func() {
+					currentDateTime := libtime.NewCurrentDateTime()
 					stepWithAllowlist := pkg.NewCheckoutExecutionStep(
 						repoManager,
 						"",
@@ -356,6 +401,7 @@ var _ = Describe("checkoutExecutionStep", func() {
 						"standard",
 						[]string{"github.com/bborbe/maintainer"},
 						nil,
+						currentDateTime,
 					)
 					const badURLTask = "---\nclone_url: not-a-url\nref: main\nbase_ref: master\ntask_identifier: bd4d883b-0000-0000-0000-000000000001\n---\n# Task\n"
 

@@ -44,11 +44,6 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
-            - name: GH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: maintainer-watcher-github-pr
-                  key: GH_TOKEN
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
@@ -59,6 +54,17 @@ spec:
               value: '{{"TRUSTED_AUTHORS" | env}}'
             - name: REPO_ALLOWLIST
               value: '{{"REPO_ALLOWLIST" | env}}'
+            - name: TASK_SUFFIX
+              value: '{{ "TASK_SUFFIX" | env }}'
+            - name: APP_ID
+              value: '{{ "WATCHER_GITHUB_PR_APP_ID" | env }}'
+            - name: INSTALLATION_ID
+              value: '{{ "WATCHER_GITHUB_PR_INSTALLATION_ID" | env }}'
+            - name: PEM_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: maintainer-watcher-github-pr
+                  key: PEM_KEY
           image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-pr:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:

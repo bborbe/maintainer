@@ -9,18 +9,17 @@
 package factory
 
 import (
-	"context"
 	"net/http"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	claudelib "github.com/bborbe/agent/lib/claude"
 	delivery "github.com/bborbe/agent/lib/delivery"
 	"github.com/bborbe/agent/lib/healthcheck"
 	"github.com/bborbe/cqrs/base"
-	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
-	"github.com/golang/glog"
+	domain "github.com/bborbe/vault-cli/pkg/domain"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
@@ -34,8 +33,8 @@ const serviceName = "maintainer-agent-pr-reviewer"
 // lets it do its job. Planning + Review are read-only inspection. Execution
 // gets broader git access for cross-file reads; posting happens in-process
 // via the PrPoster (Go net/http, not gh CLI) after the LLM step completes,
-// gated by bot-identity self-check (GET /user == pr-review-of-ben) and
-// per-repo .pr-reviewer.yaml (autoApprove: bool). The ai_review phase
+// gated by bot-identity self-check (GET /app slug-derived login) and
+// per-repo .maintainer.yaml (prReviewer.autoApprove: bool). The ai_review phase
 // independently verifies the post via GET /pulls/{n}/reviews before
 // advancing to done.
 var (
@@ -89,18 +88,6 @@ func CreateClaudeRunner(
 	})
 }
 
-// CreateSyncProducer creates a Kafka sync producer.
-func CreateSyncProducer(
-	ctx context.Context,
-	brokers libkafka.Brokers,
-) (libkafka.SyncProducer, error) {
-	producer, err := libkafka.NewSyncProducerWithName(ctx, brokers, serviceName)
-	if err != nil {
-		return nil, errors.Wrap(ctx, err, "create sync producer failed")
-	}
-	return producer, nil
-}
-
 // CreateKafkaResultDeliverer creates a ResultDeliverer that publishes task
 // updates to Kafka via CQRS commands. Uses the passthrough content generator
 // — the agent framework's StepRunner already produces the full marshaled
@@ -131,24 +118,40 @@ func CreateFileResultDeliverer(filePath string) agentlib.ResultDeliverer {
 	)
 }
 
-// CreatePrPoster wires a PrPoster backed by net/http.DefaultClient.
+// CreatePrPoster wires a PrPoster backed by a scoped http.Client.
 // token is the bot PAT (GH_TOKEN env); botLogin is the bot GitHub login
-// (BOT_GITHUB_LOGIN env, default "pr-review-of-ben" if empty). Pure plumbing; no logic.
-func CreatePrPoster(token, botLogin string) prpkg.PrPoster {
-	return githubposter.NewPrPoster(http.DefaultClient, token, botLogin)
+// (BOT_GITHUB_LOGIN env, default "ben-s-pull-request-reviewer[bot]" if empty). Pure plumbing; no logic.
+func CreatePrPoster(
+	token, botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
+) prpkg.PrPoster {
+	return githubposter.NewPrPoster(
+		&http.Client{Timeout: 15 * time.Second},
+		token,
+		botLogin,
+		currentDateTime,
+	)
 }
 
-// CreateReviewVerifier wires a ReviewVerifier backed by net/http.DefaultClient.
+// CreateReviewVerifier wires a ReviewVerifier backed by a scoped http.Client.
 // token is the bot PAT; botLogin is the expected bot login.
-func CreateReviewVerifier(token, botLogin string) prpkg.ReviewVerifier {
-	return githubposter.NewReviewVerifier(http.DefaultClient, token, botLogin)
+func CreateReviewVerifier(
+	token, botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
+) prpkg.ReviewVerifier {
+	return githubposter.NewReviewVerifier(
+		&http.Client{Timeout: 15 * time.Second},
+		token,
+		botLogin,
+		currentDateTime,
+	)
 }
 
 // CreateAgent assembles the full 3-phase pr-reviewer agent with per-phase
 // tool scopes and per-phase prompts:
 //
 //   - planning: read-only diff inspection → ## Plan (JSON)
-//   - in_progress: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
+//   - execution: read + cross-file inspection → ## Review (JSON); posts review to GitHub via PrPoster
 //   - ai_review: minimal read-only fresh-context verifier → ## Verdict (JSON);
 //     verdict=pass → done, otherwise → human_review; verifier confirms review
 //     persisted on GitHub (nil verifier skips verification)
@@ -163,16 +166,17 @@ func CreateAgent(
 	repoAllowlist []string,
 	prPoster prpkg.PrPoster,
 	verifier prpkg.ReviewVerifier,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) *agentlib.Agent {
 	botLogin := ResolveBotLogin(env)
 	tokenCheck := prpkg.NewGHTokenCheckStep(ghToken)
-	planningStep := claudelib.NewAgentStep(claudelib.AgentStepConfig{
-		Name:          "pr-plan",
-		Runner:        CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools),
-		Instructions:  prompts.BuildPlanningInstructions(),
-		OutputSection: "## Plan",
-		NextPhase:     "in_progress",
-	})
+	planningPhase := agentlib.NewPhase("planning", tokenCheck, prpkg.NewPlanningStep(
+		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools),
+		prompts.BuildPlanningInstructions(),
+		prPoster,
+		botLogin,
+		currentDateTime,
+	))
 	executionStep := prpkg.NewCheckoutExecutionStep(
 		repoManager,
 		claudeConfigDir,
@@ -183,17 +187,19 @@ func CreateAgent(
 		reviewMode,
 		repoAllowlist,
 		prPoster,
+		currentDateTime,
 	)
 	reviewStep := prpkg.NewReviewStep(
 		CreateClaudeRunner(claudeConfigDir, agentDir, model, env, reviewTools),
+		prPoster,
 		prompts.BuildReviewInstructions(),
 		verifier,
 		ghToken,
 		botLogin,
 	)
 	return agentlib.NewAgent(
-		agentlib.NewPhase("planning", tokenCheck, planningStep),
-		agentlib.NewPhase("in_progress", tokenCheck, executionStep),
+		planningPhase,
+		agentlib.NewPhase(domain.TaskPhaseExecution, tokenCheck, executionStep),
 		agentlib.NewPhase("ai_review", tokenCheck, reviewStep),
 	)
 }
@@ -211,10 +217,11 @@ func CreateAgentProvider(
 	repoManager git.RepoManager,
 	reviewMode string,
 	repoAllowlist []string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.AgentProvider {
 	botLogin := ResolveBotLogin(env)
-	poster := CreatePrPoster(ghToken, botLogin)
-	verifier := CreateReviewVerifier(ghToken, botLogin)
+	poster := CreatePrPoster(ghToken, botLogin, currentDateTime)
+	verifier := CreateReviewVerifier(ghToken, botLogin, currentDateTime)
 	domainAgent := CreateAgent(
 		claudeConfigDir,
 		agentDir,
@@ -226,6 +233,7 @@ func CreateAgentProvider(
 		repoAllowlist,
 		poster,
 		verifier,
+		currentDateTime,
 	)
 	healthcheckRunner := CreateClaudeRunner(
 		claudeConfigDir,
@@ -242,31 +250,20 @@ func CreateAgentProvider(
 }
 
 // CreateDeliverer builds the Kafka result deliverer used by the Kafka
-// entry point. Requires non-empty taskID and brokers — callers must
-// guard these preconditions before calling.
+// entry point. The caller owns the SyncProducer lifecycle and must close it
+// after the deliverer is no longer needed.
 func CreateDeliverer(
-	ctx context.Context,
+	syncProducer libkafka.SyncProducer,
 	taskID agentlib.TaskIdentifier,
-	brokers libkafka.Brokers,
 	branch base.Branch,
 	originalContent string,
 	currentDateTime libtime.CurrentDateTimeGetter,
-) (agentlib.ResultDeliverer, func(), error) {
-	syncProducer, err := CreateSyncProducer(ctx, brokers)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create sync producer failed")
-	}
-	deliverer := CreateKafkaResultDeliverer(
+) agentlib.ResultDeliverer {
+	return CreateKafkaResultDeliverer(
 		syncProducer,
 		branch,
 		taskID,
 		originalContent,
 		currentDateTime,
 	)
-	cleanup := func() {
-		if err := syncProducer.Close(); err != nil {
-			glog.Warningf("close sync producer failed: %v", err)
-		}
-	}
-	return deliverer, cleanup, nil
 }

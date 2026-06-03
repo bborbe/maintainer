@@ -8,6 +8,317 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.32.0
+- feat(agent/pr-reviewer): install `@ast-grep/cli` in the alpine image so the `bborbe/coding` plugin's new dispatcher (Step 4a invokes the ast-grep-runner agent) can resolve the `sg` / `ast-grep` binary. Without it, the reviewer's Claude run loops on `sg --version` checks until the job hits `activeDeadlineSeconds` (observed on bborbe/coding#34). Mirrors the `claude-yolo` PR #8 fix that closed the same gap for the dark-factory image. `ARG ASTGREP_VERSION=latest` so we can pin a version later without changing the install line shape
+
+## v0.31.0
+
+- feat(agent/github-releaser): add `pkg/maintainerconfig` package — fetches `.maintainer.yaml` bytes from a target GitHub repo at a ref via the contents API, mirrors the `githubchangelog.Fetcher` shape, returns the sentinel `ErrFileNotFound` (declared via `stderrors.New`, project convention) on HTTP 404 so callers can treat the absent-file case as a default-valued config. Re-exports `lib/maintainerconfig.{Config,ReleaseConfig,PrReviewerConfig,Parse}` so the planning step needs only one import. New counterfeiter mock `mocks.MaintainerConfigFetcher`; Ginkgo coverage for happy path, 404 → `ErrFileNotFound`, 500 → wrapped non-2xx error, empty owner/repo/ref, malformed JSON, unsupported encoding, bad base64, and the round-trip fetch → `Parse` integration seam
+- feat(lib): add `release.changelogRewrite` boolean field to `ReleaseConfig` in `lib/maintainerconfig` — spec-059 per-repo opt-in for the 058 LLM rewrite pipeline. Default false (omit the field, set false explicitly, or omit the `release:` block — all equivalent). Non-boolean values fail at parse time via the type system. `Parse(ctx, []byte{})` continues to return `(MaintainerConfig{}, nil)`. Ginkgo table coverage for true/false/missing-field/missing-block/empty-bytes/both-true and `It` cases for the fail-closed path on string/number values
+- feat(agent/github-releaser): planning step now reads `release.changelogRewrite` from `.maintainer.yaml` at the target ref's tip via a new `pkg/maintainerconfig` fetcher; when false (default — file absent, field absent, or explicit false) the planning LLM is NOT invoked for the rewrite call and the resulting `## Plan` carries `rewrite_needed=false`; when true the existing 058 rewrite pipeline runs unchanged. Non-boolean values for `release.changelogRewrite` fail closed at planning entry (`outcome=failed`, `error_category=invalid_config` on `## Plan`, task ends in `human_review`, no commit/tag/push). The resolved flag value is recorded on `## Plan` for audit. Adds Ginkgo coverage for all value cases plus the `human_review` fail-closed path and flag-read-once semantics
+- feat(agent/github-releaser): ai-review step now performs a semantic faithfulness check (Claude LLM compares the planning-captured `## Unreleased` body against the final `## vX.Y.Z` body in the local clone), a local diff check (release commit must touch only `CHANGELOG.md` + detected plugin manifests), and gates the network push on both. On success it pushes the local commit + tag via `git.GitOps.Push` and returns `Done`; on any check failure or push error it writes `## Review` with a `FailedChecks` list naming the offending checks (TagExists, TagAtExpectedSHA, ChangelogHeaderRewritten, Faithfulness, UnexpectedFileChange) and exits to `human_review`. `NewAIReviewStep` signature gained `claudelib.ClaudeRunner` and `git.GitOps` parameters; `factory.CreateAgent` builds the new dependencies (read-only `aiReviewTools` Claude runner + the same GitOps used for execution). `ReviewOutput` now carries `Overall` (pass|fail|unknown), `PerEntry` (flat list flattening the LLM's per_entry+extras), `UnexpectedFiles`, and `FailedChecks`. Faithfulness LLM unavailability is surfaced as `Overall=unknown`, not as a per-entry verdict
+- feat(agent/github-releaser): add `changelog.ExtractSectionBody(ctx, content, heading)` pure helper generalizing `ExtractUnreleasedBody` — both functions share the unexported scan loop; `ExtractUnreleasedBody` is now a thin wrapper that pins the heading to `"Unreleased"`. ai-review uses the new helper to extract the `## vX.Y.Z` body for the faithfulness comparison
+- feat(agent/github-releaser): add `prompts.ChangelogFaithfulnessPrompt()` (embedded from `pkg/prompts/changelog_faithfulness.md`) plus `prompts.FaithfulnessLLMResponse` / `prompts.FaithfulnessEntry` types and `prompts.ParseFaithfulnessResponse` (same three-strategy JSON extraction as `ParseBumpVerdict` / `ParseRewriteVerdict`; validates `overall ∈ {pass, fail}`, `per_entry[i].verdict ∈ {present, silent-drop}`, `extras[i].verdict == hallucinated`); Ginkgo table coverage for plain / fenced / bad-verdict / missing-overall / extra-fields cases
+- refactor(agent/github-releaser): ai-review structural checks (TagExists, TagAtExpectedSHA, ChangelogHeaderRewritten) no longer early-return on a check failure — they accumulate into a `FailedChecks` list so the human reviewer sees the full set of issues. Sentinel `ErrTagNotFound` is still handled cleanly (recorded, not wrapped as a transient retry). Transient transport errors (5xx, etc.) still return wrapped errors for controller retry, the same as before
+- test(agent/github-releaser): new `It` cases in `pkg/steps_ai_review_test.go` — faithful-rewrite happy path (push happens, NextPhase=done), silent-drop / hallucinated / unexpected-file-change failures (no push, NextPhase=human_review, `## Review` captures the offending entries), structural-check independence (TagExists, TagAtExpectedSHA, ChangelogHeaderRewritten each fail in isolation), LLM unavailability (Overall=unknown), push failure and concurrent-push (tag already exists on upstream) both end in `human_review` with a `push failed` note, and the integration-seam mapping test that flattens the LLM's per_entry+extras into a single `PerEntry` list with extras tagged `Verdict=hallucinated`
+- test(agent/github-releaser): extend `pkg/prompts/prompts_test.go` with `ChangelogFaithfulnessPrompt` content checks (semantic faithfulness, silent-drop, hallucinated, per_entry/extras/overall schema) and `ParseFaithfulnessResponse` table entries
+- test(agent/github-releaser): execution step now leaves the workdir on disk for ai-review to read on success; the `pkg/steps_execution_test.go` happy-path and pre-existing tests updated to reflect the new `Workdir`/`LocalTag` ownership boundary
+- feat(agent/github-releaser): execution step now writes the `## Unreleased` body using `plan.RewrittenUnreleased` (when `plan.RewriteNeeded=true`) before renaming the header, in a single atomic commit covering both changes. Push has moved out of execution into the (next) ai-review phase; the local clone + annotated tag now survive `Run`'s return so ai-review can read them. `ResultOutput` gains `Workdir` and `LocalTag` fields; failure paths still remove the workdir via defer
+- feat(agent/github-releaser): add `changelog.ReplaceUnreleasedBody` pure helper that swaps the body of the `## Unreleased` section (every line after the heading up to the next `## ` heading or EOF) with a supplied string, plus table tests in `pkg/changelog/changelog_test.go` covering typical replacement, empty body, missing `## Unreleased`, and trailing-newline edge cases
+- refactor(agent/github-releaser): rename `executeDirectPush` to `executeLocalRelease` (the name "direct push" was misleading once the push moved out). `ResultPathDirectPush = "direct-push"` is kept for back-compat with persisted task pages
+- feat(agent/github-releaser): planning step now captures the original `## Unreleased` body verbatim and emits a rewrite verdict (rewrite_needed + optional cleaned body) into the `## Plan` JSON, with the Changelog Quality Guide embedded via `//go:embed` and a second focused Claude call. Already-clean changelogs pass through with `rewrite_needed=false`; noisy bodies (raw `git log` lines, missing prefixes, ten-line `chore: bump` dumps) are cleaned into prefix-conformant bullets by the planning LLM using the embedded guide as the ruleset
+- feat(agent/github-releaser): add `changelog.ExtractUnreleasedBody` pure helper returning the verbatim body of the `## Unreleased` section, plus table tests in `pkg/changelog/changelog_test.go`
+- feat(agent/github-releaser): add `prompts.RewriteVerdict` type and `ParseRewriteVerdict` parser using the same three-strategy extraction as `ParseBumpVerdict` (plain JSON, fenced ```json, last balanced block); Ginkgo coverage for plain / fenced / empty / missing-reasoning / malformed / extra-fields cases
+- test(agent/github-releaser): five new `It` cases in `pkg/steps_planning_test.go` under `Context("rewrite decision")` — clean → false, noisy git-log dump → true, missing-prefix, chore-dump fold, verbatim capture. The verbatim-capture test asserts the security-relevant invariant that `OriginalUnreleased` is byte-equal to the slice ai-review will read
+- test(agent/github-releaser): add `Context("happy-path workdir + no-push")`, `Context("rewrite_needed")` (true + false), and `Context("re-fire idempotency")` blocks in `pkg/steps_execution_test.go`; existing push-failure / push-assertion specs updated to assert `PushCallCount()==0`; new `pkg/result_output_test.go` covers `Workdir`/`LocalTag` JSON tag stability and `omitempty`
+- fix(agent/github-releaser): ai-review `verifyTagAtExpectedCommit` and `verifyChangelogHeaderRewritten` now fail closed on transient GitHub API errors — set the corresponding check boolean to false AND append the failed-check name to `FailedChecks` instead of silently passing through a wrapped error that the caller only logged. The `runStructuralChecks` Warningf wrappers around those helpers are now removed as unreachable. `verifyTagExists` retains its existing transport-error → controller-retry path (intentional asymmetry). New `Context("transport-error fail-closed")` Ginkgo specs cover both helpers; new `Context("rollupVerdict: LLM unknown + structural failure")` proves `Overall=unknown` overrides even when a structural check also failed (both names surface in `FailedChecks`)
+- test(agent/github-releaser): new `Describe("rewrite_needed branch")` in `pkg/steps_execution_test.go` with a happy-path spec (captures post-Commit CHANGELOG bytes via a closure variable; asserts the verbatim rewritten body lands under `## v1.0.0` with no leftover `## Unreleased` heading) and an error-mapping spec (no `## Unreleased` heading → `Status=Failed`, `error_category=unreleased_not_found`, `Commit` not invoked)
+- test(agent/github-releaser): new `Context("plugin-manifest branch in unexpected-file-change check")` in `pkg/steps_ai_review_test.go` — Case A applied (plugin.DetectManifests CAN return a non-nil error at `pkg/plugin/manifest.go:52` on non-IsNotExist Stat failures). Spec 3a seeds a real on-disk workdir with a valid `.claude-plugin/plugin.json` and asserts the committed manifest is in the expected set; spec 3b forces `DetectManifests` to error (chmod `.claude-plugin/` to 0000 → EACCES) so the ai-review check falls back to the changelog-only expected set and an extra committed `plugin.json` surfaces as `UnexpectedFileChange=true` with `FailedChecks` containing `CheckUnexpectedFileChange`
+- test(agent/github-releaser): new `It("empty 200 OK body with no encoding field rejected")` in `pkg/maintainerconfig/fetcher_test.go` — sends a 200 OK with `{}` and asserts the wrapped error message contains `unsupported encoding ""`
+- refactor(agent/github-releaser): ai-review `Push` failed-check name is now a typed constant `pkg.CheckPush = "Push"` (matching the other Check* constants). The `finishApproved` push-failure path appends `CheckPush` instead of the bare string `"Push"`
+- refactor(agent/github-releaser): `setupWorkdir` godoc clarified — does NOT create the directory, just removes any stale copy and returns the path; `ops.Clone` is what actually creates it
+- refactor(agent/github-releaser): 15-second HTTP timeout in `pkg/maintainerconfig/fetcher.go` promoted to a named `fetchTimeout` package constant; used in both `NewHTTPFetcher` and `newHTTPFetcherWithBase`
+- refactor(agent/github-releaser): `factory.aiReviewTools` package-level `var` moved into `CreateAgent` as a local (mirrors `executionOps` lifecycle)
+- refactor(agent/github-releaser): `pkg/maintainerconfig/fetcher.go` — counterfeiter directive moved to sit directly above the `Fetcher` interface declaration (project convention; godoc now above the directive)
+- fix(agent/github-releaser): ai-review `checkUnexpectedFileChange` now fails closed on a `CommittedFiles` error — sets `checks.UnexpectedFileChange=true` and appends `CheckUnexpectedFileChange` to `FailedChecks` instead of silently passing through `nil`. Mirrors the `verifyTagAtExpectedCommit` / `verifyChangelogHeaderRewritten` transport-error pattern. A transient git blip can no longer leave the unexpected-file-change check passing. New `It("CommittedFiles error sets UnexpectedFileChange=true and appends CheckUnexpectedFileChange")` regression spec
+- fix(agent/github-releaser): `.maintainer.yaml` HTTP response body bounded to 1 MiB via `http.MaxBytesReader` — `maxConfigBodyBytes = 1 << 20` constant. A misconfigured or hostile upstream can no longer exhaust agent memory. `httpFetcher.readBody` wraps the response body before `io.ReadAll`; new `It("oversize body rejected with cap in error")` spec covers the trip
+- fix(agent/github-releaser): non-2xx response body redacted in `httpFetcher.checkStatus` error string and any associated V(2) log — replaced the 200-char body preview with the status code plus a short SHA-256 fingerprint (`body_sha256_prefix=<8 hex chars>`) and the byte count. Operator-internal paths / partial stack traces from GitHub 5xx or proxy bodies can no longer leak through. New `It("500 response with sensitive body returns redacted error")` asserts the four `Not[Contain]` invariants
+- feat(agent/github-releaser): bump-verdict cache in `## Plan` — on a re-fire (e.g. transient rewrite-LLM failure), the planning step reads the prior `## Plan` section, reuses the `Bump` and `Reasoning` verbatim, and skips the bump LLM call. Cache lookup is non-fatal (fresh task page has no plan yet). The rewrite-failure path now publishes a partial `## Plan` (with the bump verdict populated) so the re-fire cache can find it. `RunCallCount` falls from 2 to 1 on re-fire. New `Context("bump verdict cache")` Ginkgo spec models the production round-trip via `(*Markdown).Marshal` + `agentlib.ParseMarkdown`
+- feat(agent/github-releaser): surface non-404 `.maintainer.yaml` transport fetch failures on `## Plan` via new `ConfigFetchWarning` field (`json:"config_fetch_warning,omitempty"`) — operators can grep the task page to confirm whether a repo that opted into rewrite was silently downgraded. `glog.Warningf` retained for log-stream observability. Three new `It` specs cover transport-warning surfacing, happy-path empty, and 404-empty (legitimate-absent)
+- fix(lib): `lib/maintainerconfig.Parse` now uses `yaml.NewDecoder` with `KnownFields(true)` — typos like `changelogRwrite` or `prRevierer` fail loudly with a wrapped `unmarshal .maintainer.yaml` error instead of producing a silent default-false config. The empty-bytes contract (`Parse(ctx, []byte{})` → `(MaintainerConfig{}, nil)`) is preserved by an explicit short-circuit. Three new `It` specs (`unknown top-level field rejected`, `typo in nested release field rejected`, `typo in top-level prReviewer key rejected`) replace the old forward-compat "unknown top-level key ignored" tolerance spec. The package godoc no longer asserts the "tolerated by design" behavior
+
+## v0.30.0
+
+- feat(agent/github-releaser): release commit now bumps `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` version fields alongside the CHANGELOG rewrite when those manifests exist at repo root — fixes the silent drift where Claude Code plugin repos (e.g. `bborbe/coding`) shipped release tags whose manifest versions disagreed with the CHANGELOG. Pre-push guard whitelist widened dynamically to the set of files actually touched; fails closed on anything else.
+- feat(agent/github-releaser): add `plugin_manifest_invalid` error category for malformed plugin manifests (JSON parse error or missing/non-semver version field)
+- test(agent/github-releaser): add integration tests for manifest bumping in executeDirectPush covering both manifests present, one manifest only, no manifests (backward compatibility), unexpected_diff guard, and malformed plugin.json guard
+- test(agent/github-releaser): add edge-case coverage for DetectManifests (temp-dir cleanup via GinkgoT().TempDir, directory-as-file skip), BumpPluginJson (unquoted version values with/without trailing comma, unclosed quote error, second nested version key left untouched), BumpMarketplaceJson (top-level version outside metadata/plugins scope), deriveUnprefixedVersion(""), sameStringSet duplicate-element behavior, DetectManifests I/O error mapping to error_category=unknown, and marketplace.json malformed JSON mapping to error_category=plugin_manifest_invalid
+
+## v0.29.1
+
+- fix(agent/github-releaser): ai_review tag-SHA comparison now accepts short-vs-full SHA equivalence. Execution step writes Result.CommitSHA via `git rev-parse --short HEAD` (7 chars); GitHub API returns 40-char full SHA. Naive `==` was false-positive on every release (caught by canary on parked `Release bborbe-claude-yolo af4000c` immediately after prod deploy). Fix uses bidirectional `strings.HasPrefix`; regression test covers short-vs-full both directions plus a non-matching short prefix.
+
+## v0.29.0
+
+- feat(agent/pr-reviewer): when ai_review returns verdict=fail with hallucinations, dismiss bot's prior APPROVED/CHANGES_REQUESTED review at head SHA via GitHub REST and post a COMMENT citing each hallucination; route to human_review regardless of dismissal outcome
+
+- test(agent/github-releaser): add comprehensive unit tests for ai_review step covering all acceptance criteria (happy path, tag-missing/404, annotated/lightweight tag SHA mismatch, CHANGELOG ## Unreleased header, Result.outcome short-circuit, malformed/missing Result section, missing frontmatter repo, token-in-error guard, no-##-Failure assertion, Name/ShouldRun)
+
+- feat(agent/github-releaser): wire ai_review phase into CreateAgent alongside planning and execution phases, completing the three-phase release agent
+- feat(agent/github-releaser): Add githubreview client implementing AIReviewClient interface with TagExists, ResolveTagCommit, and FetchChangelog methods for ai_review step verification
+- feat(agent/github-releaser): Add ai_review step with three verification checks (tag exists, tag at expected SHA, CHANGELOG header rewritten) and ReviewOutput section
+
+## v0.28.1
+
+- refactor(mocks): consolidate every module's counterfeiter mocks into a single `<module>/mocks/` directory next to its `go.mod`, matching `go-mocking-guide.md` and the existing `agent/pr-reviewer/mocks/` reference. Removes five stray nested `pkg/mocks/` dirs in `agent/github-releaser`, `watcher/github-build`, `watcher/github-pr`, and `watcher/github-release` (21 files moved). Rewrites every `//counterfeiter:generate -o` directive to `../mocks/` (from `pkg/`) or `../../mocks/` (from `pkg/<sub>/`). Adds missing `//go:generate counterfeiter -generate` to `watcher/github-build/pkg/maintenance/suite_test.go` and `watcher/github-pr/pkg/handler/suite_test.go` (without those, `make generate`'s `rm -rf mocks` wiped subpkg mocks with no regen step). All four affected modules' `make precommit` green.
+
+## v0.28.0
+
+- feat(agent/github-releaser): pre-push guard — release fails closed if the commit changed anything other than `CHANGELOG.md` (defense-in-depth on the direct-push trust model)
+
+## v0.27.1
+
+- fix(agent/pr-reviewer): no longer posts a false CHANGES_REQUESTED on approved PRs whose review carries a long `comments` array
+
+## v0.27.0
+
+- feat(agent/github-releaser): new agent that cuts a release directly on master — rewrites `## Unreleased` → next version, commits, tags, pushes; semver bump classified from the CHANGELOG content
+- feat(watcher/github-release): scans repos for non-empty `## Unreleased` and triggers the github-releaser agent
+- feat: opt repos into auto-release via `.maintainer.yaml: release.autoRelease: true` (also where `prReviewer.autoApprove` now lives — replaces `.pr-reviewer.yaml`)
+- feat(watcher/github-release): operator endpoints — `/trigger` forces a poll, `/resetcursor/{repo}` re-emits a stuck release, `/setcursor/{repo}?sha=` pins the last-seen master SHA (no PVC editing required)
+- feat: App-only GitHub auth across all agents + watchers — drops `GH_TOKEN` PAT input fleet-wide; tightens the auth surface on push-capable agents
+- feat: `/coding:pr-review` available in every pod (plugin baked into the image — no PVC mount)
+- fix(agent/pr-reviewer, watcher/github-build): pods no longer crash-loop at startup (regression in `argument/v2.Print` on unexported struct fields)
+- fix(agent/github-releaser): handle SSH-form `clone_url` (rewritten to HTTPS — runtime image has no ssh client) and clone the target's default branch instead of the trigger ref
+- fix(agent/github-releaser): planning escalation keeps task in `planning` instead of auto-completing
+
+## v0.26.39
+
+- feat(watcher/github-release): initial Phase 1 build — scans configured repos on a cursor-tracked poll loop and emits one release task per repo whose `## Unreleased` is non-empty
+- feat: opt repos into auto-release via `.maintainer.yaml: release.autoRelease: true` (replaces `.dark-factory/config.yml`; semantics flipped to positive opt-in)
+
+## v0.26.38
+
+- refactor(watcher/github-pr): extract TaskPublisher interface and taskPublisher struct from watcher to clarify publish/trust ownership; bundle stage/maxSlugLen/maxTitleLen/taskSuffix into TaskConfig value type
+
+## v0.26.37
+
+- fix(watcher/github-build): wrap errors following ParseRepoAllowlist calls in main.go and cmd/run-once/main.go
+
+## v0.26.36
+
+- refactor(pr-reviewer): move Kafka SyncProducer lifecycle from factory to main.go; CreateDeliverer now accepts a connected SyncProducer for pure factory wiring
+
+## v0.26.35
+
+- test(watcher/github-pr): add unit tests for BuildCreateCommand covering trusted/untrusted author branches, empty author login, title sanitization, and maxTitleLen truncation
+- test(watcher/github-pr): add nil-check tests for CreateSinglePRTriggerHandler factory; add panic guards for nil httpClient, createSender, taskCreationFilter, and trustDecision
+- test(watcher/github-pr): add pkg/factory/single_pr_test.go with panic assertions for all nil parameters
+
+## v0.26.34
+
+- fix(watcher/github-pr): wrap errors at validation call sites in main.go to avoid bare returns
+- fix(watcher/github-pr): replace errors.Wrapf with errors.Wrap in cursor.go and trust.go where no format args present
+- fix(watcher/github-pr): explicitly discard unused ctx parameter in ParseRepoAllowlist
+
+## v0.26.33
+
+- feat(watcher/github-pr): record IncPRPublished metrics for /trigger endpoint outcomes; distinguish trust_error and kafka_error from generic error
+
+## v0.26.32
+
+- refactor(watcher/github-pr): refactor SinglePRTriggerHandler to use libhttp.WithError interface pattern; return errors naturally instead of calling writeError/writeSuccess
+
+## v0.26.31
+
+- refactor(watcher/github-pr): split CreateGitHubHTTPClient into CreateGitHubAppClient and CreateGitHubPATClient with zero-business-logic factories; move auth-mode dispatch to main.go
+- refactor(watcher/github-pr): refactor CreateKafkaSender to accept SyncProducer instead of creating one; move cleanup to main.go via defer
+- refactor(watcher/github-pr): refactor CreateWatcher and CreateSinglePRHandler to accept concrete dependencies (*http.Client, trust.Trust) instead of raw config structs
+
+## v0.26.30
+
+- test(watcher/github-build): add unit tests for runPollLoop error handling path and countWildcards function
+
+## v0.26.29
+
+- test(watcher/github-build): add unit tests for GetJobsForRun covering successful response with failed jobs, no failed jobs, HTTP error, and rate limit scenarios
+
+## v0.26.28
+
+- refactor(watcher/github-build): extract CreateAllowlistSnapshot to factory eliminating duplicated wildcard resolution logic in main.go and cmd/run-once/main.go
+
+## v0.26.27
+
+- fix(watcher/github-build): use write-to-temp + atomic rename in SaveCursor to prevent cursor file corruption from concurrent read-modify-write races
+
+## v0.26.26
+
+- test(agent/pr-reviewer): add unit tests for ExpandHome, normalizeURL, classifyError, eventToState, truncateBody, isGitHubPRURL, hasAnyPRURL, writePlanningVerdict, appendVerifyDiagnostic
+
+## v0.26.25
+
+- test(agent/pr-reviewer): standardize Ginkgo suite setup across all test suites — add `//go:generate` directive to factory, GinkgoConfiguration with timeout to all suites, and rename non-standard test functions to `TestSuite`
+
+## v0.26.24
+
+- refactor(agent/pr-reviewer): inject libtime.CurrentDateTimeGetter into step structs and githubposter components replacing direct time.Now() calls
+
+## v0.26.23
+
+- refactor(watcher/github-pr): remove empty pkg/publisher.go and its export test file
+
+## v0.26.22
+
+- test(watcher/github-pr): standardize Ginkgo suite setup with UTC timezone, untruncated diffs, and 60s timeout
+
+## v0.26.21
+
+- fix(watcher/github-pr): add context cancellation checks to Poll, fetchAllPRs, and processPRs to enable prompt shutdown when context is cancelled
+
+## v0.26.20
+
+- refactor(watcher/github-build): remove unused context.Context parameter from ParseRepoAllowlist
+
+## v0.26.19
+
+- fix(watcher/github-build): use context.Background() for /trigger handler to prevent requests during graceful shutdown from being dropped
+
+## v0.26.18
+
+- fix(watcher/github-build): add panic-recover wrapper around wildcard refresh loop closure in buildAllowlistSnapshot to prevent panics outside safeRefresh from killing the CancelOnFirstFinish task set
+
+## v0.26.17
+
+- fix(watcher/github-build): add context cancellation checks inside pollRepo before GetDefaultBranch, GetWorkflowRuns, and each fetchJobInfoForRun call to prevent SIGTERM from being deferred until after all API calls complete
+
+## v0.26.16
+
+- fix(watcher/github-build): add context cancellation check in listOwnerReposPaginated to stop pagination immediately when context is cancelled
+
+## v0.26.15
+
+- fix(watcher/github-build): narrow redactOpaqueHexRE from 40+ to exactly 40 hex chars to reduce false positives; add #nosec G101 to AWS secret key redaction regex
+
+## v0.26.14
+
+- chore(watcher/github-build): delete empty pkg/publisher.go; fix duplicate comment in main.go
+
+## v0.26.13
+
+- fix(agent/pr-reviewer): add 15-second timeout to http.Client used by PrPoster and ReviewVerifier to prevent indefinite hangs on stalled GitHub API connections
+
+## v0.26.12
+
+- fix(agent/pr-reviewer/cmd/cli): replace fmt.Errorf with errors.Errorf in main.go to follow project error-handling conventions
+
+## v0.26.11
+
+- perf(agent/pr-reviewer): move envVarRefRegexp compilation to package level in config.go — eliminates redundant regex recompilation on every resolveEnvVar call
+
+## v0.26.10
+
+- chore(agent/pr-reviewer): bump `github.com/bborbe/agent/lib` from v0.62.17 to v0.63.0 to collapse multi-phase pod boots into one pod on the happy path (lib spec 040); pr-reviewer's 3-phase chain now runs in a single pod boot once the new binary is deployed. Test assertions updated to match lib v0.62.27/v0.62.29 behavior change (`needs_input` / `failed` no longer write `phase: human_review`).
+
+- fix(agent/pr-reviewer): every pr-review step now publishes its routing decision on retrigger instead of silently skipping. Previously `planningStep`, `checkoutExecutionStep`, and `reviewStep` returned `ShouldRun=false` when their output section (`## Plan` / `## Review` / `## Verdict`) already existed in the body. On a retrigger (controller resets `trigger_count` but leaves the body intact), the step was skipped entirely — including the `NextPhase` decision — so the `tokenCheck` step's `Done + NextPhase=""` became the last delivered result and the task short-circuited to `phase: done` without any review running. Surfaced on `bborbe/trading#136` (2026-05-25). Fix: each step's `ShouldRun` always returns `true`; the `## <heading> already present` check moves into `Run`, which then publishes the same `NextPhase` it would have published on a fresh run (planning re-parses concerns from the existing plan; execution and ai-review just advance the phase).
+
+- fix(agent/pr-reviewer): export GH_TOKEN into every git subprocess env (clone, fetch, worktree add, worktree prune) so the credential helper installed by `gh auth setup-git` (`gh auth git-credential`) can authenticate HTTPS operations. Without this, git inherited the pod env (no GH_TOKEN), the helper returned nothing, and clone failed with `authentication required (set GH_TOKEN and re-trigger)` even after PR #11 fixed the gh-auth-setup-git step itself. Allowlist env to `{HOME, PATH, GH_TOKEN}` to keep unrelated pod secrets out of git and any helper it shells out to.
+
+- fix(agent/pr-reviewer): export the minted GitHub App IAT as `GH_TOKEN` in the `gh auth setup-git` subprocess env — without this, gh inherits the pod env (no token) and fails with `You are not logged into any GitHub hosts` even though the IAT was minted successfully. Surfaced by the previous diagnostic-capture fix; reproduced on `bborbe/agent#3` and `bborbe/trading#135` in prod
+- fix(agent/pr-reviewer): capture combined stdout+stderr from `gh auth setup-git` and include the scrubbed bounded tail (last 4 KiB, GH_TOKEN value replaced with `***`) in the wrapped error so operators can diagnose pod-startup auth failures via the OpenClaw task `## Failure` body — previously the gh output was dropped entirely and only `gh auth setup-git failed` surfaced
+- fix(agent/pr-reviewer): publish a `Status: Failed` result via the deliverer when `RunAgent` aborts on auth-setup failure so the passthrough content generator splices the wrapped error into the task `## Failure` section — previously the pod exited non-zero, k8s retried until backoffLimit, and only `Job has reached the specified backoff limit` reached the OpenClaw task body
+
+## v0.26.9
+
+- fix(watcher/github-build): suppress noisy stack trace when Dependabot internal graph-update workflows (`Graph Update:` or `Dependabot Updates`) are filtered out — these runs must not affect the red/green state machine
+
+## v0.26.8
+
+- chore: Rename `WATCHER_GITHUB_PR_TASK_SUFFIX` to `TASK_SUFFIX` in watcher/github-pr to match build watcher unified naming — breaking change, operator must update env files at deploy time
+
+## v0.26.7
+
+- feat(watcher/github-build): add `TASK_SUFFIX` env var to disambiguate build-failure task filenames per stage, preventing dev/prod filename collisions in the shared vault
+
+## v0.26.6
+
+- fix(watcher/github-build): expand owner-level wildcard allowlist entries (e.g. `github.com/bborbe/*`) into concrete repos at startup and refresh hourly — closes the silent-zero-polls bug introduced by the v0.25.0 wildcard rollout (spec 039)
+
+## v0.26.5
+
+- chore(agent/pr-reviewer): add `glog.V(2)` logging to every planning-step return site so routing decisions (LGTM short-circuit, execution advance, human_review escalation, POST failures) are visible in pod logs; mirrors the existing `steps_review.go` pattern
+
+## v0.26.4
+
+- feat(watcher/github-pr): add GitHub App auth via `APP_ID` + `INSTALLATION_ID` + `PEM_KEY` env vars (reuses existing pr-reviewer Apps `3798945` / `3800041`); uses `lib/githubapp.NewClient` (auto-refreshing IAT via `ghinstallation/v2`) because the watcher is a long-lived StatefulSet — a single `MintIAT` call would expire after 1 hour. Partial App env returns an error naming the missing field; legacy `GH_TOKEN` retained as fallback for rollout safety.
+
+## v0.26.3
+
+- feat(watcher/github-pr): migrate from PAT to GitHub App authentication with auto-refreshing IAT transport; supports APP_ID + INSTALLATION_ID + PEM_KEY env vars; static-PAT fallback via GH_TOKEN still works; partial App config produces a named error at startup naming the missing fields
+
+## v0.26.2
+
+- chore(watcher/github-build): wire GitHub App credentials (APP_ID, INSTALLATION_ID, PEM_KEY) into watcher container via Kubernetes Secret and StatefulSet env vars (spec 038)
+
+## v0.26.1
+
+- test: add Ginkgo v2 unit tests for auth resolver in `watcher/github-build/pkg/auth/auth_test.go` covering PAT fallback, conflict warning, refusal, and missing PEMKeyFile (spec 038)
+
+## v0.26.0
+
+- feat: migrate watcher/github-build from PAT to GitHub App authentication with auto-refreshing IAT transport
+
+## v0.25.15
+
+- refactor(lib): extract `ParsePRURL` from `agent/pr-reviewer/pkg/prurl.go` to shared `lib/prurl/prurl.go` so both `agent/pr-reviewer` and `watcher/github-pr` import the same parser (spec 036)
+- refactor(watcher/github-pr): rename admin endpoint `/trigger` (multi-repo poll) to `/check` — name now reflects behavior; hard cutover, no backwards-compat alias (spec 036)
+- feat(watcher/github-pr): add `POST /trigger?url=<pr_url>` admin endpoint to fire a single-PR review by URL; reuses the existing filter chain and trust evaluation; known limit — if a vault task already exists for the same (PR, SHA) the operator must still reset vault frontmatter or push a new commit (spec 036)
+
+## v0.25.14
+
+- refactor(agent/pr-reviewer,lib): move `prurl` package from `agent/pr-reviewer/pkg/prurl` to `lib/prurl`; update all callers to import `github.com/bborbe/maintainer/lib/prurl`
+
+## v0.25.13
+
+- refactor(watcher/github-pr): rename `/trigger` HTTP route to `/check`
+
+## v0.25.12
+
+- fix(agent/pr-reviewer): drop `checkBotIdentity` pre-flight call to `GET /app`; GitHub's `/app` endpoint requires the App-level JWT but the agent only holds the Installation Access Token, so every call returned 401 `"A JSON web token could not be decoded"` and blocked every review POST; bot identity is now trusted from the `BotLogin` env var (operator-configured), removing the broken self-check entirely
+
+## v0.25.11
+
+- fix(agent/pr-reviewer): planner now advances non-empty-concerns tasks with `NextPhase: "execution"` (via `domain.TaskPhaseExecution`) instead of the stale `"in_progress"` literal that spec 032 renamed; factory + k8s Config CR `trigger.phases` + planner unit test all moved to the canonical value; restores the spec 034 F2 invariant for the non-empty-concerns branch (spec 035)
+
+## v0.25.10
+
+- feat(agent/pr-reviewer): planning phase now posts an LGTM COMMENT review when concerns are empty, eliminating the silent-skip path; every PR that reaches planning produces at least one visible artifact; vault task gains `## Verdict` section naming the posted review id and event
+
+## v0.25.9
+
+- feat(agent/pr-reviewer): add GitHub App auth via new `APP_ID` / `INSTALLATION_ID` / `PEM_KEY_FILE` / `BOT_GITHUB_LOGIN` env vars; legacy `GH_TOKEN` retained as fallback; bot login `ben-s-pull-request-reviewer[bot]` (prod) / `ben-s-pull-request-reviewer-dev[bot]` (dev); `pr-review-of-ben` literal eradicated (spec 033)
+- feat(agent/pr-reviewer): wire k8s Secret + Config CR for GitHub App auth (PEM mount + APP_ID/INSTALLATION_ID/PEM_KEY_FILE/BOT_LOGIN env vars); dev uses `eqKj8L` + App 3800041, prod uses `kLoejw` + App 3798945; legacy `GH_TOKEN` Secret key retained as fallback (spec 033)
+
+## v0.25.8
+
+- feat(lib): add `lib/githubapp` shared package — `NewClient` + `MintIAT` for GitHub App installation access token minting via `ghinstallation/v2`; consumed by spec 033 pr-reviewer auth migration
+
+## v0.25.7
+
+- test(agent/pr-reviewer): add `NormalizeTaskStatus("todo")` → `TaskStatusNext` and `NormalizeTaskPhase("in_progress")` → `TaskPhaseExecution` alias round-trip tests to document and guard vault-cli's legacy alias contract (spec 032)
+
+## v0.25.6
+
+- feat(watcher/github-build,agent/pr-reviewer): bump vault-cli to v0.64.3; flip `BuildTaskStatus` default from `"todo"` to `"next"` and agent `Phase` default from `"in_progress"` to `"execution"` so newly published tasks carry the vault-cli canonical taxonomy
+
+## v0.25.5
+
+- feat(agent/pr-reviewer): route claude CLI to Anthropic-compatible alt-provider via dedicated `AnthropicBaseURL`/`AnthropicAuthToken`/`AnthropicModel` fields on the application struct (mapped to `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_MODEL` env vars). The renamed `AnthropicModel` field drives both the `--model` CLI flag and the `ANTHROPIC_MODEL` env var on the claude subprocess — single source of truth replaces the prior `MODEL`/`ANTHROPIC_MODEL` two-knob configuration. Applied to both Kafka entry point (`agent/pr-reviewer/main.go`) and local CLI entry point (`agent/pr-reviewer/cmd/run-task/main.go`); `pkg/factory.RunConfig` extended with the same fields and merges them into the claude subprocess env in `RunAgent`.
+- feat(agent/pr-reviewer): `k8s/maintainer-agent-pr-reviewer.yaml` adds `ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic` + `ANTHROPIC_MODEL=MiniMax-M2.7-highspeed` to `spec.env`; `k8s/maintainer-agent-pr-reviewer-secret.yaml` adds `ANTHROPIC_AUTH_TOKEN` sourced from teamvault `MOPmQL`. Enables MiniMax routing for dev canary as part of `[[Switch Agent API Provider]]` work.
+
+## v0.25.4
+
+- feat(watcher/github-pr): add `WATCHER_GITHUB_PR_TASK_SUFFIX` env var; non-empty value is appended as ` - <suffix>` to PR task filenames so dev and prod watchers writing into the same vault produce distinct filenames (dev=`dev` → ` - dev`; prod empty → unchanged). Fixes YAML merge-conflict markers in OpenClaw task files when two watchers poll overlapping repos.
+
 ## v0.25.3
 
 - fix(agent/pr-reviewer): invert SHA filter in `listBotReviews` from `==` to `!=`; dismissal now removes only prior-commit reviews and never the current-head review; add Dismissal Contract invariant comment and doc section (spec 031)

@@ -24,11 +24,17 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
+	"github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
+
+// triggerBufferSize coalesces redundant /trigger calls into one pending poll;
+// the poll loop is the single executor, so a larger buffer would not run them
+// any sooner.
+const triggerBufferSize = 1
 
 func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
 	if maxTitleLen <= 0 {
@@ -46,17 +52,21 @@ type application struct {
 	SentryDSN   string `required:"false" arg:"sentry-dsn"   env:"SENTRY_DSN"   usage:"SentryDSN"    display:"length"`
 	SentryProxy string `required:"false" arg:"sentry-proxy" env:"SENTRY_PROXY" usage:"Sentry Proxy"`
 
-	Listen        string           `required:"false" arg:"listen"         env:"LISTEN"         usage:"HTTP listen address (healthz/readiness/metrics/trigger)"                            default:":9090"`
-	GHToken       string           `required:"true"  arg:"gh-token"       env:"GH_TOKEN"       usage:"GitHub token (read scope sufficient)"                                                               display:"length"`
-	KafkaBrokers  libkafka.Brokers `required:"true"  arg:"kafka-brokers"  env:"KAFKA_BROKERS"  usage:"Comma-separated Kafka broker list"`
-	Stage         string           `required:"true"  arg:"stage"          env:"STAGE"          usage:"Deployment stage (dev|prod)"`
-	PollInterval  string           `required:"false" arg:"poll-interval"  env:"POLL_INTERVAL"  usage:"Poll interval (Go duration)"                                                        default:"5m"`
-	RepoAllowlist string           `required:"true"  arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
+	Listen         string           `required:"false" arg:"listen"          env:"LISTEN"          usage:"HTTP listen address (healthz/readiness/metrics/trigger)"                               default:":9090"`
+	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (numeric); required for App auth"`
+	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string           `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"    usage:"Path to the GitHub App private key (PEM) mounted from k8s Secret"`
+	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE"                 display:"length"`
+	KafkaBrokers   libkafka.Brokers `required:"true"  arg:"kafka-brokers"   env:"KAFKA_BROKERS"   usage:"Comma-separated Kafka broker list"`
+	Stage          string           `required:"true"  arg:"stage"           env:"STAGE"           usage:"Deployment stage (dev|prod)"`
+	PollInterval   string           `required:"false" arg:"poll-interval"   env:"POLL_INTERVAL"   usage:"Poll interval (Go duration)"                                                           default:"5m"`
+	RepoAllowlist  string           `required:"true"  arg:"repo-allowlist"  env:"REPO_ALLOWLIST"  usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); MUST be non-empty"`
 
-	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                    default:"build-fixer-agent"`
-	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                      default:"todo"`
+	BuildAssignee   string `required:"true"  arg:"build-assignee"    env:"TASK_ASSIGNEE" usage:"Frontmatter assignee for published tasks"                                                                                                                                                                             default:"build-fixer-agent"`
+	BuildTaskStatus string `required:"true"  arg:"build-task-status" env:"TASK_STATUS"   usage:"Frontmatter status for published tasks"                                                                                                                                                                               default:"next"`
 	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
-	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)" default:"200"`
+	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                                          default:"200"`
+	TaskSuffix      string `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"   usage:"Optional suffix appended to build-failure task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -69,9 +79,9 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrapf(ctx, err, "parse poll interval %q", a.PollInterval)
 	}
 
-	repoAllowlist, err := filter.ParseRepoAllowlist(ctx, a.RepoAllowlist)
+	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
 	if err != nil {
-		return err
+		return errors.Wrap(ctx, err, "parse repo allowlist")
 	}
 	// Validate ALL entries at startup — aggregate error names every malformed entry.
 	if validationErr := repoallowlist.Validate(ctx, repoAllowlist); validationErr != nil {
@@ -85,17 +95,38 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	glog.V(2).Infof("repo-allowlist count=%d", len(repoAllowlist))
 
+	httpClient, err := auth.Resolve(ctx, auth.Config{
+		AppID:          a.AppID,
+		InstallationID: a.InstallationID,
+		PEMKeyFile:     a.PEMKeyFile,
+		PEMKey:         a.PEMKey,
+		LogPrefix:      "watcher/github-build",
+	})
+	if err != nil {
+		return errors.Wrap(ctx, err, "resolve auth")
+	}
+	defer httpClient.CloseIdleConnections()
+
+	ghClient := pkg.NewGitHubClient(httpClient)
+
+	resolved, refreshTask, err := factory.CreateAllowlistSnapshot(ghClient, repoAllowlist)
+	if err != nil {
+		return errors.Wrap(ctx, err, "create allowlist snapshot")
+	}
+
 	w, cleanup, err := factory.CreateWatcher(
 		ctx,
-		a.GHToken,
+		ghClient,
 		a.KafkaBrokers,
 		a.Stage,
 		repoAllowlist,
+		resolved,
 		"/data/cursor.json",
 		a.BuildAssignee,
 		a.BuildTaskStatus,
 		a.BuildTaskPhase,
 		a.MaxTitleLen,
+		a.TaskSuffix,
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
@@ -107,10 +138,19 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	pollOnce := a.pollOnce(w)
 
-	return run.CancelOnFirstFinish(ctx,
-		a.runPollLoop(pollOnce, pollInterval),
-		a.runHTTPServer(pollOnce),
-	)
+	// trigger is buffered (triggerBufferSize) so an HTTP /trigger never blocks:
+	// while a poll runs, further triggers coalesce into a single pending signal.
+	// The poll loop is the sole executor, so polls never overlap (single-flight).
+	trigger := make(chan struct{}, triggerBufferSize)
+
+	tasks := []run.Func{
+		a.runPollLoop(pollOnce, pollInterval, trigger),
+		a.createHTTPServer(trigger),
+	}
+	if refreshTask != nil {
+		tasks = append(tasks, refreshTask)
+	}
+	return run.CancelOnFirstFinish(ctx, tasks...)
 }
 
 func (a *application) pollOnce(w pkg.Watcher) run.Func {
@@ -120,7 +160,11 @@ func (a *application) pollOnce(w pkg.Watcher) run.Func {
 	}
 }
 
-func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Func {
+func (a *application) runPollLoop(
+	poll run.Func,
+	interval time.Duration,
+	trigger <-chan struct{},
+) run.Func {
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -133,12 +177,17 @@ func (a *application) runPollLoop(poll run.Func, interval time.Duration) run.Fun
 				if err := poll(ctx); err != nil {
 					glog.Errorf("poll cycle error: %v", err)
 				}
+			case <-trigger:
+				glog.V(2).Infof("poll loop: triggered via HTTP")
+				if err := poll(ctx); err != nil {
+					glog.Errorf("poll cycle error: %v", err)
+				}
 			}
 		}
 	}
 }
 
-func (a *application) runHTTPServer(poll run.Func) run.Func {
+func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
@@ -148,7 +197,7 @@ func (a *application) runHTTPServer(poll run.Func) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/trigger").Handler(pkg.NewTriggerHandler(trigger))
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}

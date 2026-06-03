@@ -4,10 +4,22 @@
 
 package pkg
 
-import "context"
+import (
+	"context"
+
+	prurl "github.com/bborbe/maintainer/lib/prurl"
+)
 
 //counterfeiter:generate -o ../mocks/pr-poster.go --fake-name PrPoster . PrPoster
 //counterfeiter:generate -o ../mocks/review-verifier.go --fake-name ReviewVerifier . ReviewVerifier
+
+// Hallucination describes a single file-reference that ai_review flagged
+// as fabricated (the file or line does not exist in the diff).
+type Hallucination struct {
+	File  string `json:"file"`
+	Line  int    `json:"line"`
+	Issue string `json:"issue"`
+}
 
 // PrPoster posts a completed review verdict to GitHub as a pull-request review event.
 // The concrete implementation lives in pkg/githubposter and is wired by the factory.
@@ -15,11 +27,30 @@ import "context"
 // pkg/githubposter already imports pkg for PRInfo/Verdict.
 type PrPoster interface {
 	Post(ctx context.Context, req PostRequest) PostResult
+	// PostLGTM posts an LGTM COMMENT review when planning finds no concerns.
+	// event is always "COMMENT"; body is "Reviewed by <botLogin> — no concerns flagged."
+	// workDir is optional (empty string is fine — no .maintainer.yaml lookup needed for LGTM).
+	// On success, returns a PostResult with Outcome="success" and PostedEvent="COMMENT".
+	// On failure, returns a PostResult with Outcome="failed" and ErrorClass/ErrorMessage set.
+	PostLGTM(ctx context.Context, pr prurl.PRInfo, headSHA, workDir, botLogin string) PostResult
+	// DismissCurrentReview dismisses the bot's APPROVED or CHANGES_REQUESTED
+	// review at the current head SHA, then posts a follow-up COMMENT review
+	// citing each hallucination. A no-matching-review case is a non-error
+	// no-op (returns success with FailureStep="dismiss-current-noop"). A
+	// dismissal failure returns a failed PostResult; a COMMENT-post failure
+	// after a successful dismissal still returns success — the merge gate
+	// is already cleared.
+	DismissCurrentReview(
+		ctx context.Context,
+		pr prurl.PRInfo,
+		headSHA string,
+		hallucinations []Hallucination,
+	) PostResult
 }
 
 // PostRequest carries all inputs needed for a single posting sequence.
 type PostRequest struct {
-	PR      PRInfo
+	PR      prurl.PRInfo
 	HeadSHA string
 	Verdict Verdict
 	Summary string
@@ -67,7 +98,7 @@ type ReviewVerifier interface {
 
 // VerifyRequest carries all inputs for a single review-existence check.
 type VerifyRequest struct {
-	PR             PRInfo
+	PR             prurl.PRInfo
 	HeadSHA        string
 	ExpectedStates []string
 }

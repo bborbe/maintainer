@@ -11,14 +11,16 @@ import (
 	"time"
 
 	errors "github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 
 	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 )
 
 type reviewVerifier struct {
-	httpClient HTTPClient
-	ghToken    string
-	botLogin   string
+	httpClient      HTTPClient
+	ghToken         string
+	botLogin        string
+	currentDateTime libtime.CurrentDateTimeGetter
 }
 
 // NewReviewVerifier creates a prpkg.ReviewVerifier. botLogin must already be resolved by the caller.
@@ -26,8 +28,14 @@ func NewReviewVerifier(
 	httpClient HTTPClient,
 	ghToken string,
 	botLogin string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) prpkg.ReviewVerifier {
-	return &reviewVerifier{httpClient: httpClient, ghToken: ghToken, botLogin: botLogin}
+	return &reviewVerifier{
+		httpClient:      httpClient,
+		ghToken:         ghToken,
+		botLogin:        botLogin,
+		currentDateTime: currentDateTime,
+	}
 }
 
 // findReview scans a list of reviews for one that matches botLogin, headSHA, and any expected state.
@@ -53,7 +61,7 @@ func (v *reviewVerifier) VerifyReview(
 	ctx context.Context,
 	req prpkg.VerifyRequest,
 ) prpkg.VerifyResult {
-	start := time.Now()
+	start := time.Time(v.currentDateTime.Now())
 	step := "GET /pulls/N/reviews (ai_review verify)"
 	url := fmt.Sprintf(
 		"https://api.github.com/repos/%s/%s/pulls/%d/reviews",

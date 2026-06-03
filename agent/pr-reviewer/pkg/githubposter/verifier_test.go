@@ -9,18 +9,20 @@ import (
 	stderrors "errors"
 	"net/http"
 
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/agent/pr-reviewer/mocks"
-	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+	pkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubposter"
+	prpkg "github.com/bborbe/maintainer/lib/prurl"
 )
 
 var _ = Describe("ReviewVerifier", func() {
 	var (
 		fakeClient *mocks.HTTPClient
-		verifier   prpkg.ReviewVerifier
+		verifier   pkg.ReviewVerifier
 		pr         prpkg.PRInfo
 		ctx        context.Context
 	)
@@ -28,12 +30,18 @@ var _ = Describe("ReviewVerifier", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		fakeClient = &mocks.HTTPClient{}
-		verifier = githubposter.NewReviewVerifier(fakeClient, "test-token", testBotLogin)
+		currentDateTime := libtime.NewCurrentDateTime()
+		verifier = githubposter.NewReviewVerifier(
+			fakeClient,
+			"test-token",
+			testBotLogin,
+			currentDateTime,
+		)
 		pr = prpkg.PRInfo{Owner: "owner", Repo: "repo", Number: 1}
 	})
 
-	req := func(states ...string) prpkg.VerifyRequest {
-		return prpkg.VerifyRequest{
+	req := func(states ...string) pkg.VerifyRequest {
+		return pkg.VerifyRequest{
 			PR:             pr,
 			HeadSHA:        testHeadSHA,
 			ExpectedStates: states,
@@ -72,7 +80,7 @@ var _ = Describe("ReviewVerifier", func() {
 			result := verifier.VerifyReview(ctx, req("APPROVED"))
 			Expect(result.Found).To(BeFalse())
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassTransient))
+			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
 			Expect(result.Attempt).To(Equal(2))
 		})
 	})
@@ -83,7 +91,7 @@ var _ = Describe("ReviewVerifier", func() {
 			result := verifier.VerifyReview(ctx, req("APPROVED"))
 			Expect(result.Found).To(BeFalse())
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassPermanent))
+			Expect(result.Class).To(Equal(pkg.ErrorClassPermanent))
 			Expect(result.EscalateHint).To(BeTrue())
 			Expect(result.Attempt).To(Equal(1))
 			Expect(fakeClient.DoCallCount()).To(Equal(1))
@@ -108,7 +116,7 @@ var _ = Describe("ReviewVerifier", func() {
 			result := verifier.VerifyReview(ctx, req("APPROVED"))
 			Expect(result.Found).To(BeFalse())
 			Expect(result.Outcome).To(Equal("failed"))
-			Expect(result.Class).To(Equal(prpkg.ErrorClassTransient))
+			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
 		})
 	})
 })

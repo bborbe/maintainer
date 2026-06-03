@@ -32,6 +32,7 @@ import (
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/factory"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/git"
 	"github.com/bborbe/maintainer/agent/pr-reviewer/pkg/githubauth"
+	githubapp "github.com/bborbe/maintainer/lib/githubapp"
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 )
 
@@ -52,9 +53,6 @@ type application struct {
 	// Agent directory (contains .claude/ with CLAUDE.md and commands)
 	AgentDir claudelib.AgentDir `required:"false" arg:"agent-dir" env:"AGENT_DIR" usage:"Agent directory with .claude/ config" default:"agent"`
 
-	// Model selection
-	Model claudelib.ClaudeModel `required:"false" arg:"model" env:"MODEL" usage:"Claude model to use (sonnet, opus)" default:"sonnet"`
-
 	// Workdir paths for bare-clone cache and per-task worktrees
 	ReposPath string `required:"false" arg:"repos-path" env:"REPOS_PATH" usage:"Root path for bare-clone cache"   default:"/repos"`
 	WorkPath  string `required:"false" arg:"work-path"  env:"WORK_PATH"  usage:"Root path for per-task worktrees" default:"/work"`
@@ -69,15 +67,28 @@ type application struct {
 	Branch base.Branch `required:"true" arg:"branch" env:"BRANCH" usage:"branch"`
 
 	// Phase to run (framework requires explicit phase)
-	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | in_progress | ai_review" default:"in_progress"`
+	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | execution | ai_review" default:"execution"`
 
 	// Kafka delivery (optional — only active when TASK_ID is set)
 	KafkaBrokers libkafka.Brokers        `required:"false" arg:"kafka-brokers" env:"KAFKA_BROKERS" usage:"Comma separated list of Kafka brokers"`
 	TaskID       agentlib.TaskIdentifier `required:"false" arg:"task-id"       env:"TASK_ID"       usage:"Agent task identifier for publishing results back to task controller"`
 
-	// GitHub token forwarded to the Claude CLI subprocess as GH_TOKEN for gh auth.
-	// Also used by the real GitHubAuthSetup to configure git credential helper at pod startup.
-	GHToken string `required:"false" arg:"gh-token" env:"GH_TOKEN" usage:"GitHub token for gh CLI auth and git credential helper at pod startup" display:"length"`
+	// GitHub App authentication. The pod mints an installation access token at startup
+	// and forwards it to the agent subprocess (gh CLI, git credential helper, repo manager,
+	// and agent provider). App auth is the only supported auth path.
+	AppID          int64  `required:"false" arg:"app-id"          env:"APP_ID"           usage:"GitHub App ID (numeric); required for App auth"`
+	InstallationID int64  `required:"false" arg:"installation-id" env:"INSTALLATION_ID"  usage:"GitHub App Installation ID (numeric)"`
+	PEMKeyFile     string `required:"false" arg:"pem-key-file"    env:"PEM_KEY_FILE"     usage:"Path to the GitHub App private key (PEM file mounted from k8s Secret)"`
+	PEMKey         string `required:"false" arg:"pem-key"         env:"PEM_KEY"          usage:"GitHub App private key (PEM) as env var content; mutually exclusive with PEM_KEY_FILE" display:"length"`
+	BotLogin       string `required:"false" arg:"bot-login"       env:"BOT_GITHUB_LOGIN" usage:"Bot identity used by githubposter (e.g. ben-s-pull-request-reviewer[bot])"                              default:"ben-s-pull-request-reviewer[bot]"`
+
+	// Anthropic-compatible provider routing. Setting AnthropicBaseURL + AnthropicAuthToken
+	// routes the claude CLI to an alt-provider (e.g. MiniMax via https://api.minimax.io/anthropic).
+	// AnthropicModel drives both the `--model` CLI flag and the ANTHROPIC_MODEL env var seen by
+	// the claude subprocess.
+	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
+	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL"                                  display:"length"`
+	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name; also exposed to the claude subprocess as ANTHROPIC_MODEL"                  default:"sonnet"`
 
 	// Repo allowlist — comma-separated host/owner/repo entries; empty means allow-all.
 	RepoAllowlist string `required:"false" arg:"repo-allowlist" env:"REPO_ALLOWLIST" usage:"Comma-separated host-qualified repo allowlist (host/owner/repo); empty means allow-all"`
@@ -101,8 +112,14 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		glog.V(2).Infof("prometheus push completed")
 	}()
 	start := libtime.NewCurrentDateTime().Now().Time()
-
 	glog.V(2).Infof("maintainer-agent-pr-reviewer started phase=%s", a.Phase)
+
+	resolvedToken, err := a.resolveAuth(ctx)
+	if err != nil {
+		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
+		jobMetrics.RecordDuration(time.Since(start))
+		return err
+	}
 
 	repoAllowlist, err := prpkg.ParseRepoAllowlist(ctx, a.RepoAllowlist)
 	if err != nil {
@@ -127,28 +144,30 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	defer cleanup()
 
-	agent, err := a.dispatchAgent(ctx, repoAllowlist)
+	agent, err := a.dispatchAgent(ctx, repoAllowlist, resolvedToken)
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
 		jobMetrics.RecordDuration(time.Since(start))
 		return errors.Wrap(ctx, err, "task type dispatch")
 	}
-
-	authSetup := githubauth.NewGhAuthSetupGit(a.GHToken)
 	result, err := factory.RunAgent(ctx, factory.RunConfig{
-		ClaudeConfigDir: a.ClaudeConfigDir,
-		AgentDir:        a.AgentDir,
-		Model:           a.Model,
-		GHToken:         a.GHToken,
-		ReposPath:       a.ReposPath,
-		WorkPath:        a.WorkPath,
-		ReviewMode:      a.ReviewMode,
-		RepoAllowlist:   repoAllowlist,
-		AuthSetup:       authSetup,
-		Phase:           a.Phase,
-		TaskContent:     a.TaskContent,
-		Deliverer:       deliverer,
-		Agent:           agent,
+		ClaudeConfigDir:    a.ClaudeConfigDir,
+		AgentDir:           a.AgentDir,
+		Model:              a.AnthropicModel,
+		GHToken:            resolvedToken,
+		AnthropicBaseURL:   a.AnthropicBaseURL,
+		AnthropicAuthToken: a.AnthropicAuthToken,
+		ReposPath:          a.ReposPath,
+		WorkPath:           a.WorkPath,
+		ReviewMode:         a.ReviewMode,
+		RepoAllowlist:      repoAllowlist,
+		AuthSetup:          githubauth.NewGhAuthSetupGit(resolvedToken),
+		Phase:              a.Phase,
+		BotLogin:           a.BotLogin,
+		TaskContent:        a.TaskContent,
+		Deliverer:          deliverer,
+		Agent:              agent,
+		CurrentDateTime:    libtime.NewCurrentDateTime(),
 	})
 	if err != nil {
 		jobMetrics.RecordRun(agentlib.AgentStatusFailed)
@@ -157,37 +176,93 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	jobMetrics.RecordRun(result.Status)
 	jobMetrics.RecordDuration(time.Since(start))
-	return agentlib.PrintResult(result)
+	return agentlib.PrintResult(ctx, result)
 }
 
 // dispatchAgent builds the correct agent for the configured task type.
+// resolvedToken is the GitHub App installation token minted in resolveAuth; it
+// is forwarded to the agent subprocess (gh CLI, git credential helper, repo
+// manager, and agent provider) — never read from a config input.
 func (a *application) dispatchAgent(
 	ctx context.Context,
 	repoAllowlist []string,
+	resolvedToken string,
 ) (*agentlib.Agent, error) {
 	env := map[string]string{}
-	if a.GHToken != "" {
-		env["GH_TOKEN"] = a.GHToken
+	if resolvedToken != "" {
+		env["GH_TOKEN"] = resolvedToken
+	}
+	if a.AnthropicBaseURL != "" {
+		env["ANTHROPIC_BASE_URL"] = a.AnthropicBaseURL
+	}
+	if a.AnthropicAuthToken != "" {
+		env["ANTHROPIC_AUTH_TOKEN"] = a.AnthropicAuthToken
+	}
+	if a.AnthropicModel != "" {
+		env["ANTHROPIC_MODEL"] = a.AnthropicModel.String()
+	}
+	if a.BotLogin != "" {
+		env["BOT_GITHUB_LOGIN"] = a.BotLogin
 	}
 	repoManager := git.NewRepoManager(git.WorkdirConfig{
 		ReposPath: a.ReposPath,
 		WorkPath:  a.WorkPath,
-	})
+	}, resolvedToken)
 	provider := factory.CreateAgentProvider(
 		a.ClaudeConfigDir,
 		a.AgentDir,
-		a.Model,
-		a.GHToken,
+		a.AnthropicModel,
+		resolvedToken,
 		env,
 		repoManager,
 		a.ReviewMode,
 		repoAllowlist,
+		libtime.NewCurrentDateTime(),
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
 	if err != nil {
 		return nil, errors.Wrap(ctx, err, "select agent for task_type")
 	}
 	return agent, nil
+}
+
+// resolveAuth mints a GitHub App installation token and returns it. The token
+// is a runtime value (not a config input), so it is returned to the caller
+// rather than stored on the argument-parsed application struct — argument/v2
+// panics when reflecting over unexported struct fields at startup.
+func (a *application) resolveAuth(ctx context.Context) (string, error) {
+	hasPEMFile := a.PEMKeyFile != ""
+	hasPEMContent := a.PEMKey != ""
+	useGitHubApp := a.AppID != 0 && a.InstallationID != 0 && (hasPEMFile || hasPEMContent)
+	if !useGitHubApp {
+		return "", errors.Errorf(
+			ctx,
+			"pr-reviewer auth: GitHub App credentials not configured — set APP_ID, INSTALLATION_ID, and PEM_KEY_FILE (or PEM_KEY)",
+		)
+	}
+	var iat string
+	var err error
+	if hasPEMFile {
+		iat, err = githubapp.MintIAT(ctx, githubapp.Config{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEMPath:        a.PEMKeyFile,
+		})
+	} else {
+		iat, err = githubapp.MintIAT(ctx, githubapp.Config{
+			AppID:          a.AppID,
+			InstallationID: a.InstallationID,
+			PEM:            []byte(a.PEMKey),
+		})
+	}
+	if err != nil {
+		return "", errors.Wrap(ctx, err, "mint github app iat")
+	}
+	glog.V(2).Infof(
+		"pr-reviewer auth mode=github-app app_id=%d installation_id=%d",
+		a.AppID, a.InstallationID,
+	)
+	return iat, nil
 }
 
 // createDeliverer builds the Kafka result deliverer when TASK_ID is set,
@@ -202,17 +277,22 @@ func (a *application) createDeliverer(
 	if len(a.KafkaBrokers) == 0 {
 		return nil, nil, errors.Errorf(ctx, "KAFKA_BROKERS must be set when TASK_ID is set")
 	}
+	syncProducer, err := libkafka.NewSyncProducerWithName(ctx, a.KafkaBrokers, "agent-pr-reviewer")
+	if err != nil {
+		return nil, nil, errors.Wrap(ctx, err, "create kafka sync producer")
+	}
+	cleanup := func() {
+		if err := syncProducer.Close(); err != nil {
+			glog.Warningf("close sync producer failed: %v", err)
+		}
+	}
 	currentDateTime := libtime.NewCurrentDateTime()
-	deliverer, cleanup, err := factory.CreateDeliverer(
-		ctx,
+	deliverer := factory.CreateDeliverer(
+		syncProducer,
 		a.TaskID,
-		a.KafkaBrokers,
 		a.Branch,
 		a.TaskContent,
 		currentDateTime,
 	)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create deliverer")
-	}
 	return deliverer, cleanup, nil
 }

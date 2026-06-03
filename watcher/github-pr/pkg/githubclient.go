@@ -7,6 +7,7 @@ package pkg
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"path"
 	"time"
 
@@ -54,9 +55,21 @@ type PRDetails struct {
 	// BaseRef is the base branch name (e.g. `master`, `main`). Used as
 	// the `base_ref` the execution phase diffs against.
 	BaseRef string
+
+	// AuthorLogin is the GitHub author login; empty for deleted accounts.
+	AuthorLogin string
+
+	// Title is the PR title.
+	Title string
+
+	// IsDraft indicates whether the PR is a draft.
+	IsDraft bool
+
+	// UpdatedAt is the PR last-updated timestamp; required for AgeFilter.
+	UpdatedAt libtime.DateTime
 }
 
-//counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
+//counterfeiter:generate -o ../mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub API calls.
 type GitHubClient interface {
@@ -77,9 +90,11 @@ type GitHubClient interface {
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
-func NewGitHubClient(token string) GitHubClient {
+// The httpClient must already carry authentication (App auth via
+// lib/githubapp.NewClient).
+func NewGitHubClient(httpClient *http.Client) GitHubClient {
 	return &githubClient{
-		client: gogithub.NewClient(nil).WithAuthToken(token),
+		client: gogithub.NewClient(httpClient),
 	}
 }
 
@@ -154,9 +169,13 @@ func (c *githubClient) GetPRDetails(
 		)
 	}
 	return PRDetails{
-		HeadSHA:  pr.GetHead().GetSHA(),
-		CloneURL: pr.GetHead().GetRepo().GetCloneURL(),
-		BaseRef:  pr.GetBase().GetRef(),
+		HeadSHA:     pr.GetHead().GetSHA(),
+		CloneURL:    pr.GetHead().GetRepo().GetCloneURL(),
+		BaseRef:     pr.GetBase().GetRef(),
+		AuthorLogin: pr.GetUser().GetLogin(),
+		Title:       pr.GetTitle(),
+		IsDraft:     pr.GetDraft(),
+		UpdatedAt:   libtime.DateTime(pr.GetUpdatedAt().Time),
 	}, nil
 }
 

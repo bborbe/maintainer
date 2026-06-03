@@ -22,12 +22,57 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 )
 
-//counterfeiter:generate -o mocks/watcher.go --fake-name Watcher . Watcher
+//counterfeiter:generate -o ../mocks/watcher.go --fake-name Watcher . Watcher
+
+// DependabotGraphUpdatePrefixes are workflow-name prefixes used by Dependabot for
+// internal graph-maintenance jobs. These are NOT real CI failures — their HTTP 503s
+// are Dependabot's own service being temporarily flaky. The real CI workflows on
+// the same commits succeed. These runs must not trigger OpenClaw build-failure tasks.
+var DependabotGraphUpdatePrefixes = []string{
+	"Graph Update:",
+	"Dependabot Updates",
+}
+
+// isDependabotGraphUpdateWorkflow returns true when run.Name starts with any
+// prefix in DependabotGraphUpdatePrefixes. Comparison is case-sensitive.
+// An empty or zero Name is NOT considered a Dependabot workflow — returns false.
+func isDependabotGraphUpdateWorkflow(run WorkflowRun) bool {
+	if run.Name == "" {
+		return false
+	}
+	for _, prefix := range DependabotGraphUpdatePrefixes {
+		if strings.HasPrefix(run.Name, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // Watcher polls GitHub Actions for build status changes.
 type Watcher interface {
 	Poll(ctx context.Context) error
 }
+
+// AllowlistSnapshot returns the current set of concrete "host/owner/repo"
+// entries the poll loop should iterate. Implementations MUST be safe to
+// call from a goroutine concurrent with a refresh writer.
+type AllowlistSnapshot interface {
+	Snapshot() []string
+}
+
+// StaticSnapshot is an AllowlistSnapshot backed by an immutable slice.
+// Used by the pure-literal binary path so no wildcard machinery runs.
+type StaticSnapshot struct {
+	entries []string
+}
+
+// NewStaticSnapshot returns a snapshot holding a defensive copy of entries.
+func NewStaticSnapshot(entries []string) *StaticSnapshot {
+	return &StaticSnapshot{entries: append([]string(nil), entries...)}
+}
+
+// Snapshot returns the held entry slice. Callers MUST NOT mutate it.
+func (s *StaticSnapshot) Snapshot() []string { return s.entries }
 
 // NewWatcher returns a Watcher that polls GitHub Actions and publishes commands.
 func NewWatcher(
@@ -35,13 +80,14 @@ func NewWatcher(
 	createSender task.CreateCommandSender,
 	metrics Metrics,
 	repoFilter filter.RepoFilter,
-	allowlist []string,
+	allowlist AllowlistSnapshot,
 	cursorPath string,
 	assignee string,
 	taskStatus string,
 	taskPhase string,
 	maintenanceLoader maintenance.Loader,
 	maxTitleLen int,
+	taskSuffix string,
 ) Watcher {
 	return &buildWatcher{
 		githubClient:      githubClient,
@@ -55,6 +101,7 @@ func NewWatcher(
 		taskPhase:         taskPhase,
 		maintenanceLoader: maintenanceLoader,
 		maxTitleLen:       maxTitleLen,
+		taskSuffix:        taskSuffix,
 	}
 }
 
@@ -63,13 +110,14 @@ type buildWatcher struct {
 	createSender      task.CreateCommandSender
 	metrics           Metrics
 	repoFilter        filter.RepoFilter
-	allowlist         []string
+	allowlist         AllowlistSnapshot
 	cursorPath        string
 	assignee          string
 	taskStatus        string
 	taskPhase         string
 	maintenanceLoader maintenance.Loader
 	maxTitleLen       int
+	taskSuffix        string
 }
 
 func (w *buildWatcher) Poll(ctx context.Context) error {
@@ -78,7 +126,8 @@ func (w *buildWatcher) Poll(ctx context.Context) error {
 		return errors.Wrapf(ctx, err, "load cursor")
 	}
 
-	for _, repoKey := range w.allowlist {
+	snapshot := w.allowlist.Snapshot()
+	for _, repoKey := range snapshot {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -117,6 +166,11 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 	repoState := GetOrCreateRepoState(cursor, repoKey)
 
 	if repoState.DefaultBranch == "" {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
 		branch, err := w.githubClient.GetDefaultBranch(ctx, owner, repo)
 		if err != nil {
 			glog.Warningf("get default branch failed repo=%s err=%v", repoKey, err)
@@ -126,6 +180,11 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 		repoState.DefaultBranch = branch
 	}
 
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
 	runs, err := w.githubClient.GetWorkflowRuns(ctx, owner, repo, repoState.DefaultBranch)
 	if err != nil {
 		if errors.Is(err, ErrRateLimited) {
@@ -216,6 +275,13 @@ func deriveState(runs []WorkflowRun) (state string, episodeSHA string, failingRu
 	var considered []WorkflowRun
 	for _, run := range latestByWorkflow {
 		if run.Conclusion == "failure" || run.Conclusion == "success" {
+			// Skip Dependabot internal graph-maintenance workflows.
+			// They are not real CI and must not affect the red/green state machine.
+			if isDependabotGraphUpdateWorkflow(run) {
+				glog.V(4).
+					Infof("skipping workflow run id=%d name=%q (Dependabot graph-update)", run.RunID, run.Name)
+				continue
+			}
 			considered = append(considered, run)
 		}
 	}
@@ -281,6 +347,11 @@ func (w *buildWatcher) buildCreateTaskCommand(
 
 	var primaryJobID int64 // job ID for failingRuns[0] — used for log fetch
 	for i, run := range failingRuns {
+		select {
+		case <-ctx.Done():
+			return task.CreateCommand{}
+		default:
+		}
 		jobName, stepName, jobID := w.fetchJobInfoForRun(ctx, owner, repo, run.RunID)
 		if i == 0 {
 			primaryJobID = jobID
@@ -306,7 +377,14 @@ func (w *buildWatcher) buildCreateTaskCommand(
 		fm["phase"] = taskPhase
 	}
 	return task.CreateCommand{
-		Title:          computeBuildTitle("github", owner, repo, episodeSHA, w.maxTitleLen),
+		Title: computeBuildTitle(
+			"github",
+			owner,
+			repo,
+			episodeSHA,
+			w.maxTitleLen,
+			w.taskSuffix,
+		),
 		TaskIdentifier: agentlib.TaskIdentifier(taskID.String()),
 		Frontmatter:    fm,
 		Body:           body,
@@ -472,10 +550,11 @@ var (
 	redactGitHubTokenRE  = regexp.MustCompile(`gh[opsu]_[a-zA-Z0-9]{16,}`)
 	redactBearerAuthRE   = regexp.MustCompile(`Bearer\s+[A-Za-z0-9._-]{16,}`)
 	redactAWSAccessKeyRE = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	// #nosec G101 — this pattern redacts user-provided AWS secret keys from CI logs, it is not a hardcoded credential
 	redactAWSSecretKeyRE = regexp.MustCompile(
 		`(aws_secret_access_key[\s=:]+["']?)[A-Za-z0-9/+]{40}["']?`,
 	)
-	redactOpaqueHexRE = regexp.MustCompile(`\b[a-f0-9]{40,}\b`)
+	redactOpaqueHexRE = regexp.MustCompile(`\b[a-f0-9]{40}\b`)
 )
 
 func redactLogSnippet(s string) string {
@@ -491,9 +570,8 @@ func redactLogSnippet(s string) string {
 	// 4. AWS secret access keys: keep the key= prefix, redact the 40-char base64 secret
 	s = redactAWSSecretKeyRE.ReplaceAllString(s, "${1}[REDACTED]")
 
-	// 5. Long opaque hex strings (≥40 chars) — generic auth hashes catch-all.
-	//    Will also match the episode SHA if present in log output — acceptable per spec.
-	//    MUST run last so the specific patterns above (1-4) match their tokens first.
+	// 5. SHA-1 hashes (exactly 40 hex chars) — generic auth hash catch-all.
+	//    Runs last so specific patterns above (1-4) match their tokens first.
 	s = redactOpaqueHexRE.ReplaceAllString(s, "[REDACTED]")
 
 	return s

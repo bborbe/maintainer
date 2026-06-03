@@ -42,7 +42,7 @@ func (r *result) Success() bool { return r.success }
 
 func (r *result) Description() string { return r.description }
 
-//counterfeiter:generate -o ../mocks/trust.go --fake-name Trust . Trust
+//counterfeiter:generate -o ../../mocks/trust.go --fake-name Trust . Trust
 
 // Trust is the single-method trust-decision interface.
 // Each implementation returns both an outcome (trusted/denied) and a
@@ -71,7 +71,7 @@ func (a And) IsTrusted(ctx context.Context, pr PR) (Result, error) {
 	for _, t := range a {
 		r, err := t.IsTrusted(ctx, pr)
 		if err != nil {
-			return nil, errors.Wrapf(ctx, err, "and trust check")
+			return nil, errors.Wrap(ctx, err, "and trust check")
 		}
 		if !r.Success() {
 			success = false
@@ -93,7 +93,7 @@ func (o Or) IsTrusted(ctx context.Context, pr PR) (Result, error) {
 	for _, t := range o {
 		r, err := t.IsTrusted(ctx, pr)
 		if err != nil {
-			return nil, errors.Wrapf(ctx, err, "or trust check")
+			return nil, errors.Wrap(ctx, err, "or trust check")
 		}
 		if r.Success() {
 			success = true
@@ -108,7 +108,7 @@ func Not(t Trust) Trust {
 	return Func(func(ctx context.Context, pr PR) (Result, error) {
 		r, err := t.IsTrusted(ctx, pr)
 		if err != nil {
-			return nil, errors.Wrapf(ctx, err, "not trust check")
+			return nil, errors.Wrap(ctx, err, "not trust check")
 		}
 		return NewResult(!r.Success(), "not("+r.Description()+")"), nil
 	})

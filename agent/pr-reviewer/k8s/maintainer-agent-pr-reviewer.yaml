@@ -16,22 +16,34 @@ spec:
   image: '{{"DOCKER_REGISTRY" | env}}/maintainer-agent-pr-reviewer'
   heartbeat: 5m
   secretName: maintainer-agent-pr-reviewer
-  volumeClaim: agent-pr-reviewer
-  volumeMountPath: /home/claude/.claude
   env:
-    # Tell Claude Code where the config + plugins live (matches volumeMountPath).
-    # Without this, the agent runs without /coding plugin loaded → /coding:pr-review
-    # slash command not registered → execution phase falls back to inline prompt.
+    # Tell Claude Code where the image-resident config + plugins live (the /coding
+    # plugin is baked into the image at this path; no volume is mounted). Without
+    # this, /coding:pr-review is not registered → execution falls back to inline prompt.
     CLAUDE_CONFIG_DIR: /home/claude/.claude
     # Defense-in-depth allowlist mirroring watcher's REPO_ALLOWLIST. Agent refuses
     # to clone tasks whose host/owner/repo is not on the list. Empty = allow-all.
     REPO_ALLOWLIST: '{{ "REPO_ALLOWLIST" | env }}'
+    # Anthropic-compatible alt-provider routing (MiniMax). The Go binary reads
+    # ANTHROPIC_MODEL into the AnthropicModel field and forwards it to the claude
+    # subprocess as both the --model flag and the ANTHROPIC_MODEL env var.
+    # ANTHROPIC_AUTH_TOKEN is sourced from the agent secret (teamvault MOPmQL).
+    ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+    ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+    # GitHub App auth — pod mints an installation access token at startup. The
+    # PEM content is injected as env var $PEM_KEY via the Secret's envFrom mount
+    # (controller wires Secret keys as env vars, not files — see
+    # agent/task/executor/pkg/agent_configuration.go). The legacy GH_TOKEN PAT
+    # was retired 2026-05-24 after both watchers + agent migrated to App auth.
+    APP_ID: '{{ "AGENT_PR_REVIEWER_APP_ID" | env }}'
+    INSTALLATION_ID: '{{ "AGENT_PR_REVIEWER_INSTALLATION_ID" | env }}'
+    BOT_GITHUB_LOGIN: '{{ "AGENT_PR_REVIEWER_BOT_LOGIN" | env }}'
   trigger:
     statuses:
       - in_progress
     phases:
       - planning
-      - in_progress
+      - execution
       - ai_review
   resources:
     requests:

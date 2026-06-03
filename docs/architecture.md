@@ -143,7 +143,7 @@ done
 |---|---|---|---|---|
 | Per-task workdir | `/work/<task-id>` | overlayfs (counts toward `ephemeral-storage`) | emptyDir | wiped on pod end |
 | Per-repo bare cache | `/repos/<host>/<owner>/<repo>.git` | overlayfs (no caching benefit) | PVC | survives pod end (step 2.5+) |
-| `.claude/` config | `/home/claude/.claude/` | existing PVC `agent-pr-reviewer` (preserved across `code-reviewer` → `maintainer` rename to avoid OAuth re-seed) | unchanged | survives pod |
+| `.claude/` config | `/home/claude/.claude/` | image-resident (baked into image at `/home/claude/.claude`; no PVC) | unchanged | image-resident (rebuilt per release) |
 
 **Why locked paths from day one** — the agent task controller's `Config` CRD (`bborbe/agent`) currently supports only one PVC mount per agent, fixed at `/home/claude/.claude`. Adding a second PVC at `/repos` and an emptyDir at `/work` requires extending the CRD to accept multiple volume mounts (separate task: `Multi-volume support in agent Config CRD`). Until that lands, `/repos` and `/work` are unmounted directories backed by overlayfs — the cache logic runs but the cache never hits in K8s (every pod starts empty). The day the CRD ships, mount yaml is added; code does not change. CLI mode benefits from caching today because `/repos` is a real persistent directory on the developer's machine (configurable via `WorkdirConfig`).
 

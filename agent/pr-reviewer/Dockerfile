@@ -1,5 +1,5 @@
 ARG DOCKER_REGISTRY=docker.quant.benjamin-borbe.de:443
-FROM ${DOCKER_REGISTRY}/golang:1.26.3 AS build
+FROM ${DOCKER_REGISTRY}/golang:1.26.4 AS build
 ARG BUILD_GIT_COMMIT=none
 ARG BUILD_DATE=unknown
 COPY . /workspace
@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -mod=vendor -ldflags "-s" -a -in
 CMD ["/bin/bash"]
 
 FROM ${DOCKER_REGISTRY}/alpine:3.23 AS alpine
-RUN apk --no-cache add ca-certificates curl bash nodejs npm github-cli git \
+RUN apk --no-cache add ca-certificates curl bash nodejs npm github-cli git ast-grep \
  && npm install -g --omit=dev --no-optional @anthropic-ai/claude-code \
  && npm cache clean --force \
  && apk del npm \
@@ -20,7 +20,12 @@ ARG BUILD_DATE=unknown
 COPY --from=build /main /main
 COPY agent/ /agent/
 ENV HOME=/home/claude
-RUN mkdir -p /home/claude/.claude
+ENV CLAUDE_CONFIG_DIR=/home/claude/.claude
+RUN set -eux \
+ && mkdir -p /home/claude/.claude \
+ && timeout 300 claude plugin marketplace add bborbe/coding \
+ && timeout 300 claude plugin install coding \
+ && claude plugin list | grep -q coding
 ENV ZONEINFO=/zoneinfo.zip
 COPY --from=build /usr/local/go/lib/time/zoneinfo.zip /
 ENV BUILD_GIT_COMMIT=${BUILD_GIT_COMMIT}

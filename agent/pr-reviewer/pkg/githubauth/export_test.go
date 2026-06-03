@@ -6,3 +6,9 @@ package githubauth
 
 // DefaultExecFunc exposes the production exec wrapper for testing.
 var DefaultExecFunc = defaultExecFunc
+
+// NewGhAuthSetupGitWithExecFunc exposes the test-only constructor for
+// injecting a fake exec function. Keeping the underlying function unexported
+// in production prevents real callers from bypassing the production exec
+// wrapper (which is the only path that goes through `cmd.CombinedOutput`).
+var NewGhAuthSetupGitWithExecFunc = newGhAuthSetupGitWithExecFunc

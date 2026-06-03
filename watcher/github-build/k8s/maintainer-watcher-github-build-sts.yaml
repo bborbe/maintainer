@@ -44,11 +44,15 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
-            - name: GH_TOKEN
+            - name: APP_ID
+              value: '{{ "WATCHER_GITHUB_BUILD_APP_ID" | env }}'
+            - name: INSTALLATION_ID
+              value: '{{ "WATCHER_GITHUB_BUILD_INSTALLATION_ID" | env }}'
+            - name: PEM_KEY
               valueFrom:
                 secretKeyRef:
                   name: maintainer-watcher-github-build
-                  key: GH_TOKEN
+                  key: PEM_KEY
             - name: KAFKA_BROKERS
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
@@ -63,6 +67,8 @@ spec:
               value: '{{"WATCHER_GITHUB_BUILD_TASK_STATUS" | env}}'
             - name: TASK_PHASE
               value: '{{"WATCHER_GITHUB_BUILD_TASK_PHASE" | env}}'
+            - name: TASK_SUFFIX
+              value: '{{"TASK_SUFFIX" | env}}'
           image: '{{"DOCKER_REGISTRY" | env}}/maintainer-watcher-github-build:{{"BRANCH" | env}}'
           imagePullPolicy: Always
           securityContext:

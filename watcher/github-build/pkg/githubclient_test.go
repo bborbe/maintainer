@@ -363,4 +363,259 @@ var _ = Describe("pkg.GitHubClient", func() {
 			})
 		})
 	})
+
+	Describe("GetJobsForRun", func() {
+		Context("server returns jobs with failed steps", func() {
+			It("returns failed job info with correct failed step name", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						Expect(
+							r.URL.Path,
+						).To(ContainSubstring("/repos/owner/repo/actions/runs/42/jobs"))
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(w, `{
+							"total_count": 2,
+							"jobs": [
+								{
+									"id": 101,
+									"name": "build",
+									"conclusion": "failure",
+									"steps": [
+										{"name": "setup", "conclusion": "success"},
+										{"name": "compile", "conclusion": "failure"},
+										{"name": "teardown", "conclusion": "skipped"}
+									]
+								},
+								{
+									"id": 102,
+									"name": "test",
+									"conclusion": "failure",
+									"steps": [
+										{"name": "unit-tests", "conclusion": "failure"},
+										{"name": "integration-tests", "conclusion": "skipped"}
+									]
+								}
+							]
+						}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(HaveLen(2))
+
+				Expect(result[0].JobID).To(Equal(int64(101)))
+				Expect(result[0].JobName).To(Equal("build"))
+				Expect(result[0].FailedStepName).To(Equal("compile"))
+
+				Expect(result[1].JobID).To(Equal(int64(102)))
+				Expect(result[1].JobName).To(Equal("test"))
+				Expect(result[1].FailedStepName).To(Equal("unit-tests"))
+			})
+		})
+
+		Context("server returns only successful jobs", func() {
+			It("returns an empty slice", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						fmt.Fprintf(w, `{
+							"total_count": 2,
+							"jobs": [
+								{
+									"id": 201,
+									"name": "lint",
+									"conclusion": "success",
+									"steps": [
+										{"name": "lint-check", "conclusion": "success"}
+									]
+								},
+								{
+									"id": 202,
+									"name": "format",
+									"conclusion": "success",
+									"steps": [
+										{"name": "fmt-check", "conclusion": "success"}
+									]
+								}
+							]
+						}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Context("server returns HTTP 401", func() {
+			It("returns an error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusUnauthorized)
+						fmt.Fprintf(w, `{"message":"Bad credentials"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("server returns rate limit response", func() {
+			It("returns ErrRateLimited", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(
+							w,
+							`{"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.GetJobsForRun(ctx, "owner", "repo", 42)
+				Expect(err).To(MatchError(pkg.ErrRateLimited))
+			})
+		})
+	})
+
+	Describe("ListOwnerRepos", func() {
+		Context("owner is a user", func() {
+			It("returns non-archived, non-fork repos", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testuser":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testuser","type":"User"}`)
+						case "/users/testuser/repos":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(
+								w,
+								`[{"name":"repo-a","archived":false,"fork":false},{"name":"repo-b","archived":true,"fork":false},{"name":"repo-c","archived":false,"fork":true},{"name":"repo-d","archived":false,"fork":false}]`,
+							)
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"repo-a", "repo-d"}))
+			})
+		})
+
+		Context("owner is an organization", func() {
+			It("calls ListByOrg", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testorg":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testorg","type":"Organization"}`)
+						case "/orgs/testorg/repos":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `[{"name":"org-repo","archived":false,"fork":false}]`)
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testorg")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"org-repo"}))
+			})
+		})
+
+		Context("owner not found (404)", func() {
+			It("returns an error", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusNotFound)
+						fmt.Fprintf(w, `{"message":"Not Found"}`)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.ListOwnerRepos(ctx, "nonexistent")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("rate limited during list", func() {
+			It("returns ErrRateLimited", func() {
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.Header().Set("X-RateLimit-Remaining", "0")
+						w.WriteHeader(http.StatusForbidden)
+						fmt.Fprintf(
+							w,
+							`{"message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}`,
+						)
+					}),
+				)
+				defer server.Close()
+
+				client := buildClient(server)
+				_, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).To(MatchError(pkg.ErrRateLimited))
+			})
+		})
+
+		Context("two-page response", func() {
+			It("returns repos from both pages", func() {
+				var serverURL string
+				server := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/users/testuser":
+							w.Header().Set("Content-Type", "application/json")
+							fmt.Fprintf(w, `{"login":"testuser","type":"User"}`)
+						case "/users/testuser/repos":
+							page := r.URL.Query().Get("page")
+							w.Header().Set("Content-Type", "application/json")
+							if page == "1" {
+								w.Header().
+									Set("Link", `<`+serverURL+`/users/testuser/repos?page=2>; rel="next"`)
+								fmt.Fprintf(w, `[{"name":"repo-a","archived":false,"fork":false}]`)
+							} else {
+								fmt.Fprintf(w, `[{"name":"repo-b","archived":false,"fork":false}]`)
+							}
+						default:
+							w.WriteHeader(http.StatusNotFound)
+						}
+					}),
+				)
+				defer server.Close()
+				serverURL = server.URL
+
+				client := buildClient(server)
+				result, err := client.ListOwnerRepos(ctx, "testuser")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(Equal([]string{"repo-a", "repo-b"}))
+			})
+		})
+	})
 })

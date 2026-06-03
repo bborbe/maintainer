@@ -52,3 +52,43 @@ func PostAndRouteForTest(
 	s := &checkoutExecutionStep{prPoster: prPoster}
 	return s.postAndRoute(ctx, md, prURLStr, worktreePath, jobRunTime)
 }
+
+// ParsePlanningConcernsForTest exposes parsePlanningConcerns for unit testing.
+func ParsePlanningConcernsForTest(body string) ([]struct{}, error) {
+	return parsePlanningConcerns(context.Background(), body)
+}
+
+// IsGitHubPRURLForTest exposes isGitHubPRURL for unit testing.
+func IsGitHubPRURLForTest(rawURL string) bool {
+	return isGitHubPRURL(rawURL)
+}
+
+// HasAnyPRURLForTest exposes hasAnyPRURL for unit testing.
+func HasAnyPRURLForTest(md *agentlib.Markdown) bool {
+	return hasAnyPRURL(md)
+}
+
+// WritePlanningVerdictForTest exposes writePlanningVerdict for unit testing.
+func WritePlanningVerdictForTest(md *agentlib.Markdown, reviewID int64, postedEvent string) {
+	writePlanningVerdict(md, reviewID, postedEvent)
+}
+
+// AppendVerifyDiagnosticForTest exposes appendVerifyDiagnostic for unit testing.
+func AppendVerifyDiagnosticForTest(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	result VerifyResult,
+) {
+	appendVerifyDiagnostic(ctx, md, result)
+}
+
+// NormalizeURLForTest exposes normalizeURL for unit testing.
+func NormalizeURLForTest(url string) string {
+	return normalizeURL(url)
+}
+
+// AppendDismissDiagnosticForTest exposes appendDismissDiagnostic to the
+// _test package.
+func AppendDismissDiagnosticForTest(md *agentlib.Markdown, result PostResult) {
+	appendDismissDiagnostic(md, result)
+}

@@ -15,9 +15,11 @@ import (
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6@v6.12.2 -generate
 
-func TestGitHubAuth(t *testing.T) {
+func TestSuite(t *testing.T) {
 	time.Local = time.UTC
 	format.TruncatedDiff = false
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "GitHubAuth Suite")
+	suiteConfig, reporterConfig := GinkgoConfiguration()
+	suiteConfig.Timeout = 60 * time.Second
+	RunSpecs(t, "Githubauth Suite", suiteConfig, reporterConfig)
 }

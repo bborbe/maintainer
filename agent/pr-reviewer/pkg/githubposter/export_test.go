@@ -4,7 +4,26 @@
 
 package githubposter
 
+import (
+	prpkg "github.com/bborbe/maintainer/agent/pr-reviewer/pkg"
+)
+
 func init() {
 	retryBaseDelay = 0
 	retryJitterMs = 0
+}
+
+// ClassifyErrorForTest exposes classifyError for unit testing.
+func ClassifyErrorForTest(httpStatus int, err error) prpkg.ErrorClass {
+	return classifyError(httpStatus, err)
+}
+
+// EventToStateForTest exposes eventToState for unit testing.
+func EventToStateForTest(event string) string {
+	return eventToState(event)
+}
+
+// TruncateBodyForTest exposes truncateBody for unit testing.
+func TruncateBodyForTest(b []byte) string {
+	return truncateBody(b)
 }

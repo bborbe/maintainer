@@ -7,78 +7,79 @@ package factory
 
 import (
 	"context"
+	"net/http"
 
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
-	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
 	"github.com/bborbe/log"
 	libtime "github.com/bborbe/time"
-	"github.com/golang/glog"
 
+	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-// CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
-// The cleanup function closes the underlying sync producer on shutdown.
-func CreateKafkaSender(
+// CreateGitHubAppClient creates an HTTP client authenticated as a GitHub App installation.
+func CreateGitHubAppClient(
 	ctx context.Context,
-	brokers libkafka.Brokers,
+	appID int64,
+	installationID int64,
+	pemKey []byte,
+) (*http.Client, error) {
+	cfg := githubapp.Config{
+		AppID:          appID,
+		InstallationID: installationID,
+		PEM:            pemKey,
+	}
+	return githubapp.NewClient(ctx, cfg)
+}
+
+// CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
+func CreateKafkaSender(
+	syncProducer libkafka.SyncProducer,
 	branch base.Branch,
-) (task.CreateCommandSender, func(), error) {
-	syncProducer, err := libkafka.NewSyncProducerWithName(
-		ctx,
-		brokers,
-		"maintainer-watcher-github-pr",
-	)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
-	}
+) task.CreateCommandSender {
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
-	cleanup := func() {
-		if err := syncProducer.Close(); err != nil {
-			glog.Warningf("close kafka sync producer: %v", err)
-		}
-	}
-	return task.NewCreateCommandSender(sender), cleanup, nil
+	return task.NewCreateCommandSender(sender)
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 func CreateWatcher(
-	ctx context.Context,
-	ghToken string,
-	brokers libkafka.Brokers,
-	stage string,
-	repoScope string,
-	taskCreationFilter filter.TaskCreationFilter,
+	httpClient *http.Client,
+	createSender task.CreateCommandSender,
+	cursorPath string,
 	startTime libtime.DateTime,
-	trustedAuthors []string,
+	scope string,
+	taskCreationFilter filter.TaskCreationFilter,
+	stage string,
+	metrics pkg.Metrics,
+	trustDecision trust.Trust,
 	maxSlugLen int,
 	maxTitleLen int,
-) (pkg.Watcher, func(), error) {
-	branch := base.Branch(stage)
-	createSender, cleanup, err := CreateKafkaSender(ctx, brokers, branch)
-	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka sender")
-	}
-
-	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
-	ghClient := pkg.NewGitHubClient(ghToken)
-	w := pkg.NewWatcher(
-		ghClient,
+	taskSuffix string,
+) pkg.Watcher {
+	ghClient := pkg.NewGitHubClient(httpClient)
+	publisher := pkg.NewTaskPublisher(
 		createSender,
-		pkg.DefaultCursorPath,
-		startTime,
-		repoScope,
-		taskCreationFilter,
-		stage,
-		pkg.NewMetrics(),
 		trustDecision,
-		maxSlugLen,
-		maxTitleLen,
+		metrics,
+		pkg.TaskConfig{
+			Stage:       stage,
+			MaxSlugLen:  maxSlugLen,
+			MaxTitleLen: maxTitleLen,
+			TaskSuffix:  taskSuffix,
+		},
 	)
-	return w, cleanup, nil
+	return pkg.NewWatcher(
+		ghClient,
+		publisher,
+		metrics,
+		cursorPath,
+		startTime,
+		scope,
+		taskCreationFilter,
+	)
 }

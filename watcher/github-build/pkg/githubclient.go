@@ -43,7 +43,7 @@ type WorkflowJobInfo struct {
 	FailedStepName string // first failed step's name; empty when not determinable
 }
 
-//counterfeiter:generate -o mocks/github_client.go --fake-name GitHubClient . GitHubClient
+//counterfeiter:generate -o ../mocks/github_client.go --fake-name GitHubClient . GitHubClient
 
 // GitHubClient abstracts the GitHub Actions API calls.
 type GitHubClient interface {
@@ -71,12 +71,21 @@ type GitHubClient interface {
 	// Returns (nil, err) for a non-nil error where the log should be omitted.
 	// Rejects payloads > 1 MiB before truncation (returns (nil, err)).
 	GetJobLog(ctx context.Context, owner, repo string, jobID int64) ([]byte, error)
+
+	// ListOwnerRepos returns the names of every non-archived, non-fork
+	// repository owned by `owner`. Owner kind (User vs Organization) is
+	// detected via GET /users/<owner>; the method then calls ListByUser
+	// or ListByOrg respectively, paginating with PerPage=100 until done.
+	// Returns (nil, ErrRateLimited) when rate-limited.
+	// Returns (nil, err) for any other API error (network, 401/403, 404).
+	// Returns ([]string{}, nil) when the owner has zero eligible repos.
+	ListOwnerRepos(ctx context.Context, owner string) ([]string, error)
 }
 
 // NewGitHubClient returns a GitHubClient backed by the real GitHub API.
-func NewGitHubClient(token string) GitHubClient {
+func NewGitHubClient(httpClient *http.Client) GitHubClient {
 	return &githubClient{
-		client: gogithub.NewClient(nil).WithAuthToken(token),
+		client: gogithub.NewClient(httpClient),
 	}
 }
 
@@ -287,4 +296,87 @@ func (c *githubClient) GetJobLog(
 		)
 	}
 	return data, nil
+}
+
+func (c *githubClient) ListOwnerRepos(ctx context.Context, owner string) ([]string, error) {
+	user, _, err := c.client.Users.Get(ctx, owner)
+	if err != nil {
+		return nil, c.wrapRateLimitErr(ctx, err, "get user %s", owner)
+	}
+
+	isOrg := user.GetType() == "Organization"
+	return c.listOwnerReposPaginated(ctx, owner, isOrg)
+}
+
+func (c *githubClient) listOwnerReposPaginated(
+	ctx context.Context,
+	owner string,
+	isOrg bool,
+) ([]string, error) {
+	names := make([]string, 0, 32)
+	page := 1
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		repos, resp, err := c.fetchRepoPage(ctx, owner, isOrg, page)
+		if err != nil {
+			return nil, c.wrapRateLimitErr(ctx, err, "list repos for %s page=%d", owner, page)
+		}
+		names = append(names, filterRepoNames(repos)...)
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		page = resp.NextPage
+	}
+	return names, nil
+}
+
+func (c *githubClient) fetchRepoPage(
+	ctx context.Context,
+	owner string,
+	isOrg bool,
+	page int,
+) ([]*gogithub.Repository, *gogithub.Response, error) {
+	if isOrg {
+		opts := &gogithub.RepositoryListByOrgOptions{
+			ListOptions: gogithub.ListOptions{PerPage: 100, Page: page},
+		}
+		return c.client.Repositories.ListByOrg(ctx, owner, opts)
+	}
+	opts := &gogithub.RepositoryListByUserOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100, Page: page},
+	}
+	return c.client.Repositories.ListByUser(ctx, owner, opts)
+}
+
+func (c *githubClient) wrapRateLimitErr(
+	ctx context.Context,
+	err error,
+	msg string,
+	args ...interface{},
+) error {
+	var rl *gogithub.RateLimitError
+	var arl *gogithub.AbuseRateLimitError
+	if stderrors.As(err, &rl) || stderrors.As(err, &arl) {
+		return ErrRateLimited
+	}
+	return errors.Wrapf(ctx, err, msg, args...)
+}
+
+func filterRepoNames(repos []*gogithub.Repository) []string {
+	var names []string
+	for _, repo := range repos {
+		if repo.GetArchived() || repo.GetFork() {
+			continue
+		}
+		name := repo.GetName()
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
 }

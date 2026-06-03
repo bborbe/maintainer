@@ -4,6 +4,7 @@ DIRS += $(shell find */* -maxdepth 0 -name Makefile -exec dirname "{}" \;)
 build: check-go-mod
 	DOCKER_BUILDKIT=1 \
 	docker build \
+	--pull \
 	--no-cache \
 	--rm=true \
 	--platform=linux/amd64 \
@@ -30,8 +31,8 @@ upload:
 .PHONY: clean
 clean:
 	docker rmi $(DOCKER_REGISTRY)/$(SERVICE):$(BRANCH) || true
-	docker image prune -f
-	docker builder prune --all -f
+	docker image prune -f || true
+	docker builder prune --all -f || true
 	rm -rf vendor
 
 .PHONY: apply

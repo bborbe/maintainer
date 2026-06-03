@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	task "github.com/bborbe/agent/lib/command/task"
@@ -17,9 +18,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/bborbe/maintainer/watcher/github-pr/mocks"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/mocks"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
@@ -31,9 +32,21 @@ func newTestWatcher(
 	fakeMetrics *mocks.Metrics,
 	trustDecision trust.Trust,
 ) pkg.Watcher {
+	publisher := pkg.NewTaskPublisher(
+		createSender,
+		trustDecision,
+		fakeMetrics,
+		pkg.TaskConfig{
+			Stage:       "dev",
+			MaxSlugLen:  pkg.DefaultMaxSlugLen,
+			MaxTitleLen: pkg.DefaultMaxTitleLen,
+			TaskSuffix:  "",
+		},
+	)
 	return pkg.NewWatcher(
 		ghClient,
-		createSender,
+		publisher,
+		fakeMetrics,
 		cursorPath,
 		startTime,
 		"bborbe",
@@ -41,11 +54,6 @@ func newTestWatcher(
 			filter.NewDraftFilter(),
 			filter.NewBotAuthorFilter([]string{"dependabot[bot]"}),
 		},
-		"dev",
-		fakeMetrics,
-		trustDecision,
-		pkg.DefaultMaxSlugLen,
-		pkg.DefaultMaxTitleLen,
 	)
 }
 
@@ -1066,5 +1074,202 @@ var _ = Describe("pkg.Watcher", func() {
 				Expect(cmd.Title).To(Equal("PR Review github - bborbe-repo - 10 - sha1 - some-pr"))
 			})
 		})
+	})
+
+	Describe("TaskPublisher contract", func() {
+		It("calls publisher.PublishCreate with derived taskID for new (PR,SHA) pairs", func() {
+			pr := pkg.PullRequest{
+				Number:      42,
+				Owner:       "bborbe",
+				Repo:        "code-reviewer",
+				Title:       "feat: new feature",
+				HTMLURL:     "https://github.com/bborbe/maintainer/pull/42",
+				AuthorLogin: "alice",
+				IsDraft:     false,
+				UpdatedAt:   libtime.DateTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)),
+			}
+			ghClient.SearchPRsReturns(pkg.SearchResult{
+				PullRequests:  []pkg.PullRequest{pr},
+				HasNextPage:   false,
+				RateRemaining: 100,
+			}, nil)
+			ghClient.GetPRDetailsReturns(
+				pkg.PRDetails{
+					HeadSHA:  "abc123",
+					CloneURL: "https://github.com/owner/repo.git",
+					BaseRef:  "master",
+				},
+				nil,
+			)
+			createSender.SendCommandReturns(nil)
+
+			fakePublisher := new(mocks.TaskPublisher)
+			fakePublisher.PublishCreateReturns(true)
+
+			w := pkg.NewWatcher(
+				ghClient,
+				fakePublisher,
+				fakeMetrics,
+				cursorPath,
+				startTime,
+				"bborbe",
+				filter.TaskCreationFilters{
+					filter.NewDraftFilter(),
+					filter.NewBotAuthorFilter([]string{"dependabot[bot]"}),
+				},
+			)
+			err := w.Poll(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakePublisher.PublishCreateCallCount()).To(Equal(1))
+
+			ctxArg, prArg, taskIDStrArg, detailsArg := fakePublisher.PublishCreateArgsForCall(0)
+			Expect(ctxArg).To(Equal(ctx))
+			Expect(prArg.Number).To(Equal(pr.Number))
+			Expect(prArg.Owner).To(Equal(pr.Owner))
+			Expect(prArg.Repo).To(Equal(pr.Repo))
+			Expect(taskIDStrArg).To(Equal(
+				pkg.DeriveTaskID(pr.Owner, pr.Repo, pr.Number, "abc123").String()))
+			Expect(detailsArg.HeadSHA).To(Equal("abc123"))
+		})
+	})
+})
+
+var _ = Describe("BuildCreateCommand", func() {
+	makePR := func(login string) pkg.PullRequest {
+		return pkg.PullRequest{
+			Number:      1,
+			Owner:       "owner",
+			Repo:        "repo",
+			Title:       "feat: add new feature",
+			HTMLURL:     "https://github.com/owner/repo/pull/1",
+			AuthorLogin: login,
+			IsDraft:     false,
+			UpdatedAt:   libtime.DateTime(time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)),
+		}
+	}
+
+	makeDetails := func() pkg.PRDetails {
+		return pkg.PRDetails{
+			HeadSHA:  "abc123",
+			CloneURL: "https://github.com/owner/repo.git",
+			BaseRef:  "master",
+		}
+	}
+
+	It(
+		"trusted author — sets phase=planning, status=in_progress, assignee=pr-reviewer-agent",
+		func() {
+			pr := makePR("trusted-user")
+			details := makeDetails()
+			trustResult := trust.NewResult(true, "author allowlist")
+			taskIDStr := "00000000-0000-0000-0000-000000000001"
+
+			cmd := pkg.BuildCreateCommand(
+				pr,
+				details,
+				taskIDStr,
+				"dev",
+				80,
+				60,
+				"pr-reviewer",
+				trustResult,
+			)
+
+			Expect(cmd.Title).NotTo(BeEmpty())
+			Expect(cmd.Frontmatter["phase"]).To(Equal("planning"))
+			Expect(cmd.Frontmatter["status"]).To(Equal("in_progress"))
+			Expect(cmd.Frontmatter["assignee"]).To(Equal("pr-reviewer-agent"))
+			Expect(cmd.Body).To(ContainSubstring("feat: add new feature"))
+		},
+	)
+
+	It("untrusted author — sets phase=human_review, status=todo, assignee=empty", func() {
+		pr := makePR("unknown-user")
+		details := makeDetails()
+		trustResult := trust.NewResult(false, "author not in allowlist")
+		taskIDStr := "00000000-0000-0000-0000-000000000002"
+
+		cmd := pkg.BuildCreateCommand(
+			pr,
+			details,
+			taskIDStr,
+			"dev",
+			80,
+			60,
+			"pr-reviewer",
+			trustResult,
+		)
+
+		Expect(cmd.Title).NotTo(BeEmpty())
+		Expect(cmd.Frontmatter["phase"]).To(Equal("human_review"))
+		Expect(cmd.Frontmatter["status"]).To(Equal("todo"))
+		Expect(cmd.Frontmatter["assignee"]).To(Equal(""))
+		Expect(cmd.Body).To(ContainSubstring("Untrusted author"))
+		Expect(cmd.Body).To(ContainSubstring("unknown-user"))
+		Expect(cmd.Body).To(ContainSubstring("author not in allowlist"))
+	})
+
+	It("untrusted author with empty login — body contains (unknown)", func() {
+		pr := makePR("")
+		details := makeDetails()
+		trustResult := trust.NewResult(false, "no author")
+		taskIDStr := "00000000-0000-0000-0000-000000000003"
+
+		cmd := pkg.BuildCreateCommand(
+			pr,
+			details,
+			taskIDStr,
+			"dev",
+			80,
+			60,
+			"pr-reviewer",
+			trustResult,
+		)
+
+		Expect(cmd.Body).To(ContainSubstring("(unknown)"))
+	})
+
+	It("title sanitizes special characters", func() {
+		pr := makePR("trusted-user")
+		pr.Title = "fix: handle /api?id=1 in :backend"
+		details := makeDetails()
+		trustResult := trust.NewResult(true, "author allowlist")
+		taskIDStr := "00000000-0000-0000-0000-000000000004"
+
+		cmd := pkg.BuildCreateCommand(
+			pr,
+			details,
+			taskIDStr,
+			"dev",
+			80,
+			60,
+			"pr-reviewer",
+			trustResult,
+		)
+
+		// Title must not contain slashes or colons that could break filename
+		Expect(cmd.Title).NotTo(ContainSubstring("/"))
+		Expect(cmd.Title).NotTo(ContainSubstring(":"))
+	})
+
+	It("respects maxTitleLen truncation", func() {
+		pr := makePR("trusted-user")
+		pr.Title = strings.Repeat("a", 200)
+		details := makeDetails()
+		trustResult := trust.NewResult(true, "author allowlist")
+		taskIDStr := "00000000-0000-0000-0000-000000000005"
+
+		cmd := pkg.BuildCreateCommand(
+			pr,
+			details,
+			taskIDStr,
+			"dev",
+			80,
+			30,
+			"pr-reviewer",
+			trustResult,
+		) // maxTitleLen=30
+
+		Expect(len(cmd.Title)).To(BeNumerically("<=", 30+len("-github-owner-repo-1-abc123")))
 	})
 })

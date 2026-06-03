@@ -5,7 +5,6 @@
 package filter
 
 import (
-	"context"
 	"strings"
 
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
@@ -16,7 +15,7 @@ import (
 // Returns (nil, nil) for empty input (allow-all).
 // Entry well-formedness is NOT validated here — repoallowlist.IsAllowed handles
 // malformed entries gracefully at match time (logs and skips).
-func ParseRepoAllowlist(_ context.Context, raw string) ([]string, error) {
+func ParseRepoAllowlist(raw string) ([]string, error) {
 	if raw == "" {
 		return nil, nil
 	}
