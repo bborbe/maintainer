@@ -193,3 +193,17 @@ Cost of NOT building this guard:
 - Conversely, when the classifier mis-classifies a breaking change as patch (the originating incident: `refactor(lib): rename TaskTypeClaude → TaskTypeLLM`), the agent tags `vN.Y.Z+1` and downstream consumers break under semver discipline. The guard does NOT fix this case directly — it can only catch the symmetric `major` false-positive — BUT shipping the guard establishes the per-repo opt-in scaffolding that a future stricter classifier (LLM-based, audited) could rely on without needing a fleet-wide migration.
 - Without the per-repo opt-in field, the fleet rollout of a stricter classifier becomes all-or-nothing: every repo gets stricter rules at once, and the inevitable false-positives block every release until manually overridden. With the field shipped now (default false), a stricter classifier can be rolled out repo-by-repo by flipping `allowMajorBump: true` on opted-in repos that have human reviewers ready.
 - A do-nothing alternative is "rely on PR review of the release commit" — but the agent commits direct-to-master via App bypass (no PR), so there is no review surface. The guard IS the review surface.
+
+## Verification Result
+
+**Verified:** 2026-06-03T17:15:00Z (HEAD d25e50d)
+**Binary:** installed dark-factory v0.175.0
+**Scenario:** Static-evidence verification (no scenario per spec); 23 ACs walked against merged implementation (PR #42, commit 7c69a78, released v0.33.0 by github-releaser-agent itself).
+**Evidence:**
+- AC1 `cd agent/github-releaser && make precommit` → "ready to commit" (exit 0)
+- AC2 `cd lib/maintainerconfig && go test ./...` → ok (exit 0)
+- AC3-22 all grep counts match spec thresholds (incl. AC10 case-insensitive `grep -ci 'allowMajor' .../buildenv.go` = 4)
+- AC20 `go test -cover ./pkg/...` → planning-step pkg coverage 86.7% (matches `[7-9][0-9]%`)
+- AC23 `git diff` introduced 0 new `fmt.Errorf` in touched files
+- Shipped end-to-end: v0.33.0 released by github-releaser-agent on its own code (minor-classified bump, guard no-op path exercised in prod)
+**Verdict:** PASS
