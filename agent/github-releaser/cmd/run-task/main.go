@@ -54,6 +54,15 @@ type application struct {
 	AnthropicBaseURL   string                `required:"false" arg:"anthropic-base-url"   env:"ANTHROPIC_BASE_URL"   usage:"Anthropic-compatible API base URL"`
 	AnthropicAuthToken string                `required:"false" arg:"anthropic-auth-token" env:"ANTHROPIC_AUTH_TOKEN" usage:"Bearer token for ANTHROPIC_BASE_URL" display:"length"`
 	AnthropicModel     claudelib.ClaudeModel `required:"false" arg:"anthropic-model"      env:"ANTHROPIC_MODEL"      usage:"Model name"                                           default:"sonnet"`
+
+	// Per-run override for the spec 060 major-bump guard. When true, a
+	// bump verdict of `major` proceeds to execution even when the
+	// target repo's `.maintainer.yaml` does not have
+	// `release.allowMajorBump: true`. Equivalent opt-in semantics;
+	// either source is sufficient. Default false; the planning step
+	// emits `glog.V(2) --allow-major override` so kubectl-logs greps
+	// surface operator overrides.
+	AllowMajor bool `required:"false" arg:"allow-major" env:"ALLOW_MAJOR" usage:"Per-run override: allow 'major' bump verdict even if repo has no release.allowMajorBump opt-in" default:"false"`
 }
 
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -81,6 +90,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.AnthropicBaseURL,
 		a.AnthropicAuthToken,
 		a.AnthropicModel.String(),
+		a.AllowMajor,
 	)
 
 	provider := factory.CreateAgentProvider(
@@ -89,6 +99,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.AnthropicModel,
 		resolvedToken,
 		env,
+		a.AllowMajor,
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
 	if err != nil {
