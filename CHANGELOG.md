@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- chore: bump `github.com/bborbe/agent/lib` v0.63.11 → v0.65.0 across all services (agent/pr-reviewer, agent/github-releaser, watcher/github-pr, watcher/github-release, watcher/github-build) to pick up `envparse.RedactForLog` — pr-reviewer subprocess env logs now show `ANTHROPIC_AUTH_TOKEN=***` and `GH_TOKEN=***` instead of the literal values; closes the 2026-06-03 prod-leak surface
+
 ## v0.32.0
 - feat(agent/pr-reviewer): install `@ast-grep/cli` in the alpine image so the `bborbe/coding` plugin's new dispatcher (Step 4a invokes the ast-grep-runner agent) can resolve the `sg` / `ast-grep` binary. Without it, the reviewer's Claude run loops on `sg --version` checks until the job hits `activeDeadlineSeconds` (observed on bborbe/coding#34). Mirrors the `claude-yolo` PR #8 fix that closed the same gap for the dark-factory image. `ARG ASTGREP_VERSION=latest` so we can pin a version later without changing the install line shape
 
