@@ -122,7 +122,7 @@ Rationale: schema first (no deps), then flag plumbing (depends on schema for `Al
 - [ ] Strict parser rejects non-bool `allowMajorBump` value — evidence: `grep -c 'allowMajorBump: non-bool -> strict error' lib/maintainerconfig/maintainerconfig_test.go` returns 1
 - [ ] `grep -c 'allow-major' agent/github-releaser/main.go` returns ≥ 1 (CLI flag wired into application struct) — evidence: grep count
 - [ ] `grep -c 'ALLOW_MAJOR' agent/github-releaser/main.go` returns ≥ 1 (env var wired into application struct) — evidence: grep count
-- [ ] `grep -c 'AllowMajor' agent/github-releaser/pkg/buildenv.go` returns ≥ 1 (flag propagates through BuildEnv to planning step) — evidence: grep count
+- [ ] `grep -ci 'allowMajor' agent/github-releaser/pkg/buildenv.go` returns ≥ 1 (flag propagates through BuildEnv to planning step; case-insensitive because BuildEnv is a function with parameter `allowMajor`, not a struct with field `AllowMajor`) — evidence: grep count
 - [ ] `grep -c 'major_bump_not_allowed' agent/github-releaser/pkg/steps_planning.go` returns ≥ 1 — evidence: grep count
 - [ ] `grep -c 'PreconditionMajorBumpNotAllowed' agent/github-releaser/pkg/steps_planning.go` returns ≥ 1 (typed constant exists, not a string-literal-only path) — evidence: grep count
 - [ ] `grep -c 'AllowMajorBumpConfig\s\+bool' agent/github-releaser/pkg/plan_output.go` returns 1 (struct field declared) — evidence: grep count
@@ -159,7 +159,7 @@ grep -c 'allowMajorBump: non-bool -> strict error' lib/maintainerconfig/maintain
 # CLI flag + env propagation
 grep -c 'allow-major'                             agent/github-releaser/main.go        # ≥1
 grep -c 'ALLOW_MAJOR'                             agent/github-releaser/main.go        # ≥1
-grep -c 'AllowMajor'                              agent/github-releaser/pkg/buildenv.go  # ≥1
+grep -ci 'allowMajor'                             agent/github-releaser/pkg/buildenv.go  # ≥1
 
 # Guard inside planning step
 grep -c 'major_bump_not_allowed'                  agent/github-releaser/pkg/steps_planning.go  # ≥1
