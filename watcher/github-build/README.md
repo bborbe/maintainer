@@ -51,6 +51,19 @@ rules, the worked example (t0–t4), and cold-start flood behaviour.
 | `TASK_STATUS` | no | `todo` | Frontmatter `status` written to published tasks; explicit empty string rejected at startup |
 | `TASK_PHASE` | no | (empty — omitted) | Frontmatter `phase` written to published tasks; if empty or unset, the key is NOT written to frontmatter |
 
+### `REPO_ALLOWLIST` syntax
+
+Entries are comma-separated. A leading `!` marks an exclusion. A target is allowed iff `(includes is empty OR any include matches) AND (no exclude matches)`; excludes always override includes.
+
+| Entry shape | Example | Meaning |
+|---|---|---|
+| Literal include | `github.com/bborbe/maintainer` | Allow exactly this repo |
+| Wildcard include | `github.com/bborbe/*` | Allow every repo under this owner |
+| Literal exclude | `!github.com/bborbe/go-skeleton` | Reject exactly this repo (overrides any matching include) |
+| Wildcard exclude | `!github.com/bborbe/*` | Reject every repo under this owner |
+
+An allowlist consisting of only exclude entries is treated as allow-all-except: every target passes the include gate, and only the exclude gate filters. Example: `REPO_ALLOWLIST=!github.com/bborbe/go-skeleton` rejects go-skeleton and allows every other repo (including all other bborbe repos). To allow every bborbe repo except go-skeleton, write `github.com/bborbe/*,!github.com/bborbe/go-skeleton`.
+
 The container env vars above are short and pod-scoped. The deploy-side env file (`dev.env` / `prod.env`) uses long, namespaced names (`WATCHER_GITHUB_BUILD_TASK_ASSIGNEE` etc.) because that file holds variables for multiple services; the StatefulSet template (`k8s/maintainer-watcher-github-build-sts.yaml`) maps long → short on its way into the pod.
 
 ## HTTP Endpoints

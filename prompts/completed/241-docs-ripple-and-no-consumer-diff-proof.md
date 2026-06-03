@@ -1,11 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [061-extend-repoallowlist-exclusion-syntax]
-summary: Add a syntax table to the three REPO_ALLOWLIST consumer READMEs (watcher/github-release, watcher/github-pr, watcher/github-build) covering literal include / wildcard include / literal exclude / wildcard exclude / allow-all-except; append a lib/repoallowlist Unreleased entry to CHANGELOG.md; run the spec's grep proof of zero consumer code change; do NOT edit any watcher/ or agent/ source file
-container: maintainer-repoallowlist-exclude-syntax-exec-2-docs
+summary: Added `!`-prefix syntax table to three consumer READMEs and a `feat(lib/repoallowlist)` entry under `## Unreleased` in CHANGELOG.md; no consumer service code touched
+container: maintainer-allowlist-exclude-exec-241-docs-ripple-and-no-consumer-diff-proof
 dark-factory-version: v0.175.0
 created: "2026-06-03T18:26:57Z"
 queued: "2026-06-03T18:26:57Z"
+started: "2026-06-03T18:33:41Z"
+completed: "2026-06-03T18:35:36Z"
 branch: dark-factory/extend-repoallowlist-exclusion-syntax
 ---
 

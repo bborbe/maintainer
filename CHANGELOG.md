@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(lib/repoallowlist): allow `!`-prefix entries as exclusions — a target is allowed iff `(includes empty OR any include matches) AND (no exclude matches)`. Excludes always override includes; an exclude-only allowlist means allow-all-except. Existing `IsAllowed` / `Validate` signatures unchanged; consumer services pick up the new semantics with zero code change (spec 061)
+
 ## v0.33.0
 
 - refactor(agent/github-releaser): extract the spec-060 major-bump guard decision table from `runClassification` into a private `applyMajorBumpGuard` helper, and the rewrite-and-publish tail into a private `resolveRewriteAndPublish` helper. `runClassification` drops from 92 non-comment lines (over the 80-line `funlen` threshold) to 64. Decision table, escalation contract, glog lines, and `PlanOutput` field emissions are preserved bit-identically
