@@ -8,6 +8,9 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+- feat(agent/pr-reviewer): install `@ast-grep/cli` in the alpine image so the `bborbe/coding` plugin's new dispatcher (Step 4a invokes the ast-grep-runner agent) can resolve the `sg` / `ast-grep` binary. Without it, the reviewer's Claude run loops on `sg --version` checks until the job hits `activeDeadlineSeconds` (observed on bborbe/coding#34). Mirrors the `claude-yolo` PR #8 fix that closed the same gap for the dark-factory image. `ARG ASTGREP_VERSION=latest` so we can pin a version later without changing the install line shape
+
 ## v0.31.0
 
 - feat(agent/github-releaser): add `pkg/maintainerconfig` package — fetches `.maintainer.yaml` bytes from a target GitHub repo at a ref via the contents API, mirrors the `githubchangelog.Fetcher` shape, returns the sentinel `ErrFileNotFound` (declared via `stderrors.New`, project convention) on HTTP 404 so callers can treat the absent-file case as a default-valued config. Re-exports `lib/maintainerconfig.{Config,ReleaseConfig,PrReviewerConfig,Parse}` so the planning step needs only one import. New counterfeiter mock `mocks.MaintainerConfigFetcher`; Ginkgo coverage for happy path, 404 → `ErrFileNotFound`, 500 → wrapped non-2xx error, empty owner/repo/ref, malformed JSON, unsupported encoding, bad base64, and the round-trip fetch → `Parse` integration seam
