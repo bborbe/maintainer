@@ -106,13 +106,14 @@ func CreateAgent(
 	model claudelib.ClaudeModel,
 	ghToken string,
 	env map[string]string,
+	allowMajor bool,
 ) *agentlib.Agent {
 	// AI-review LLM is read-only — same tool policy as planning.
 	aiReviewTools := claudelib.AllowedTools{}
 	planningRunner := CreateClaudeRunner(claudeConfigDir, agentDir, model, env, planningTools)
 	fetcher := githubchangelog.NewHTTPFetcher(ghToken)
 	maintainerConfigFetcher := maintainerconfig.NewHTTPFetcher(ghToken)
-	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher, maintainerConfigFetcher)
+	planningStep := releaserpkg.NewPlanningStep(planningRunner, fetcher, maintainerConfigFetcher, allowMajor)
 
 	executionOps := CreateGitOps()
 	executionStep := releaserpkg.NewExecutionStep(executionOps, ghToken)
@@ -152,8 +153,9 @@ func CreateAgentProvider(
 	model claudelib.ClaudeModel,
 	ghToken string,
 	env map[string]string,
+	allowMajor bool,
 ) agentlib.AgentProvider {
-	domainAgent := CreateAgent(claudeConfigDir, agentDir, model, ghToken, env)
+	domainAgent := CreateAgent(claudeConfigDir, agentDir, model, ghToken, env, allowMajor)
 	healthcheckRunner := CreateClaudeRunner(
 		claudeConfigDir,
 		agentDir,

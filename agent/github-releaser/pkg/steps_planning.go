@@ -47,21 +47,26 @@ type planningStep struct {
 	runner           claudelib.ClaudeRunner
 	fetcher          githubchangelog.Fetcher
 	maintainerConfig maintainerconfig.Fetcher
+	allowMajor       bool
 }
 
-// NewPlanningStep wires the planning step with its three IO seams:
+// NewPlanningStep wires the planning step with its four IO seams:
 //   - the Claude runner (LLM verdict for bump + rewrite)
 //   - the CHANGELOG.md fetcher (GitHub contents API)
 //   - the .maintainer.yaml fetcher (GitHub contents API, spec 059)
+//   - the spec-060 per-run override: when true, the major-bump guard
+//     is bypassed; equivalent to cfg.Release.AllowMajorBump==true.
 func NewPlanningStep(
 	runner claudelib.ClaudeRunner,
 	fetcher githubchangelog.Fetcher,
 	maintainerConfig maintainerconfig.Fetcher,
+	allowMajor bool,
 ) agentlib.Step {
 	return &planningStep{
 		runner:           runner,
 		fetcher:          fetcher,
 		maintainerConfig: maintainerConfig,
+		allowMajor:       allowMajor,
 	}
 }
 
@@ -146,7 +151,7 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		}, nil
 	}
 
-	changelogRewrite, fetchWarning, err := s.resolveChangelogRewrite(ctx, owner, name, ref)
+	changelogRewrite, allowMajorBump, fetchWarning, err := s.resolveMaintainerConfig(ctx, owner, name, ref)
 	if err != nil {
 		// Fail-closed: .maintainer.yaml is malformed OR contains a
 		// non-boolean release.changelogRewrite. Write a ## Plan(failed)
@@ -161,6 +166,7 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		prefixStyle,
 		originalBody,
 		changelogRewrite,
+		allowMajorBump,
 		cachedBump,
 		cachedReasoning,
 		fetchWarning,
@@ -193,14 +199,16 @@ func (s *planningStep) readCachedBump(
 	return prior.Bump, prior.Reasoning
 }
 
-// resolveChangelogRewrite fetches .maintainer.yaml at the ref's tip and
-// returns the parsed release.changelogRewrite value, with these semantics
-// (per spec 059 § Desired Behavior and § Failure Modes):
+// resolveMaintainerConfig fetches .maintainer.yaml at the ref's tip and
+// returns the parsed release.changelogRewrite (spec 059) and
+// release.allowMajorBump (spec 060) flag values, with these semantics
+// (per spec 059 § Desired Behavior and § Failure Modes, and spec 060
+// § Desired Behavior):
 //
-//   - File absent (ErrFileNotFound)        → (false, "", nil)  // default, no warning
-//   - File present, malformed YAML         → (false, "", wrappedErr) // fail-closed; caller maps to human_review
-//   - File present, non-boolean value      → (false, "", wrappedErr) // fail-closed; same
-//   - Any other fetch error (5xx, network) → (false, "<warning>", nil)  // treated as default; warning surfaced on plan
+//   - File absent (ErrFileNotFound)        → (false, false, "", nil)  // default, no warning
+//   - File present, malformed YAML         → (false, false, "", wrappedErr) // fail-closed; caller maps to human_review
+//   - File present, non-boolean value      → (false, false, "", wrappedErr) // fail-closed; same
+//   - Any other fetch error (5xx, network) → (false, false, "<warning>", nil)  // treated as default; warning surfaced on plan
 //
 // The "any other fetch error → default" rule is the spec's Failure Modes
 // "Repo has no .maintainer.yaml" + spec § Desired Behavior 6: missing-yaml
@@ -214,24 +222,30 @@ func (s *planningStep) readCachedBump(
 // silently downgraded on a transient flake — operators can grep
 // PlanOutput.ConfigFetchWarning to confirm. Empty on the happy path
 // and on the legitimate-absent (404) path.
-func (s *planningStep) resolveChangelogRewrite(
+//
+// The single-fetch invariant is preserved: this helper is the ONE call
+// site for `s.maintainerConfig.Fetch` at planning entry. Spec 059's
+// "flag-read-once" rule and spec 060's "resolve both opt-in flags
+// together" rule both flow through here — the call site gets both
+// resolved bools from one parse.
+func (s *planningStep) resolveMaintainerConfig(
 	ctx context.Context,
 	owner, name, ref string,
-) (bool, string, error) {
+) (changelogRewrite bool, allowMajorBump bool, fetchWarning string, err error) {
 	bytes, err := s.maintainerConfig.Fetch(ctx, owner, name, ref)
 	if err != nil {
 		if stderrors.Is(err, maintainerconfig.ErrFileNotFound) {
 			glog.V(2).Infof(
-				"planning: .maintainer.yaml absent at ref=%s — using default changelogRewrite=false",
+				"planning: .maintainer.yaml absent at ref=%s — using default changelogRewrite=false, allowMajorBump=false",
 				ref,
 			)
-			return false, "", nil
+			return false, false, "", nil
 		}
 		// Transport / non-404 error: log and default to false. NOT a
 		// fail-closed condition (see spec 059 § Failure Modes).
 		glog.Warningf("planning: .maintainer.yaml fetch failed (treated as default): %v", err)
-		return false, fmt.Sprintf(
-			".maintainer.yaml fetch failed (treated as default changelogRewrite=false): %s",
+		return false, false, fmt.Sprintf(
+			".maintainer.yaml fetch failed (treated as default changelogRewrite=false, allowMajorBump=false): %s",
 			err.Error(),
 		), nil
 	}
@@ -240,9 +254,9 @@ func (s *planningStep) resolveChangelogRewrite(
 		// YAML parse error or non-boolean value: fail-closed. Surface the
 		// original error so the caller can include it in the human_review
 		// task-page block.
-		return false, "", errors.Wrapf(ctx, err, "parse .maintainer.yaml")
+		return false, false, "", errors.Wrapf(ctx, err, "parse .maintainer.yaml")
 	}
-	return cfg.Release.ChangelogRewrite, "", nil
+	return cfg.Release.ChangelogRewrite, cfg.Release.AllowMajorBump, "", nil
 }
 
 // resolveBumpVerdict returns the bump verdict either from a prior cached
@@ -288,6 +302,7 @@ func (s *planningStep) runClassification(
 	prefixStyle string,
 	originalBody string,
 	changelogRewrite bool,
+	allowMajorBumpConfig bool,
 	cachedBump, cachedReasoning string,
 	fetchWarning string,
 ) (*agentlib.Result, error) {
@@ -309,6 +324,37 @@ func (s *planningStep) runClassification(
 			preconditionFailed: PreconditionBadCurrentVersion,
 			currentVersion:     currentVersion,
 		})
+	}
+
+	// Spec 060 major-bump guard. Decision table (FROZEN):
+	//   bump=major + allowMajorBumpConfig==true  → proceed (repo opted in)
+	//   bump=major + s.allowMajor==true           → proceed (CLI override; log audit)
+	//   bump=major + neither                      → TRIP (escalate, log audit)
+	//   bump=patch/minor (any)                    → proceed (no guard)
+	// On TRIP, the precondition_failed token written to ## Plan is the
+	// literal "major_bump_not_allowed" (PreconditionMajorBumpNotAllowed);
+	// operators grep the task page for that token to find this run.
+	if verdict.Bump == "major" && !allowMajorBumpConfig && !s.allowMajor {
+		glog.V(2).Infof(
+			"planning: major bump not allowed: bump=major, allowMajorBumpConfig=%t, allowMajorFlag=%t, reasoning=%q",
+			allowMajorBumpConfig, s.allowMajor, verdict.Reasoning,
+		)
+		header := "## " + prefixStyle + nextNumeric
+		return s.escalate(ctx, md, escalation{
+			reason:               "major bump not allowed: " + verdict.Reasoning,
+			preconditionFailed:   PreconditionMajorBumpNotAllowed,
+			currentVersion:       currentVersion,
+			nextVersion:          nextNumeric,
+			nextVersionHeader:    header,
+			bump:                 verdict.Bump,
+			bullets:              bullets,
+			reasoning:            verdict.Reasoning,
+			allowMajorBumpConfig: allowMajorBumpConfig,
+			allowMajorBumpFlag:   s.allowMajor,
+		})
+	}
+	if verdict.Bump == "major" && s.allowMajor && !allowMajorBumpConfig {
+		glog.V(2).Infof("planning: --allow-major override accepted for major bump")
 	}
 
 	rewriteVerdict, err := s.resolveRewriteVerdict(ctx, originalBody, changelogRewrite)
@@ -453,6 +499,17 @@ type escalation struct {
 	reason             string
 	preconditionFailed string
 	currentVersion     string
+	// Spec 060 trip-case fields. All optional — P1/P2 escalation
+	// paths pass zero values; the major-bump guard trip case
+	// populates all of them so the operator sees the would-be
+	// release shape on the task page.
+	nextVersion         string
+	nextVersionHeader   string
+	bump                string
+	bullets             []string
+	reasoning           string
+	allowMajorBumpConfig bool
+	allowMajorBumpFlag   bool
 }
 
 // escalate writes a ## Plan(needs_input) section, clears `assignee`,
@@ -473,10 +530,17 @@ func (s *planningStep) escalate(
 	e escalation,
 ) (*agentlib.Result, error) {
 	output := PlanOutput{
-		Outcome:            PlanOutcomeNeedsInput,
-		Reason:             e.reason,
-		PreconditionFailed: e.preconditionFailed,
-		CurrentVersion:     e.currentVersion,
+		Outcome:             PlanOutcomeNeedsInput,
+		Reason:              e.reason,
+		PreconditionFailed:  e.preconditionFailed,
+		CurrentVersion:      e.currentVersion,
+		NextVersion:         e.nextVersion,
+		NextVersionHeader:   e.nextVersionHeader,
+		Bump:                e.bump,
+		Bullets:             e.bullets,
+		Reasoning:           e.reasoning,
+		AllowMajorBumpConfig: e.allowMajorBumpConfig,
+		AllowMajorBumpFlag:   e.allowMajorBumpFlag,
 	}
 	section, err := agentlib.MarshalSectionTyped(ctx, "## Plan", output)
 	if err != nil {

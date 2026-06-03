@@ -144,6 +144,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.AnthropicModel,
 		resolvedToken,
 		env,
+		a.AllowMajor,
 	)
 	agent, err := provider.Get(ctx, agentlib.TaskType(a.TaskType))
 	if err != nil {
