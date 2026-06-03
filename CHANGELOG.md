@@ -12,6 +12,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 - feat(lib/repoallowlist): allow `!`-prefix entries as exclusions — a target is allowed iff `(includes empty OR any include matches) AND (no exclude matches)`. Excludes always override includes; an exclude-only allowlist means allow-all-except. Existing `IsAllowed` / `Validate` signatures unchanged; consumer services pick up the new semantics with zero code change (spec 061)
 
+## v0.33.1
+
+- fix(agent/pr-reviewer): verdict now decides the GitHub review event — `approve` always maps to `APPROVE` and `request-changes` always maps to `REQUEST_CHANGES`, regardless of the per-repo `autoApprove` config. The `autoApprove` flag remains as a config field/YAML key for operator tooling; it no longer downgrades a verdict. The verifier's fresh-review allow-list at the call site in `pkg/steps_review.go` drops `COMMENTED` so a stale `COMMENTED` review at the head SHA is correctly treated as a non-match. Branch protection's "approving review" requirement is now satisfied on docs-only PRs with `autoApprove=false`.
+
 ## v0.33.0
 
 - refactor(agent/github-releaser): extract the spec-060 major-bump guard decision table from `runClassification` into a private `applyMajorBumpGuard` helper, and the rewrite-and-publish tail into a private `resolveRewriteAndPublish` helper. `runClassification` drops from 92 non-comment lines (over the 80-line `funlen` threshold) to 64. Decision table, escalation contract, glog lines, and `PlanOutput` field emissions are preserved bit-identically
