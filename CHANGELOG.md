@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(lib): add `release.allowMajorBump` boolean field to `ReleaseConfig` in `lib/maintainerconfig` — spec-060 per-repo opt-in for automatic major-version releases; default `false` (omit the field, set `false` explicitly, or omit the `release:` block — all equivalent). Non-boolean values fail at parse time via the type system. The planning step (github-releaser) reads `cfg.Release.AllowMajorBump` to gate `bump=major` verdicts; the second lever is the `--allow-major` CLI flag (env `ALLOW_MAJOR`) on the agent binary. Ginkgo table coverage for true/missing-field/missing-block plus the strict-parse non-bool rejection path
+
 ## v0.32.1
 
 - chore: bump `github.com/bborbe/agent/lib` v0.63.11 → v0.65.0 across all services (agent/pr-reviewer, agent/github-releaser, watcher/github-pr, watcher/github-release, watcher/github-build) to pick up `envparse.RedactForLog` — pr-reviewer subprocess env logs now show `ANTHROPIC_AUTH_TOKEN=***` and `GH_TOKEN=***` instead of the literal values; closes the 2026-06-03 prod-leak surface

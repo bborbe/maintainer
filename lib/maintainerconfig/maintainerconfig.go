@@ -62,9 +62,34 @@ type MaintainerConfig struct {
 // Non-boolean values fail at parse time; the planning step is responsible
 // for surfacing the error as `error_category=invalid_config`.
 // See spec 059 § Desired Behavior 1-3 and § Goal.
+//
+// AllowMajorBump is the spec-060 per-repo opt-in for automatic major-version
+// releases. Default false (omit the field, set false explicitly, or omit
+// the `release:` block — all equivalent). When false, the
+// github-releaser-agent planning phase TRIPS (Status=NeedsInput, ## Plan
+// outcome=needs_input, precondition_failed=major_bump_not_allowed) on any
+// classifier verdict of `bump=major`, forcing a human ack before tag +
+// push. When true, a major verdict proceeds to execution as before. The
+// second lever is the `--allow-major` CLI flag (env `ALLOW_MJOR`) — either
+// source is sufficient. Non-boolean values fail at parse time; the
+// planning step is responsible for surfacing the error as
+// `error_category=invalid_config`. See spec 060 § Desired Behavior 1 and
+// § Goal.
 type ReleaseConfig struct {
 	AutoRelease      bool `yaml:"autoRelease"`
 	ChangelogRewrite bool `yaml:"changelogRewrite"`
+	// AllowMajorBump is the spec-060 per-repo opt-in for automatic major-version
+	// releases. Default false (omit the field, set false explicitly, or omit the
+	// `release:` block — all equivalent). When false, the github-releaser-agent
+	// planning phase will TRIP (Status=NeedsInput, ## Plan outcome=needs_input,
+	// precondition_failed=major_bump_not_allowed) on any classifier verdict of
+	// `bump=major`, forcing a human ack before tag + push. When true, a major
+	// verdict proceeds to execution as before. The second lever is the
+	// `--allow-major` CLI flag on the agent binary (env `ALLOW_MJOR`) — either
+	// source is sufficient. Non-boolean values fail at parse time; the planning
+	// step is responsible for surfacing the error as `error_category=invalid_config`.
+	// See spec 060 § Desired Behavior 1 and § Goal.
+	AllowMajorBump bool `yaml:"allowMajorBump"`
 }
 
 // PrReviewerConfig is the `prReviewer:` namespace. AutoApprove=true means
