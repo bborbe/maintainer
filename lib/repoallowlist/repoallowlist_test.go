@@ -91,6 +91,74 @@ var _ = Describe("IsAllowed", func() {
 			"github.com/bborbe/maintainer",
 			true,
 		),
+
+		// Exclude syntax (spec 061)
+		Entry("AC 1: include matches but exclude rejects",
+			[]string{"github.com/bborbe/*", "!github.com/bborbe/go-skeleton"},
+			"github.com/bborbe/go-skeleton",
+			false,
+		),
+		Entry("AC 2: include matches and no exclude rejects",
+			[]string{"github.com/bborbe/*", "!github.com/bborbe/go-skeleton"},
+			"github.com/bborbe/maintainer",
+			true,
+		),
+		Entry("AC 3: exclude-only list is allow-all-except for non-excluded target",
+			[]string{"!github.com/bborbe/go-skeleton"},
+			"github.com/bborbe/maintainer",
+			true,
+		),
+		Entry("AC 4: exclude-only list rejects the excluded target",
+			[]string{"!github.com/bborbe/go-skeleton"},
+			"github.com/bborbe/go-skeleton",
+			false,
+		),
+		Entry("AC 5: wildcard exclude matches any repo under same owner",
+			[]string{"!github.com/bborbe/*"},
+			"github.com/bborbe/anything",
+			false,
+		),
+		Entry("AC 6: wildcard exclude does not over-reach to other owner",
+			[]string{"!github.com/bborbe/*"},
+			"github.com/other/anything",
+			true,
+		),
+		Entry("AC 8a: malformed exclude (2 segments) is skipped, surviving include matches",
+			[]string{"!github.com/bborbe", "github.com/bborbe/*"},
+			"github.com/bborbe/maintainer",
+			true,
+		),
+		Entry("AC 8b: malformed exclude (wildcard in owner) is skipped, surviving include matches",
+			[]string{"!github.com/*/repo", "github.com/bborbe/maintainer"},
+			"github.com/bborbe/maintainer",
+			true,
+		),
+		Entry("AC 8c: malformed exclude (wildcard in host) is skipped, surviving include matches",
+			[]string{"!*/bborbe/repo", "github.com/bborbe/maintainer"},
+			"github.com/bborbe/maintainer",
+			true,
+		),
+	)
+
+	DescribeTable(
+		"order independence: include-then-exclude equals exclude-then-include AND matches the expected result",
+		func(target string, expected bool) {
+			orderingA := []string{
+				"github.com/bborbe/*",
+				"!github.com/bborbe/go-skeleton",
+			}
+			orderingB := []string{
+				"!github.com/bborbe/go-skeleton",
+				"github.com/bborbe/*",
+			}
+			resultA := repoallowlist.IsAllowed(orderingA, target)
+			resultB := repoallowlist.IsAllowed(orderingB, target)
+			Expect(resultA).To(Equal(resultB))
+			Expect(resultA).To(Equal(expected))
+		},
+		Entry("excluded target", "github.com/bborbe/go-skeleton", false),
+		Entry("included target", "github.com/bborbe/maintainer", true),
+		Entry("unrelated target", "github.com/other/repo", false),
 	)
 })
 
@@ -130,6 +198,14 @@ var _ = Describe("Validate", func() {
 		// Aggregate: ALL malformed entries are reported, not just the first
 		Entry("multiple malformed entries both appear in aggregate error",
 			[]string{"github.com/bborbe", "github.com/*/foo"}, true),
+
+		// Exclude syntax (spec 061)
+		Entry("AC 9: well-formed exclude entry validates cleanly",
+			[]string{"!github.com/bborbe/go-skeleton"}, false),
+		Entry("AC 10: malformed exclude (2 segments) returns error",
+			[]string{"!github.com/bborbe"}, true),
+		Entry("AC 11: empty-body exclude (! alone) returns error",
+			[]string{"!"}, true),
 	)
 
 	It("Validate returns aggregate error mentioning each malformed entry", func() {
@@ -139,5 +215,13 @@ var _ = Describe("Validate", func() {
 		msg := err.Error()
 		Expect(msg).To(ContainSubstring("github.com/bborbe"))
 		Expect(msg).To(ContainSubstring("github.com/*/foo"))
+	})
+
+	It("Validate aggregate error for malformed exclude entries names the entry and reason", func() {
+		err := repoallowlist.Validate(context.Background(), []string{"!github.com/bborbe"})
+		Expect(err).To(HaveOccurred())
+		msg := err.Error()
+		Expect(msg).To(ContainSubstring("!github.com/bborbe"))
+		Expect(msg).To(ContainSubstring("must have exactly 3 path segments"))
 	})
 })

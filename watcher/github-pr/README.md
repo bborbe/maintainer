@@ -45,6 +45,19 @@ Two independent decision chains run per PR — see [`docs/watcher-decision-chain
 | `SENTRY_DSN` | no | — | Sentry DSN for error tracking |
 | `SENTRY_PROXY` | no | — | HTTP proxy URL for Sentry transport |
 
+### `REPO_ALLOWLIST` syntax
+
+Entries are comma-separated. A leading `!` marks an exclusion. A target is allowed iff `(includes is empty OR any include matches) AND (no exclude matches)`; excludes always override includes.
+
+| Entry shape | Example | Meaning |
+|---|---|---|
+| Literal include | `github.com/bborbe/maintainer` | Allow exactly this repo |
+| Wildcard include | `github.com/bborbe/*` | Allow every repo under this owner |
+| Literal exclude | `!github.com/bborbe/go-skeleton` | Reject exactly this repo (overrides any matching include) |
+| Wildcard exclude | `!github.com/bborbe/*` | Reject every repo under this owner |
+
+An allowlist consisting of only exclude entries is treated as allow-all-except: every target passes the include gate, and only the exclude gate filters. Example: `REPO_ALLOWLIST=!github.com/bborbe/go-skeleton` rejects go-skeleton and allows every other repo (including all other bborbe repos). To allow every bborbe repo except go-skeleton, write `github.com/bborbe/*,!github.com/bborbe/go-skeleton`.
+
 ## HTTP Endpoints
 
 | Path | Method | Purpose |
