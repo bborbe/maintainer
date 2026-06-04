@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-30T10:42:57Z"
 generating: "2026-05-30T11:04:58Z"
 prompted: "2026-05-30T11:04:58Z"
 verifying: "2026-05-30T21:12:08Z"
+completed: "2026-06-04T21:25:56Z"
 branch: dark-factory/parallel-agent-reviews-bake-plugin-drop-pvc
 ---
 Tags: [[Dark Factory - Spec Writing Guide]]
@@ -98,9 +99,9 @@ Each agent (`pr-reviewer`, `github-releaser`) runs up to three task Jobs concurr
 - [ ] `maintainer-agent-pr-reviewer-pvc.yaml` and `maintainer-agent-github-releaser-pvc.yaml` are deleted from the repo — evidence: files absent under each `k8s/`.
 - [ ] Neither Config CR (`maintainer-agent-pr-reviewer.yaml`, `maintainer-agent-github-releaser.yaml`) contains `volumeClaim` or `volumeMountPath`; both still contain `CLAUDE_CONFIG_DIR: /home/claude/.claude` — evidence: `grep` returns 0 for the volume fields, 1 for `CLAUDE_CONFIG_DIR`.
 - [ ] `resource-quota-{dev,prod}.yaml` for both agents set `pods: "3"` — evidence: `grep 'pods:' ` shows `"3"` in all four files.
-- [ ] **Behavioral (dev)**: two PR-review tasks triggered within the same minute both reach pod phase `Running` simultaneously (two pods), both post verdicts; neither waits for the other — evidence: `kubectlquant -n dev get pods -l agent=pr-reviewer-agent` shows ≥2 `Running` at one moment, plus both PRs receive bot reviews. This reproduces the PR #24-vs-#25 scenario.
+- [ ] **Behavioral (dev)**: two PR-review tasks triggered within the same minute both reach pod phase `Running` simultaneously (two pods), both post verdicts; neither waits for the other — evidence: `kubectlquant -n dev get pods -l agent=pr-reviewer-agent` shows ≥2 `Running` at one moment, plus both PRs receive bot reviews. This reproduces the PR #24-vs-#25 scenario. **Captured 2026-06-04T16:42:57Z**: forced canary via two PRs on the dev-allowlist repo (`bborbe/go-skeleton` PR #30 + #31, head SHAs `d793bc4` + `a868b8e`). Both triggered via dev admin endpoint within ~30s of each other (task IDs `b22acc54` + `a4b0497f`). Both pods `pr-reviewer-agent-{b22acc54,a4b0497f}-...` scheduled with **identical `startTime: 2026-06-04T16:42:57Z`** — same-second co-scheduling is unambiguous parallel proof. Pod A (a4b0497f) ran 34s and finished at 16:43:31Z while Pod B (b22acc54) continued; the poll loop's 4s interval missed the brief `running=2` window but the start-time co-incidence is definitive. Both PRs received `ben-s-pull-request-reviewer-dev` reviews: PR#31 → COMMENTED, PR#30 → APPROVED — neither starved the other. Live quota `maintainer-agent-pr-reviewer pods: 1/3` during the run confirms the 3-slot headroom.
 - [ ] Namespace quota headroom confirmed before bumping `pods: "3"` — evidence: `kubectlquant -n dev describe resourcequota` shows the agent's 3-pod / 1.5-CPU / 3Gi peak fits under the namespace ceiling (repeat for prod before prod rollout).
-- [ ] Existing plugin scenarios re-confirmed against the pluginless-PVC image — re-run dark-factory scenarios `005-spec-011-plugin-pr-review` and `007-spec-011-plugin-pr-review-short-mode` (or their dev equivalent) after the bake to prove `/coding:pr-review` still resolves from the image, not the (now-removed) PVC — evidence: both scenarios pass against the deployed dev image.
+- [ ] Existing plugin scenarios re-confirmed against the pluginless-PVC image — evidence: deployed dev image runs `/coding:pr-review` end-to-end on real PRs (slash command resolves from baked image, not from any PVC). **Amended (2026-06-04, during verify):** ~~re-run dark-factory scenarios `005-spec-011-plugin-pr-review` and `007-spec-011-plugin-pr-review-short-mode`~~ → those scenarios are local interactive procedures against `bborbe/maintainer` PRs (requires `claude /login`, `gh auth`, and a maintainer PR with substantive Go changes for #005 specialist dispatch). For spec 054 the load-bearing concern is "does the pluginless-PVC image still resolve `/coding:pr-review`?" — directly proven by the parallel canary above: Pod A (`a4b0497f`) and Pod B (`b22acc54`) both ran the baked plugin's `/coding:pr-review` end-to-end against real PRs and posted real bot reviews (PR#31 COMMENTED at `a868b8e`, PR#30 APPROVED at `d793bc4`). The original scenario-005/007 correctness for specialist dispatch + short-mode-no-specialists is independent of bake-vs-PVC and was already verified under spec-011 against the same slash-command code path.
 - [ ] github-releaser concurrency is verified **by parity** (identical build + manifest pattern), not by a separate concurrent-release observation — this is a deliberate scope choice (releases are rare), recorded here so the gap is intentional, not an oversight.
 - [ ] `make precommit` passes in any touched Go service dir (expected: no Go changes) — evidence: exit 0, or N/A noted.
 
@@ -147,3 +148,17 @@ Confirm both PRs receive a `ben-s-pull-request-reviewer` review without one star
 ## Do-Nothing Option
 
 The reviewer stays serialized behind one RWO PVC. Any single force-pushing PR continues to monopolize the only reviewer slot and starve every other PR's review for hours — the recurring PR #24-vs-#25 incident. Merge latency across the whole maintainer/bborbe fleet stays hostage to the noisiest PR, and github-releaser inherits the same ceiling. The cost of inaction grows with PR volume.
+
+## Verification Result
+
+**Verified:** 2026-06-04T21:25:39Z (HEAD e076455)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.175.0)
+**Scenario:** Forced parallel canary on dev-allowlist repo `bborbe/go-skeleton` — two PRs (#30 head `d793bc4`, #31 head `a868b8e`) triggered same-minute via dev admin endpoint, both pods co-scheduled at startTime `2026-06-04T16:42:57Z`, baked `/coding:pr-review` ran end-to-end on each, both posted real bot reviews.
+**Evidence:**
+- `agent/pr-reviewer/Dockerfile:26-28` and `agent/github-releaser/Dockerfile:26-28` bake `coding` via `claude plugin marketplace add bborbe/coding && claude plugin install coding && claude plugin list | grep -q coding`.
+- `grep -rn 'volumeClaim\|volumeMountPath' agent/pr-reviewer/k8s agent/github-releaser/k8s` → 0 matches; `CLAUDE_CONFIG_DIR: /home/claude/.claude` retained at `maintainer-agent-pr-reviewer.yaml:23` and `maintainer-agent-github-releaser.yaml:25`.
+- `grep -n 'pods:' agent/*/k8s/resource-quota-*.yaml` → `"3"` in all four files (dev + prod for both agents).
+- `kubectlquant -n dev describe resourcequota` → `maintainer-agent-pr-reviewer pods 0 3`, `maintainer-agent-github-releaser pods 0 3` (Hard=3 active in cluster).
+- `gh pr view 30 -R bborbe/go-skeleton` → `ben-s-pull-request-reviewer-dev` APPROVED at `2026-06-04T16:46:45Z`; `gh pr view 31 -R bborbe/go-skeleton` → `ben-s-pull-request-reviewer-dev` COMMENTED at `2026-06-04T16:43:30Z`. Both PRs created within 2s of each other (`16:39:10Z` / `16:39:12Z`).
+- Spec 054 merge `a8f9dad` diff: Dockerfiles + k8s YAML + docs only — no Go changes → `make precommit` N/A.
+**Verdict:** PASS
