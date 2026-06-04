@@ -1,7 +1,8 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-27T21:32:27Z"
 verifying: "2026-05-27T21:58:03Z"
+completed: "2026-06-04T15:26:38Z"
 branch: dark-factory/github-releaser-claude-bump-prompt
 ---
 
