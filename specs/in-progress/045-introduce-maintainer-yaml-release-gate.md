@@ -120,3 +120,18 @@ If we ship nothing, the watcher continues to read `.dark-factory/config.yml: aut
 
 - Exact skip-reason metric label string. The current code emits `"auto_release"` for "dark-factory handles it" (i.e., the inverse of the new gate). The new gate's skip is semantically "not opted in." Agent decides at impl time; the prompt should pin one label (e.g., `"not_opted_in"` or keep `"auto_release"` for dashboard continuity) and document the choice in godoc.
 - Whether to keep the gate predicate file named `auto_release_filter.go` or rename to e.g. `maintainer_gate_filter.go`. Agent decides at impl time — either is fine; the spec only constrains behavior.
+
+## Verification Result
+
+**Verified:** 2026-06-04T15:12:26Z (HEAD 9a0d185)
+**Binary:** installed `dark-factory` (target repo: maintainer, not dark-factory itself)
+**Scenario:** Ginkgo suite replay against current master — client `GetMaintainerConfig` + `AutoReleaseFilter` + grep guards.
+**Evidence:**
+- `make precommit` in `watcher/github-release/`: exit 0; `pkg` coverage 81.9%, `pkg/filter` 100%, `pkg/auth` 100%.
+- `grep -rn "GetAutoReleaseConfig|dark-factory/config|darkFactoryConfig|parseAutoReleaseConfig" watcher/github-release/` → empty, exit 1.
+- `grep -n "GetMaintainerConfig" watcher/github-release/pkg/githubclient.go` → interface decl line 62, impl line 255.
+- `grep -n "GetMaintainerConfigStub" watcher/github-release/mocks/github_client.go` → line 30 (mock regenerated; no `GetAutoReleaseConfigStub`).
+- `go test ./pkg/... -ginkgo.focus="GetMaintainerConfig"` → 10 Passed, 0 Failed; covers (a) 404 (b) empty (c) release-absent (d) false (e) true (f) malformed (g) unknown-keys (h) rate-limit + HTTP 500 + oversize.
+- `go test ./pkg/filter/... -ginkgo.focus="AutoReleaseFilter"` → 3 Passed: pass-on-true, skip-on-false (label `auto_release`), skip-on-zero-value (label `auto_release`).
+- `docs/watcher-decision-chains.md` lines 77-81 reference `.maintainer.yaml`; `grep "dark-factory/config" docs/watcher-decision-chains.md` empty.
+**Verdict:** PASS
