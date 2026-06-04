@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-27T20:32:51Z"
 generating: "2026-05-27T22:07:25Z"
 prompted: "2026-05-27T22:07:25Z"
 verifying: "2026-05-27T22:10:15Z"
+completed: "2026-06-04T15:09:17Z"
 branch: dark-factory/github-release-watcher-implementation
 ---
 
