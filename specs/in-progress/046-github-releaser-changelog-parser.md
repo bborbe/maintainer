@@ -123,3 +123,17 @@ grep -c "found '1.2.6' at line 11"                  pkg/changelog/changelog_test
 ```
 
 No scenario justified at this rung — this is leaf-library logic fully covered by unit tests + table-driven cases. Per [[spec-writing]] § Test-layer responsibilities, scenarios are for behavior the unit + integration layers genuinely cannot reach; this spec is unit-layer by construction.
+
+## Verification Result
+
+**Verified:** 2026-06-04T15:16:33Z (HEAD d93847f)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory v0.175.0
+**Scenario:** Walked each AC against `agent/github-releaser/pkg/changelog/` on maintainer master.
+**Evidence:**
+- `cd agent/github-releaser && make precommit` → `ready to commit`, EXIT=0
+- `ls pkg/changelog/` → `changelog.go`, `changelog_test.go`, `suite_test.go` (3 files)
+- `grep -c '^func ValidateUnreleased('` = 1; `ExtractUnreleasedBullets` = 1; `InferHeaderPrefixStyle` = 1
+- `go test -cover ./pkg/changelog/...` → `coverage: 95.7% of statements` (≥90%)
+- All 8 DescribeTable case names grep = 1 each; `"found '1.2.6' at line 11"` grep = 1
+- Root CHANGELOG.md `## Unreleased` feat entry referencing spec was shipped in commit 76e0f86 (`feat(agent/github-releaser): add pkg/changelog parser library — pure-Go ValidateUnreleased/ExtractUnreleasedBullets/InferHeaderPrefixStyle for planning step (spec 044)`) — spec 044 was renumbered to 046 in 54de50b; the entry was later rolled into v0.27.0's summary bullets per the release pipeline
+**Verdict:** PASS
