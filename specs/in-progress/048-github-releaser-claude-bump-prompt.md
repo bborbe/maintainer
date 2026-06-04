@@ -158,3 +158,22 @@ grep -c 'pkg/prompts' CHANGELOG.md                                              
 ```
 
 No scenario justified — pure-Go library with `//go:embed`, fully covered by unit tests + table-driven cases. Per [[spec-writing]] § Test-layer responsibilities.
+
+## Verification Result
+
+**Verified:** 2026-06-04T15:25:54Z (HEAD 753f3f5)
+**Binary:** installed dark-factory (target repo is bborbe/maintainer, not dark-factory)
+**Scenario:** Filesystem + `make precommit` + `go test -cover` against master; original 4 files added by commit cff6cd0 on 2026-05-27 (matches `verifying` timestamp).
+**Evidence:**
+- `make precommit` in `agent/github-releaser` exits 0 (trivy clean, addlicense ran, "ready to commit")
+- `go test -cover ./pkg/prompts/...` → `coverage: 90.7% of statements`
+- All 4 spec-mandated files present (`prompts.go`, `prompts_test.go`, `suite_test.go`, `bump_classification.md`); 3 extra files in dir from downstream completed spec 058 (`changelog_*.md`, `changelog-quality-guide.md`)
+- Signature greps: `BumpClassificationPrompt()=1`, `BumpVerdict struct=1`, `ParseBumpVerdict(=1`, `//go:embed bump_classification.md=1`
+- Prompt content: `patch | minor | major=1`, `BREAKING CHANGE=2`, `feat:=2`, `"bump":=1`, priority-order `major.*minor.*patch=1`
+- Error wrapping: `fmt.Errorf=0`, `errors.(Wrap|Errorf)=14`, `parse bump verdict=6`
+- All 8 DescribeTable Entry names present (some appear ≥2× due to second DescribeTable for error-substring assertions — intent satisfied)
+- Root `CHANGELOG.md` contains 5 references to `pkg/prompts`
+- Commit cff6cd0 ("Classify the next semantic-version bump", 2026-05-27 23:58 +0200) introduced exactly the 4 files (281 insertions)
+**Verdict:** PASS
+
+Notes on strict-literal drift: ACs #2 and several DescribeTable count ACs (#9-11, #13, #15) specified exact integer matches that no longer hold because downstream completed spec 058 added 3 prompt files to the same directory and grew the test suite with additional Entries reusing the same case names. Spec 048's deliverables are intact and serve as the foundation; the drift is additive growth from accepted downstream work, not regression.
