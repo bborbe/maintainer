@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-05-29T14:47:05Z"
 generating: "2026-05-29T16:22:56Z"
 prompted: "2026-05-29T16:22:56Z"
 verifying: "2026-05-29T16:37:24Z"
+completed: "2026-06-04T15:44:17Z"
 branch: dark-factory/migrate-pr-reviewer-to-maintainer-yaml
 ---
 
@@ -121,3 +122,16 @@ If we ship nothing, pr-reviewer keeps reading `.pr-reviewer.yaml` and the watche
 ## Open Questions
 
 - Whether to keep the agent reader function named `ReadAutoApproveConfig` (returns just the bool) or rename to e.g. `ReadMaintainerConfig` (returns the whole config, caller picks `.PrReviewer.AutoApprove`). Either is fine; the spec constrains behavior, not the name.
+
+## Verification Result
+
+**Verified:** 2026-06-04T15:44:02Z (HEAD 7f539a6)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory v0.175.0
+**Scenario:** Static-evidence walk against master: grep AC checks, `make precommit` per module, `go test -cover` per touched package, Ginkgo spec enumeration.
+**Evidence:**
+- `lib/maintainerconfig/`: `Parse(ctx, []byte) (MaintainerConfig, error)` at maintainerconfig.go:101; struct exposes `Release.AutoRelease` (line 79) and `PrReviewer.AutoApprove` (line 88); Ginkgo suite runs 22/22 SUCCESS with all required cases (empty/prReviewer-true/prReviewer-absent/release-autoRelease/both/unknown-ignored/malformed-wrapped).
+- `agent/pr-reviewer/`: `grep .pr-reviewer.yaml\|AutoApproveConfig` exit 1 (empty). `pkg/githubposter/config.go:23` reads `.maintainer.yaml` from workDir, parses via `maintainerconfig.Parse`, returns `cfg.PrReviewer.AutoApprove`.
+- `watcher/github-release/pkg/githubclient.go:15` imports `github.com/bborbe/maintainer/lib/maintainerconfig`; `GetMaintainerConfig` returns `maintainerconfig.MaintainerConfig`; `grep parseMaintainerConfig\|MaintainerReleaseConfig` exit 1.
+- `make precommit`: lib, agent/pr-reviewer, watcher/github-release all printed `ready to commit`.
+- Coverage: `lib/maintainerconfig` 100%, `agent/pr-reviewer/pkg/githubposter` 87.0%, `watcher/github-release/pkg` 81.9%.
+**Verdict:** PASS
