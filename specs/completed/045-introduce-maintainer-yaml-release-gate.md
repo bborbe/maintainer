@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-29T09:05:42Z"
 generating: "2026-05-29T09:23:36Z"
 prompted: "2026-05-29T09:23:36Z"
 verifying: "2026-05-29T09:26:42Z"
+completed: "2026-06-04T15:12:46Z"
 ---
 
 # introduce-maintainer-yaml-release-gate
