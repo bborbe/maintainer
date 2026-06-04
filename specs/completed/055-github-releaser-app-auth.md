@@ -1,9 +1,10 @@
 ---
-status: verifying
+status: completed
 approved: "2026-05-29T16:14:45Z"
 generating: "2026-05-29T16:22:07Z"
 prompted: "2026-05-29T16:22:07Z"
 verifying: "2026-05-29T16:34:51Z"
+completed: "2026-06-04T21:31:43Z"
 branch: dark-factory/github-releaser-app-auth
 ---
 
@@ -67,7 +68,7 @@ After this work, the github-releaser binary authenticates **only** as a GitHub A
 
 - [ ] `make precommit` exits 0 in `agent/github-releaser/` — evidence: exit code 0.
 - [ ] The binary's config struct declares `APP_ID`, `INSTALLATION_ID`, `PEM_KEY_FILE`, `PEM_KEY` with the pr-reviewer env names — evidence: `grep -nE 'env:"(APP_ID|INSTALLATION_ID|PEM_KEY_FILE|PEM_KEY)"' agent/github-releaser/main.go` returns 4 lines; the `PEM_KEY` line also matches `display:"length"`.
-- [ ] App-mode auth mints via `lib/githubapp` and no JWT is hand-rolled — evidence: `grep -rn 'githubapp.MintIAT' agent/github-releaser/` returns ≥1 line (location is an impl choice per the implementation note — main.go or a pkg helper), AND `grep -rn 'golang-jwt' agent/github-releaser/ | wc -l` returns `0`.
+- [ ] App-mode auth mints via `lib/githubapp` and no JWT is hand-rolled — evidence: `grep -rn 'githubapp.MintIAT' agent/github-releaser/` returns ≥1 line (location is an impl choice per the implementation note — main.go or a pkg helper), AND `grep -rn 'golang-jwt' agent/github-releaser/ --include='*.go' | wc -l` returns `0`. **Amended (2026-06-04, during verify):** original grep was unscoped → it caught transitive indirect deps in `go.mod`/`go.sum` (`golang-jwt/jwt/v4 // indirect` pulled by `ghinstallation/v2`, which `lib/githubapp.MintIAT` itself uses). Intent is "no hand-rolled JWT in Go source files" — scope corrected to `--include='*.go'`.
 - [ ] With App creds set, the effective token is the minted IAT and is the value wired to both fetcher and execution step — evidence: a Ginkgo unit test on the auth-resolution function (using `githubapp.Config.BaseURL` pointed at an `httptest` IAT endpoint, the pattern `lib/githubapp` tests already use) asserts the resolved effective token equals the stubbed IAT string; test passes under `make precommit`.
 - [ ] With both PEM forms set, `PEM_KEY_FILE` wins silently — evidence: Ginkgo unit test sets a valid `PEM_KEY_FILE` plus a garbage `PEM_KEY`, asserts the resolved token equals the stubbed IAT (proving the file PEM was used); test passes.
 - [ ] With App creds absent, startup returns a non-nil error before any clone and there is no PAT fallback — evidence: Ginkgo unit test asserts a non-nil error whose message names the required App env vars (`APP_ID`/`INSTALLATION_ID`/`PEM_KEY*`) and does NOT mention `GH_TOKEN`; test passes. Plus `grep -rn 'AuthModePATFallback' agent/github-releaser/ | wc -l` returns `0`.
@@ -96,3 +97,16 @@ grep -rn 'golang-jwt' agent/github-releaser/ | wc -l
 If we don't do this, the github-releaser agent cannot authenticate inside the cluster at all: fleet-wide PAT auth was retired on 2026-05-24, so every clone, changelog fetch, and push fails. The agent is undeployable and the release loop stays broken at the auth link. There is no acceptable workaround that keeps PAT auth, since the credential type itself is gone fleet-wide. Not acceptable.
 
 <!-- IMPLEMENTATION NOTE: pr-reviewer resolves auth in a dedicated resolveAuth(ctx) method that mutates a.GHToken in place (main.go ~lines 229-280). The releaser has no such method yet — its Run() reads a.GHToken directly. The cleanest mirror is to add an equivalent resolution function and call it at the top of Run() before createDeliverer/CreateAgentProvider, so the single resolved token flows unchanged through factory.CreateAgentProvider(..., ghToken, ...) → CreateAgent → both NewHTTPFetcher and NewExecutionStep. Whether the resolution lives in main.go (like pr-reviewer) or a small testable pkg helper is an agent decision at impl time; ACs only require the four observable resolution outcomes above. -->
+
+## Verification Result
+
+**Verified:** 2026-06-04T21:30:53Z (HEAD ee6481e)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.175.0)
+**Scenario:** Walked all 6 ACs against fresh evidence in agent/github-releaser/ (no runtime scenario per spec — unit tests against httptest IAT endpoint mirror lib/githubapp pattern).
+**Evidence:**
+- AC#1: `make precommit` exit 0; all 13 packages green; coverage 85-100% in pkg/*; `0 issues` golangci-lint; `ready to commit`.
+- AC#2: `grep -nE 'env:"(APP_ID|INSTALLATION_ID|PEM_KEY_FILE|PEM_KEY)"' agent/github-releaser/main.go` → 4 lines (88-91); `PEM_KEY` line carries `display:"length"`.
+- AC#3: `grep -rn 'githubapp.MintIAT' agent/github-releaser/` → 2 hits in pkg/githubauth/githubauth.go (line 69 doc, line 99 call); `grep -rn 'golang-jwt' agent/github-releaser/ --include='*.go' | wc -l` → 0 (amended scope: `.go` files only — transitive indirect deps in go.mod/go.sum brought in by ghinstallation/v2 that lib/githubapp.MintIAT itself uses).
+- AC#4/5/6: `go test -count=1 -v ./pkg/githubauth/...` → "Ran 11 of 11 Specs … SUCCESS! -- 11 Passed | 0 Failed". Specs include "App creds set → effective token is the minted IAT" (AC#4), "both PEMKeyFile and PEMKey set → PEMKeyFile wins silently" (AC#5), "App creds incomplete → error naming the required App env vars (no GH_TOKEN mention)" (AC#6).
+- AC#6: `grep -rn 'AuthModePATFallback' agent/github-releaser/ | wc -l` → 0.
+**Verdict:** PASS
