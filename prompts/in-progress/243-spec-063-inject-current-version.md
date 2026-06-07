@@ -1,7 +1,8 @@
 ---
-status: draft
+status: approved
 spec: [063-releaser-no-major-bump]
 created: "2026-06-06T21:46:08Z"
+queued: "2026-06-07T14:26:58Z"
 branch: dark-factory/releaser-no-major-bump
 ---
 

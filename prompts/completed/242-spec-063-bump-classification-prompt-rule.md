@@ -1,7 +1,13 @@
 ---
-status: draft
+status: completed
 spec: [063-releaser-no-major-bump]
+summary: Added the pre-1.0 cap rule to bump_classification.md, the new Ginkgo Describe block + DescribeTable entry in prompts_test.go, and the CHANGELOG Unreleased bullet. All 57 prompts_test.go specs pass via `make test`; prompts.go was not touched.
+container: maintainer-no-major-bump-exec-242-spec-063-bump-classification-prompt-rule
+dark-factory-version: v0.175.0
 created: "2026-06-06T21:46:08Z"
+queued: "2026-06-07T14:26:58Z"
+started: "2026-06-07T14:27:00Z"
+completed: "2026-06-07T14:31:20Z"
 branch: dark-factory/releaser-no-major-bump
 ---
 
@@ -77,10 +83,10 @@ The spec's Acceptance Criteria (AC 1-3) for this prompt are:
 >
 > AC 3: The prompt's existing major → minor → patch priority order text is still present — evidence: existing test `contains major → minor → patch priority order` still passes (`go test ./agent/github-releaser/pkg/prompts/...` exit 0).
 
-Coding plugin guides (in-container paths):
+Coding guidance (mirror existing project patterns; don't import external docs):
 
-- `/home/node/.claude/plugins/marketplaces/coding/docs/go-testing-guide.md` — Ginkgo v2/Gomega style, `Describe` + `It` + `DescribeTable` for new entries.
-- `/home/node/.claude/plugins/marketplaces/coding/docs/changelog-guide.md` — entry format for the `## Unreleased` block (prefix `feat:` for new feature, `fix:` for a bug fix, `test:` for a test-only change).
+- Ginkgo v2 / Gomega test style — mirror the existing `Describe` + `It` + `DescribeTable` shape already present in `/workspace/agent/github-releaser/pkg/prompts/prompts_test.go`.
+- CHANGELOG entry — add a single `test:` prefixed bullet under `## Unreleased` (create the heading if absent).
 </context>
 
 <requirements>
@@ -164,7 +170,7 @@ Coding plugin guides (in-container paths):
 
    The parser contract is unchanged — this entry only proves that a verdict shaped like the one Claude is now expected to produce on a pre-1.0 breaking change round-trips cleanly through `ParseBumpVerdict`. AC 6 is partially satisfied here; the planning-step end-to-end fixture is in prompt 3.
 
-6. **Do NOT add a `BumpClassificationPromptFor(currentVersion)` helper.** The spec's Constraint § 50 explicitly forbids replacing the embedded-string export. Prompt 2 (separate file) will handle the prompt assembly in the planning step; the lib package in this prompt stays a pure `//go:embed` + `BumpClassificationPrompt()` accessor.
+6. **Do NOT add a `BumpClassificationPromptFor(currentVersion)` helper in this prompt.** The spec *permits* such a helper but the choice belongs to prompt 2 (`spec-063-inject-current-version.md`), which decides whether to add a helper or assemble the prompt inline. This prompt scope: prompt-text edit + assertions only. The lib package stays a pure `//go:embed` + `BumpClassificationPrompt()` accessor.
 
 7. **Add a `## Unreleased` entry to `CHANGELOG.md`.** Append a single bullet to the existing `## Unreleased` block (create the block if absent; the current `CHANGELOG.md` has its most recent `## v0.34.0` at the top — `## Unreleased` is missing). The entry:
 
