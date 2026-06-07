@@ -38,6 +38,248 @@ func withChangelogRewriteTrue() *mocks.MaintainerConfigFetcher {
 }
 
 var _ = Describe("steps_planning", func() {
+	// spec 063 — pre-1.0 cap. The pre-1.0 cap is enforced in the
+	// classifier's prompt (the rule that caps pre-1.0 breaking changes at
+	// minor is in the embedded rules text). This block pins two end-to-end
+	// envelopes:
+	//
+	//   (a) Pre-1.0 breaking-change input (vault-cli 2026-06-06 incident) +
+	//       Claude returning bump=minor with the pre-1.0 reasoning string
+	//       → outcome=ready, next_version=0.70.0 (the human-shipped shape).
+	//   (b) Post-1.0 breaking-change input (v1.2.3) + Claude returning
+	//       bump=major → outcome=needs_input, precondition_failed=
+	//       major_bump_not_allowed (the spec-060 guard still trips).
+	//
+	// (a) is the spec's primary behavioral fix: prior to 063 a pre-1.0
+	// rename would trip the major-bump guard and require a human operator
+	// to override. After 063 the classifier caps the bump at minor and the
+	// release proceeds unattended. The fixture replays the originating
+	// incident so the audit trail is self-documenting.
+	//
+	// (b) is the spec's required negative evidence: the guard remains
+	// intact for post-1.0 versions. Without (b) a future refactor could
+	// silently extend the pre-1.0 cap to 1.x and pass (a) while breaking
+	// the spec 060 contract.
+	Context("pre-1.0 cap (spec 063)", func() {
+		// Vault-cli 2026-06-06 regression: /refine-task → /plan-task rename
+		// at v0.69.0 halted at planning with major_bump_not_allowed. The
+		// spec-063 fix teaches the classifier to cap pre-1.0 breaking
+		// changes at minor. This fixture replays the exact incident and
+		// asserts the release proceeds unattended to outcome=ready with
+		// next_version=0.70.0 (the human-shipped shape).
+		vaultCliChangelog := []byte(
+			"## Unreleased\n\n" +
+				"- refactor: rename /refine-task to /plan-task\n\n" +
+				"## v0.69.0\n\n- old\n",
+		)
+
+		It(
+			"vault-cli v0.69.0 + rename bullet + Claude returns minor:pre-1.0 → outcome=ready, next_version=0.70.0",
+			func() {
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(vaultCliChangelog, nil)
+
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturns(
+					&claudelib.ClaudeResult{
+						Result: `{"bump":"minor","reasoning":"breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)"}`,
+					},
+					nil,
+				)
+
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+					false,
+				)
+
+				taskMD := "---\n" +
+					"status: in_progress\n" +
+					"phase: planning\n" +
+					"assignee: github-releaser-agent\n" +
+					"task_type: github-release\n" +
+					"repo: bborbe/vault-cli\n" +
+					"clone_url: https://github.com/bborbe/vault-cli.git\n" +
+					"ref: master\n" +
+					"current_version: 0.69.0\n" +
+					"task_identifier: gh-release-bborbe-vault-cli-001\n" +
+					"---\n\n" +
+					"# release task\n"
+
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Status/NextPhase: planning succeeded, advance to execution.
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("execution"))
+
+				// ## Plan JSON content: outcome=ready, bump=minor, next_version=0.70.0.
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(), md, "## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.Outcome).To(Equal(pkg.PlanOutcomeReady))
+				Expect(plan.Bump).To(Equal("minor"))
+				Expect(plan.CurrentVersion).To(Equal("0.69.0"))
+				Expect(plan.NextVersion).To(Equal("0.70.0"))
+				Expect(plan.NextVersionHeader).To(Equal("## v0.70.0"))
+				Expect(plan.HeaderPrefixStyle).To(Equal("v"))
+				Expect(plan.PreconditionFailed).To(BeEmpty())
+
+				// FROZEN spec-047 escalation contract is NOT triggered on
+				// the happy path: status/phase unchanged, assignee is
+				// untouched (the planning step does not mutate the
+				// frontmatter on the success path; the controller's
+				// status→frontmatter switch handles phase advance).
+				gotStatus, _ := md.Frontmatter.String("status")
+				Expect(gotStatus).To(Equal("in_progress"))
+				gotPhase, _ := md.Frontmatter.String("phase")
+				Expect(gotPhase).To(Equal("planning"))
+			},
+		)
+
+		// Post-1.0 unchanged-behavior fixture: v1.2.3 + breaking-change
+		// bullet + Claude returns bump=major. The pre-1.0 cap rule does
+		// NOT apply (1.x is post-1.0) so Claude legally returns major.
+		// The spec-060 guard then trips: allowMajorBumpConfig=false
+		// (no .maintainer.yaml), allowMajor=false (per-run override off).
+		// The fixture proves the guard remains intact for post-1.0 — a
+		// future maintainer cannot "helpfully" extend the cap to 1.x
+		// without breaking this test.
+		It(
+			"post-1.0 v1.2.3 + breaking-change bullet + Claude returns major: still trips guard, outcome=needs_input",
+			func() {
+				post1Changelog := []byte(
+					"## Unreleased\n\n" +
+						"- refactor(lib): rename TaskTypeClaude → TaskTypeLLM\n\n" +
+						"## v1.2.3\n\n- old\n",
+				)
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(post1Changelog, nil)
+
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturns(
+					&claudelib.ClaudeResult{
+						Result: `{"bump":"major","reasoning":"BREAKING CHANGE: refactor(lib) renames TaskTypeClaude → TaskTypeLLM"}`,
+					},
+					nil,
+				)
+
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+					false,
+				)
+
+				taskMD := "---\n" +
+					"status: in_progress\n" +
+					"phase: planning\n" +
+					"assignee: github-releaser-agent\n" +
+					"task_type: github-release\n" +
+					"repo: bborbe/post-1-0-lib\n" +
+					"clone_url: https://github.com/bborbe/post-1-0-lib.git\n" +
+					"ref: master\n" +
+					"current_version: v1.2.3\n" +
+					"task_identifier: gh-release-bborbe-post-1-0-001\n" +
+					"---\n\n" +
+					"# release task\n"
+
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Status: NeedsInput (the spec-060 trip contract).
+				Expect(result.Status).To(Equal(agentlib.AgentStatusNeedsInput))
+
+				// ## Plan JSON: outcome + precondition + audit-trail flags.
+				plan, err := agentlib.ExtractSection[pkg.PlanOutput](
+					context.Background(), md, "## Plan",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(plan.Outcome).To(Equal(pkg.PlanOutcomeNeedsInput))
+				Expect(plan.PreconditionFailed).To(Equal(pkg.PreconditionMajorBumpNotAllowed))
+
+				// FROZEN spec-047 frontmatter mutations.
+				gotAssignee, _ := md.Frontmatter.String("assignee")
+				Expect(gotAssignee).To(Equal(""))
+				gotPrevAssignee, _ := md.Frontmatter.String("previous_assignee")
+				Expect(gotPrevAssignee).To(Equal("github-releaser-agent"))
+				gotStatus, _ := md.Frontmatter.String("status")
+				Expect(gotStatus).To(Equal("in_progress"))
+				gotPhase, _ := md.Frontmatter.String("phase")
+				Expect(gotPhase).To(Equal("planning"))
+			},
+		)
+	})
+
+	Context("prompt assembly with current_version (spec 063)", func() {
+		It(
+			"assembled prompt contains ## Current version section before ## Bullets to classify",
+			func() {
+				fakeFetcher := &mocks.Fetcher{}
+				fakeFetcher.FetchReturns(
+					[]byte(
+						"## Unreleased\n\n- refactor: rename /refine-task to /plan-task\n\n## v0.69.0\n\n- old\n",
+					),
+					nil,
+				)
+
+				fakeRunner := &mocks.ClaudeRunnerMock{}
+				fakeRunner.RunReturns(&claudelib.ClaudeResult{
+					Result: `{"bump":"minor","reasoning":"stub"}`,
+				}, nil)
+
+				step := pkg.NewPlanningStep(
+					fakeRunner,
+					fakeFetcher,
+					&mocks.MaintainerConfigFetcher{},
+					false,
+				)
+
+				taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v0.69.0\ntask_identifier: gh-release-bborbe-vault-cli-001\n---\n\n# release task\n"
+
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+				// Inspect the prompt string the runner received.
+				_, promptArg := fakeRunner.RunArgsForCall(0)
+
+				// (a) ## Current version heading present.
+				Expect(promptArg).To(ContainSubstring("## Current version"))
+
+				// (b) The literal version string is in the section body.
+				Expect(promptArg).To(ContainSubstring("v0.69.0"))
+
+				// (c) ## Current version appears BEFORE ## Bullets to classify.
+				currentVersionIdx := strings.Index(promptArg, "## Current version")
+				bulletsIdx := strings.Index(promptArg, "## Bullets to classify")
+				Expect(currentVersionIdx).To(BeNumerically(">=", 0))
+				Expect(bulletsIdx).To(BeNumerically(">=", 0))
+				Expect(currentVersionIdx).To(BeNumerically("<", bulletsIdx))
+
+				// (d) The embedded rules (returned by BumpClassificationPrompt)
+				// appear BEFORE ## Current version. This proves the version
+				// section is sandwiched between the rules and the bullets,
+				// not prepended to the entire prompt.
+				rulesIdx := strings.Index(promptArg, "# Classify the next semantic-version bump")
+				Expect(rulesIdx).To(Equal(0))
+				Expect(currentVersionIdx).To(BeNumerically(">", rulesIdx))
+			},
+		)
+	})
+
 	Describe("PlanningStep", func() {
 		Context("happy path", func() {
 			It("ready path: emits ## Plan with outcome=ready and NextPhase=execution", func() {

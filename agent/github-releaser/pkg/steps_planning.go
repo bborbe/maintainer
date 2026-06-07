@@ -271,6 +271,7 @@ func (s *planningStep) resolveMaintainerConfig(
 func (s *planningStep) resolveBumpVerdict(
 	ctx context.Context,
 	bullets []string,
+	currentVersion string,
 	cachedBump, cachedReasoning string,
 ) (prompts.BumpVerdict, *agentlib.Result) {
 	if cachedBump != "" {
@@ -278,7 +279,9 @@ func (s *planningStep) resolveBumpVerdict(
 		return prompts.BumpVerdict{Bump: cachedBump, Reasoning: cachedReasoning}, nil
 	}
 	userMsg := strings.Join(bullets, "\n")
+	versionSection := "\n\n## Current version\n\n" + currentVersion
 	fullPrompt := prompts.BumpClassificationPrompt() +
+		versionSection +
 		"\n\n## Bullets to classify\n\n" + userMsg
 	runResult, err := s.runner.Run(ctx, fullPrompt)
 	if err != nil {
@@ -314,6 +317,7 @@ func (s *planningStep) runClassification(
 	verdict, result := s.resolveBumpVerdict(
 		ctx,
 		bullets,
+		currentVersion,
 		cachedBump,
 		cachedReasoning,
 	)

@@ -45,6 +45,44 @@ var _ = Describe("BumpClassificationPrompt", func() {
 	})
 })
 
+var _ = Describe("BumpClassificationPrompt pre-1.0 cap (spec 063)", func() {
+	It("names pre-1.0 in the rule text", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("pre-1.0"))
+	})
+
+	It("names the 0.x prefix pattern", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("0."))
+	})
+
+	It("names the v0.x prefix pattern", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("v0."))
+	})
+
+	It("states major is forbidden for pre-1.0", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("MUST NOT return `bump: major`"))
+	})
+
+	It("states minor is the strongest allowed bump", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("strongest allowed bump is `minor`"))
+	})
+
+	It("states reasoning must mention pre-1.0 for audit trail", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("reasoning"))
+		Expect(p).To(ContainSubstring("`pre-1.0`"))
+	})
+
+	It("preserves the major → minor → patch priority order", func() {
+		p := prompts.BumpClassificationPrompt()
+		Expect(p).To(ContainSubstring("major → minor → patch"))
+	})
+})
+
 var _ = DescribeTable("ParseBumpVerdict",
 	func(input, wantBump, wantReasoning, wantErrSubstr string) {
 		verdict, err := prompts.ParseBumpVerdict(context.Background(), input)
@@ -87,6 +125,13 @@ var _ = DescribeTable("ParseBumpVerdict",
 	Entry("prose only no JSON errors",
 		`Claude says: the answer is patch but I am not formatting JSON.`,
 		"", "", "no JSON found"),
+	Entry(
+		"pre-1.0 breaking change capped to minor (spec 063)",
+		`{"bump":"minor","reasoning":"breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)"}`,
+		"minor",
+		"breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)",
+		"",
+	),
 )
 
 var _ = Describe("ChangelogQualityGuide", func() {

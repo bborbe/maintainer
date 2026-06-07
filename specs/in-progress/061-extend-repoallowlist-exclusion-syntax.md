@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-03T17:34:33Z"
 generating: "2026-06-03T17:34:48Z"
 prompted: "2026-06-03T17:50:47Z"
+verifying: "2026-06-06T21:42:45Z"
 branch: dark-factory/extend-repoallowlist-exclusion-syntax
 ---
 
