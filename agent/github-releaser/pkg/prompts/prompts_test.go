@@ -125,9 +125,13 @@ var _ = DescribeTable("ParseBumpVerdict",
 	Entry("prose only no JSON errors",
 		`Claude says: the answer is patch but I am not formatting JSON.`,
 		"", "", "no JSON found"),
-	Entry("pre-1.0 breaking change capped to minor (spec 063)",
+	Entry(
+		"pre-1.0 breaking change capped to minor (spec 063)",
 		`{"bump":"minor","reasoning":"breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)"}`,
-		"minor", "breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)", ""),
+		"minor",
+		"breaking change capped to minor due to pre-1.0 stream (current_version 0.69.0)",
+		"",
+	),
 )
 
 var _ = Describe("ChangelogQualityGuide", func() {

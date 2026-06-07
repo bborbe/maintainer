@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [063-releaser-no-major-bump]
+summary: Added spec 063 pre-1.0 cap behavioral fixtures (vault-cli 0.69.0 happy path + v1.2.3 post-1.0 guard trip) to steps_planning_test.go; both new It cases pass and make precommit exits 0
+container: maintainer-no-major-bump-exec-244-spec-063-fixture-tests
+dark-factory-version: v0.175.0
 created: "2026-06-06T21:46:08Z"
 queued: "2026-06-07T14:26:59Z"
+started: "2026-06-07T14:35:34Z"
+completed: "2026-06-07T14:55:58Z"
 branch: dark-factory/releaser-no-major-bump
 ---
 
