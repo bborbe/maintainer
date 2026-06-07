@@ -38,6 +38,62 @@ func withChangelogRewriteTrue() *mocks.MaintainerConfigFetcher {
 }
 
 var _ = Describe("steps_planning", func() {
+	Context("prompt assembly with current_version (spec 063)", func() {
+		It("assembled prompt contains ## Current version section before ## Bullets to classify", func() {
+			fakeFetcher := &mocks.Fetcher{}
+			fakeFetcher.FetchReturns(
+				[]byte("## Unreleased\n\n- refactor: rename /refine-task to /plan-task\n\n## v0.69.0\n\n- old\n"),
+				nil,
+			)
+
+			fakeRunner := &mocks.ClaudeRunnerMock{}
+			fakeRunner.RunReturns(&claudelib.ClaudeResult{
+				Result: `{"bump":"minor","reasoning":"stub"}`,
+			}, nil)
+
+			step := pkg.NewPlanningStep(
+				fakeRunner,
+				fakeFetcher,
+				&mocks.MaintainerConfigFetcher{},
+				false,
+			)
+
+			taskMD := "---\nstatus: in_progress\nphase: planning\nassignee: github-releaser-agent\ntask_type: github-release\nrepo: bborbe/maintainer\nclone_url: https://github.com/bborbe/maintainer.git\nref: master\ncurrent_version: v0.69.0\ntask_identifier: gh-release-bborbe-vault-cli-001\n---\n\n# release task\n"
+
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = step.Run(context.Background(), md)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeRunner.RunCallCount()).To(Equal(1))
+
+			// Inspect the prompt string the runner received.
+			_, promptArg := fakeRunner.RunArgsForCall(0)
+
+			// (a) ## Current version heading present.
+			Expect(promptArg).To(ContainSubstring("## Current version"))
+
+			// (b) The literal version string is in the section body.
+			Expect(promptArg).To(ContainSubstring("v0.69.0"))
+
+			// (c) ## Current version appears BEFORE ## Bullets to classify.
+			currentVersionIdx := strings.Index(promptArg, "## Current version")
+			bulletsIdx := strings.Index(promptArg, "## Bullets to classify")
+			Expect(currentVersionIdx).To(BeNumerically(">=", 0))
+			Expect(bulletsIdx).To(BeNumerically(">=", 0))
+			Expect(currentVersionIdx).To(BeNumerically("<", bulletsIdx))
+
+			// (d) The embedded rules (returned by BumpClassificationPrompt)
+			// appear BEFORE ## Current version. This proves the version
+			// section is sandwiched between the rules and the bullets,
+			// not prepended to the entire prompt.
+			rulesIdx := strings.Index(promptArg, "# Classify the next semantic-version bump")
+			Expect(rulesIdx).To(Equal(0))
+			Expect(currentVersionIdx).To(BeNumerically(">", rulesIdx))
+		})
+	})
+
 	Describe("PlanningStep", func() {
 		Context("happy path", func() {
 			It("ready path: emits ## Plan with outcome=ready and NextPhase=execution", func() {

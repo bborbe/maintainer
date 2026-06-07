@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [063-releaser-no-major-bump]
+summary: 'Plumbed currentVersion through resolveBumpVerdict and added ## Current version section to bump-classification prompt; added Ginkgo test asserting heading presence and ordering; all 125 specs pass.'
+container: maintainer-no-major-bump-exec-243-spec-063-inject-current-version
+dark-factory-version: v0.175.0
 created: "2026-06-06T21:46:08Z"
 queued: "2026-06-07T14:26:58Z"
+started: "2026-06-07T14:31:21Z"
+completed: "2026-06-07T14:35:33Z"
 branch: dark-factory/releaser-no-major-bump
 ---
 
