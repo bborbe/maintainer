@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.35.0
 
 - feat(agent/github-releaser): teach the bump classifier about the pre-1.0 cap — pre-1.0 projects (current_version starting with `0.` or `v0.`) now have `major` capped at `minor`; the LLM records the downgrade in its `reasoning` string. Post-1.0 behavior is unchanged. The Go `applyMajorBumpGuard` stays as the durable safety net (spec 063)
 
