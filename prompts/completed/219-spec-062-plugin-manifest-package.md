@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["062"]
+spec: [062-plugin-version-bump]
 container: maintainer-plugin-version-bump-exec-219-spec-056-plugin-manifest-package
 dark-factory-version: v0.173.0
 created: "2026-06-01T00:00:00Z"

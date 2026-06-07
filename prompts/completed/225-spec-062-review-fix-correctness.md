@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["062"]
+spec: [062-plugin-version-bump]
 summary: Applied five correctness and code-quality fixes to spec-056 github-releaser implementation
 container: maintainer-plugin-version-bump-exec-225-spec-056-review-fix-correctness
 dark-factory-version: v0.173.0
