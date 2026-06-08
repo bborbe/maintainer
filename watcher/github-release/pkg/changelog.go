@@ -20,8 +20,8 @@ import (
 //     placement for that operator feedback)
 //   - LatestVersion → Release.CurrentVersion (semver base for next bump)
 type ChangelogSummary struct {
-	UnreleasedBullets int    // count of "^- " lines under "## Unreleased"
-	UnreleasedIsFirst bool   // true if "## Unreleased" is the first "## " heading
+	UnreleasedBullets int    // count of "^- " lines under the first non-version "## " heading
+	UnreleasedIsFirst bool   // true if the first non-version "## " heading is the first "## " heading overall
 	LatestVersion     string // first "## vX.Y.Z" or "## X.Y.Z" header found; "" if none
 }
 
@@ -38,9 +38,13 @@ func isVersionHeader(heading string) (string, bool) {
 // ParseChangelog parses a CHANGELOG.md byte slice into a ChangelogSummary.
 //
 // Behaviour:
-//   - Counts "^- " bullet lines directly under "## Unreleased" until next "## " heading
-//   - Determines whether "## Unreleased" is the first "## " heading (preamble lines like
-//     "# Changelog" don't count — only "## " level)
+//   - Counts "^- " bullet lines directly under the first non-version "## " heading
+//     (the unreleased section) until the next "## " heading
+//   - The unreleased section is detected structurally: the first "## " heading that
+//     is NOT a version header (## X.Y.Z or ## vX.Y.Z) is treated as unreleased. This
+//     accepts the literal "## Unreleased" plus common author variants such as
+//     "## unreleased", "## Unreleased changes", "## WIP", and "## Next"
+//   - Determines whether the unreleased section is the first "## " heading
 //   - Extracts the first "## X.Y.Z" or "## vX.Y.Z" heading as LatestVersion
 //
 // Implementation reference: the /github-unreleased-repo-watcher slash command (Phase 1
@@ -53,6 +57,7 @@ func ParseChangelog(content []byte) ChangelogSummary {
 
 	var inUnreleased bool
 	var seenAnyH2 bool
+	var unreleasedOpened bool
 	var unreleasedIsFirstH2 bool
 	var unreleasedBullets int
 	var latestVersion string
@@ -69,24 +74,32 @@ func ParseChangelog(content []byte) ChangelogSummary {
 			continue
 		}
 
-		// H2 heading
+		// H2 heading — classify structurally: version-header OR unreleased.
 		heading := strings.TrimRight(line, " \t")
-		if heading == "## Unreleased" {
-			if !seenAnyH2 {
+		isFirstH2 := !seenAnyH2 // snapshot BEFORE setting seenAnyH2
+		seenAnyH2 = true
+		if v, ok := isVersionHeader(heading); ok {
+			if latestVersion == "" {
+				latestVersion = v
+			}
+			inUnreleased = false
+			continue
+		}
+		// Non-version H2 → only the FIRST non-version H2 opens the unreleased section.
+		// A later non-version heading (e.g. "## Next" after "## Unreleased") transitions
+		// the parser out of unreleased state so its bullets do not double-count
+		// (spec § Failure Modes row 4). Version headings do NOT consume the
+		// first-non-version slot: a "## WIP" that appears after one or more version
+		// headings still opens the unreleased section and its bullets ARE counted
+		// (see test fixtureVersionThenWIPBullets — load-bearing, not a quirk).
+		if !unreleasedOpened {
+			if isFirstH2 {
 				unreleasedIsFirstH2 = true
 			}
 			inUnreleased = true
-			seenAnyH2 = true
-			continue
-		}
-
-		// Other heading
-		inUnreleased = false
-		seenAnyH2 = true
-		if latestVersion == "" {
-			if v, ok := isVersionHeader(heading); ok {
-				latestVersion = v
-			}
+			unreleasedOpened = true
+		} else {
+			inUnreleased = false
 		}
 	}
 

@@ -115,4 +115,170 @@ Intro paragraph
 		Expect(summary.UnreleasedIsFirst).To(Equal(true))
 		Expect(summary.LatestVersion).To(Equal("v1.0.0"))
 	})
+
+	DescribeTable(
+		"lenient unreleased detection (spec 064)",
+		func(content string, w want) {
+			summary := pkg.ParseChangelog([]byte(content))
+			Expect(summary.UnreleasedBullets).To(Equal(w.Bullets))
+			Expect(summary.UnreleasedIsFirst).To(Equal(w.IsFirst))
+			Expect(summary.LatestVersion).To(Equal(w.Latest))
+		},
+		Entry(
+			"literal_Unreleased",
+			fixtureLiteral,
+			want{Bullets: 1, IsFirst: true, Latest: "v1.2.3"},
+		),
+		Entry(
+			"lowercase_unreleased",
+			fixtureLowercase,
+			want{Bullets: 2, IsFirst: true, Latest: "v1.2.3"},
+		),
+		Entry(
+			"extended_Unreleased_changes",
+			fixtureExtended,
+			want{Bullets: 1, IsFirst: true, Latest: "v1.2.3"},
+		),
+		Entry("WIP_heading", fixtureWIP, want{Bullets: 2, IsFirst: true, Latest: "v1.2.3"}),
+		Entry(
+			"version_header_first_no_unreleased",
+			fixtureVersionFirst,
+			want{Bullets: 0, IsFirst: false, Latest: "v0.35.0"},
+		),
+		Entry(
+			"empty_unreleased_section",
+			fixtureEmpty,
+			want{Bullets: 0, IsFirst: true, Latest: "v0.35.0"},
+		),
+		Entry(
+			"trailing_whitespace_heading",
+			fixtureTrailingWS,
+			want{Bullets: 1, IsFirst: true, Latest: "v1.2.3"},
+		),
+		Entry(
+			"version_header_first_then_wip",
+			fixtureVersionThenWIP,
+			want{Bullets: 0, IsFirst: false, Latest: "v0.35.0"},
+		),
+		Entry(
+			"version_first_then_wip_with_bullets",
+			fixtureVersionThenWIPBullets,
+			want{Bullets: 2, IsFirst: false, Latest: "v0.35.0"},
+		),
+		Entry(
+			"second_non_version_h2_after_unreleased",
+			fixtureUnreleasedThenNext,
+			want{Bullets: 1, IsFirst: true, Latest: ""},
+		),
+	)
 })
+
+type want struct {
+	Bullets int
+	IsFirst bool
+	Latest  string
+}
+
+const (
+	fixtureLiteral = `# Changelog
+
+## Unreleased
+
+- new entry
+
+## v1.2.3
+
+- old
+`
+
+	fixtureLowercase = `# Changelog
+
+## unreleased
+
+- entry one
+- entry two
+
+## v1.2.3
+`
+
+	fixtureExtended = `# Changelog
+
+## Unreleased changes
+
+- one
+
+## v1.2.3
+`
+
+	fixtureWIP = `# Changelog
+
+## WIP
+
+- alpha
+- beta
+
+## v1.2.3
+`
+
+	fixtureVersionFirst = `# Changelog
+
+## v0.35.0
+
+- shipped
+`
+
+	fixtureEmpty = `# Changelog
+
+## WIP
+
+## v0.35.0
+
+- shipped
+`
+
+	fixtureTrailingWS = "# Changelog\n\n## WIP\t\n\n- one\n\n## v1.2.3\n"
+
+	fixtureVersionThenWIP = `# Changelog
+
+## v0.35.0
+
+- shipped
+
+## WIP
+
+## v1.0.0
+
+- next
+`
+
+	// fixtureVersionThenWIPBullets: WIP after v0.35.0 IS the first non-version H2,
+	// so its bullets ARE counted (lenient detection). The trailing v1.0.0 does not
+	// displace v0.35.0 as LatestVersion (first version wins).
+	fixtureVersionThenWIPBullets = `# Changelog
+
+## v0.35.0
+
+- shipped
+
+## WIP
+
+- first-wip-bullet
+- second-wip-bullet
+
+## v1.0.0
+
+- next
+`
+
+	fixtureUnreleasedThenNext = `# Changelog
+
+## Unreleased
+
+- real entry
+
+## Next
+
+- should-not-count
+- nor-this
+`
+)
