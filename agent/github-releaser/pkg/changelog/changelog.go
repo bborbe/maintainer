@@ -19,12 +19,28 @@ import (
 	bborbeerrors "github.com/bborbe/errors"
 )
 
-// Package-level compiled regexes for InferHeaderPrefixStyle.
-// These are read-only and deterministic, preserving the pure-function contract.
+// Package-level compiled regexes for InferHeaderPrefixStyle and the lenient
+// version-header detection rule used by the unreleased-section parser. These
+// are read-only and deterministic, preserving the pure-function contract.
+//
+// versionHeaderRe matches "X.Y.Z" or "vX.Y.Z" only — it does NOT accept
+// extended text such as "Unreleased changes" or "WIP". The parser treats the
+// first ## heading that does NOT match this pattern as the unreleased
+// section (spec 065; parity with watcher/github-release/pkg/changelog.go).
 var (
-	vPrefixRE  = regexp.MustCompile(`^v[0-9]+\.`)
-	noPrefixRE = regexp.MustCompile(`^[0-9]+\.`)
+	vPrefixRE       = regexp.MustCompile(`^v[0-9]+\.`)
+	noPrefixRE      = regexp.MustCompile(`^[0-9]+\.`)
+	versionHeaderRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
 )
+
+// isVersionHeader reports whether headingText (the text after "## ") matches
+// the version-header pattern "X.Y.Z" or "vX.Y.Z". Used by the lenient
+// unreleased-section detection rule to distinguish release headings from
+// the unreleased section. Trailing whitespace is already stripped by
+// parseHeading, so the regex runs against the cleaned text.
+func isVersionHeader(headingText string) bool {
+	return versionHeaderRe.MatchString(headingText)
+}
 
 // ValidateUnreleased checks whether the CHANGELOG content is in a releaseable state.
 // It returns (valid, reason, line) where valid is true if the Unreleased section exists
@@ -43,7 +59,11 @@ func ValidateUnreleased(content []byte) (valid bool, reason string, line int) {
 	}
 
 	if unreleasedLine == 0 {
-		return false, "Unreleased section not found.", 0
+		return false, fmt.Sprintf(
+			"Unreleased is not the first ## section; found '%s' at line %d. Move ## Unreleased above all release headings.",
+			firstHeading.text,
+			firstHeading.line,
+		), firstHeading.line
 	}
 
 	if firstHeading.line != unreleasedLine {
@@ -70,8 +90,17 @@ type heading struct {
 	text string
 }
 
-// findFirstAndUnreleased scans the content and returns the first ## heading
-// and the line number of the ## Unreleased heading (0 if not found).
+// findFirstAndUnreleased scans the content and returns the FIRST ## heading
+// (firstHeading) plus the line of the first ## heading that is NOT a version
+// header (unreleasedLine). When the first ## heading is a non-version header
+// (i.e. the lenient rule classifies it as the unreleased section),
+// firstHeading.line == unreleasedLine and the "version header first" branch
+// of ValidateUnreleased is skipped. When the first ## heading IS a version
+// header, unreleasedLine is 0 unless a later ## heading is non-version.
+//
+// The lenient "first non-version H2" rule accepts ## Unreleased, ## unreleased,
+// ## Unreleased changes, ## WIP, ## Next, and similar author variants. The
+// pattern is mirrored from watcher/github-release/pkg/changelog.go.
 func findFirstAndUnreleased(scanner *bufio.Scanner) (*heading, int) {
 	var firstHeading *heading
 	unreleasedLine := 0
@@ -91,7 +120,7 @@ func findFirstAndUnreleased(scanner *bufio.Scanner) (*heading, int) {
 			firstHeading = &heading{line: lineNum, text: headingText}
 		}
 
-		if headingText == "Unreleased" {
+		if !isVersionHeader(headingText) {
 			unreleasedLine = lineNum
 			break
 		}
@@ -139,10 +168,11 @@ func isBullet(line string) bool {
 }
 
 // ExtractUnreleasedBullets returns the bullet entries from the ## Unreleased section.
-// It locates the first ## Unreleased heading and returns all lines starting with "- "
-// until the next ## heading or EOF.
-// Returns nil if no ## Unreleased section exists.
-// Returns a non-nil empty slice if ## Unreleased exists but contains no bullets.
+// It locates the first non-version "## " heading (lenient rule: matches ## Unreleased,
+// ## unreleased, ## Unreleased changes, ## WIP, ## Next, etc.) and returns all lines
+// starting with "- " until the next ## heading or EOF.
+// Returns nil if no non-version ## heading exists.
+// Returns a non-nil empty slice if a non-version ## heading exists but contains no bullets.
 func ExtractUnreleasedBullets(content []byte) []string {
 	if len(content) == 0 {
 		return nil
@@ -153,7 +183,7 @@ func ExtractUnreleasedBullets(content []byte) []string {
 	lineNum := 0
 	inUnreleased := false
 
-	// Find the first ## Unreleased heading
+	// Find the first non-version ## heading (the lenient unreleased section).
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
@@ -162,7 +192,7 @@ func ExtractUnreleasedBullets(content []byte) []string {
 			headingText := line[3:] // Strip "## "
 			headingText = trimTrailingWhitespace(headingText)
 
-			if headingText == "Unreleased" {
+			if !isVersionHeader(headingText) {
 				inUnreleased = true
 				break
 			}
@@ -195,10 +225,13 @@ func ExtractUnreleasedBullets(content []byte) []string {
 	return result
 }
 
-// InferHeaderPrefixStyle examines the first historic release heading (the first ## heading
-// that is not "Unreleased") and returns the prefix style used.
-// Returns "v" if the heading matches "vX.Y.Z" format, "" if it matches "X.Y.Z" format,
-// and "v" as a default if no historic release heading exists.
+// InferHeaderPrefixStyle examines the first historic release heading (the first
+// ## heading that is not the lenient-detected unreleased section) and returns
+// the prefix style used. The lenient rule (spec 065) classifies ANY non-version
+// ## heading — ## Unreleased, ## WIP, ## Next, etc. — as the unreleased section
+// to skip, then infers the prefix style from the first version-header ## heading.
+// Returns "v" if the heading matches "vX.Y.Z" format, "" if it matches "X.Y.Z"
+// format, and "v" as a default if no historic release heading exists.
 func InferHeaderPrefixStyle(content []byte) string {
 	if len(content) == 0 {
 		return "v"
@@ -213,8 +246,9 @@ func InferHeaderPrefixStyle(content []byte) string {
 			headingText := line[3:] // Strip "## "
 			headingText = trimTrailingWhitespace(headingText)
 
-			// Skip Unreleased
-			if headingText == "Unreleased" {
+			// Skip the lenient-detected unreleased section: any ## heading
+			// that is not a version header.
+			if !isVersionHeader(headingText) {
 				continue
 			}
 
@@ -242,24 +276,67 @@ func trimTrailingWhitespace(s string) string {
 	return s[:end]
 }
 
-// ExtractUnreleasedBody returns the verbatim body of the ## Unreleased
-// section: every line after the `## Unreleased` heading up to (but
-// excluding) the next `## ` heading or EOF. Line endings are normalized
-// to '\n' between emitted lines (matching the RewriteUnreleasedHeader
-// line-ending convention). Leading and trailing blank lines are NOT
-// trimmed — the returned string is the raw slice of the section.
+// ExtractUnreleasedBody returns the verbatim body of the lenient-detected
+// unreleased section (spec 065): every line after the first non-version "## "
+// heading up to (but excluding) the next "## " heading or EOF. Line endings
+// are normalized to '\n' between emitted lines (matching the
+// RewriteUnreleasedHeader line-ending convention). Leading and trailing blank
+// lines are NOT trimmed — the returned string is the raw slice of the section.
 //
-// Returns a wrapped bborbe/errors error if ## Unreleased is not present.
-// The ctx parameter is used only for error wrapping consistency.
-// No IO, deterministic. Safe for concurrent use.
+// The lenient rule accepts ## Unreleased plus author variants such as
+// ## unreleased, ## Unreleased changes, ## WIP, ## Next.
 //
-// Thin wrapper around ExtractSectionBody with the heading pinned to
-// "Unreleased". Both functions share the unexported scan loop.
+// Returns a wrapped bborbe/errors error if no non-version "## " heading is
+// present. The error message uses the literal phrase "unreleased header not
+// found" (lowercase) so the ErrorCategoryUnreleasedNotFound classifier in
+// git/error_classifier.go continues to match. The ctx parameter is used only
+// for error wrapping consistency. No IO, deterministic. Safe for concurrent
+// use.
+//
+// Distinct from ExtractSectionBody (which retains exact-match semantics for
+// version-heading lookups in steps_ai_review.go:463). The lenient logic is
+// applied in this wrapper only.
 func ExtractUnreleasedBody(
 	ctx context.Context,
 	content []byte,
 ) (string, error) {
-	return ExtractSectionBody(ctx, content, "Unreleased")
+	if len(content) == 0 {
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower("unreleased"),
+		)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+
+	found := false
+	var out bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !found {
+			if isHeading(line) && !isVersionHeader(parseHeading(line)) {
+				found = true
+			}
+			continue
+		}
+		if isHeading(line) {
+			break
+		}
+		out.WriteString(line)
+		out.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		return "", bborbeerrors.Wrap(ctx, err, "scan CHANGELOG content")
+	}
+	if !found {
+		return "", bborbeerrors.Errorf(
+			ctx,
+			"%s header not found",
+			strings.ToLower("unreleased"),
+		)
+	}
+	return out.String(), nil
 }
 
 // ExtractSectionBody returns the verbatim body of the first section
@@ -323,18 +400,23 @@ func ExtractSectionBody(
 	return out.String(), nil
 }
 
-// ReplaceUnreleasedBody returns content with the body of the "## Unreleased"
-// section replaced by newBody. The "## Unreleased" heading line itself is
-// preserved; only the lines AFTER it (and BEFORE the next "## " heading or
-// EOF) are swapped. Text before the heading and text starting at the next
-// "## " heading is preserved verbatim.
+// ReplaceUnreleasedBody returns content with the body of the lenient-detected
+// unreleased section replaced by newBody. The lenient rule (spec 065) treats
+// the first "## " heading that is not a version header as the unreleased
+// section; the heading line itself is preserved VERBATIM (input "## WIP"
+// stays "## WIP" on disk). Only the lines AFTER it (and BEFORE the next
+// "## " heading or EOF) are swapped. Text before the heading and text
+// starting at the next "## " heading is preserved verbatim.
 //
 // newBody is inserted as-is. If it does not end with '\n', a single '\n' is
 // appended before the next heading line so the inserted body is followed
 // by the original separator. Line endings are normalized to '\n' on output.
 //
-// Returns a wrapped bborbe/errors error if "## Unreleased" is not present.
-// The caller (execution step) maps this to error_category: unreleased_not_found.
+// Returns a wrapped bborbe/errors error if no non-version "## " heading is
+// present. The error message uses the literal phrase "unreleased header not
+// found" (lowercase) so the ErrorCategoryUnreleasedNotFound classifier in
+// git/error_classifier.go continues to match. The caller (execution step)
+// maps this to error_category: unreleased_not_found.
 //
 // The ctx parameter is used only for error wrapping consistency.
 // No IO, deterministic. Safe for concurrent use.
@@ -362,7 +444,7 @@ func ReplaceUnreleasedBody(
 		line := scanner.Text()
 		switch state {
 		case 0:
-			if isHeading(line) && parseHeading(line) == "Unreleased" {
+			if isHeading(line) && !isVersionHeader(parseHeading(line)) {
 				out.WriteString(line)
 				out.WriteByte('\n')
 				out.WriteString(newBody)
@@ -407,21 +489,30 @@ func ReplaceUnreleasedBody(
 	return result, nil
 }
 
-// RewriteUnreleasedHeader returns content with the "## Unreleased" line
-// replaced by newHeader (e.g. "## v1.2.8"). Whitespace-tolerant: trailing
-// spaces/tabs/CR on the Unreleased heading are accepted and discarded along
-// with the original line. All other lines (bullets, blank lines, other
-// headings) are preserved verbatim, including their original line endings.
+// RewriteUnreleasedHeader returns content with the lenient-detected
+// unreleased heading line replaced by newHeader (e.g. "## v1.2.8"). The
+// lenient rule (spec 065) matches the first "## " heading that is NOT a
+// version header; the rewrite step is what canonicalizes the on-disk
+// heading, so input "## unreleased" / "## WIP" / "## Next" all become
+// "## vX.Y.Z" regardless of the input variant ("lenient on input,
+// canonical on output"). Whitespace-tolerant: trailing spaces/tabs/CR on
+// the unreleased heading are accepted and discarded along with the
+// original line. All other lines (bullets, blank lines, other headings)
+// are preserved verbatim, including their original line endings.
 //
 // Line endings are normalized to `\n` on rewrite.
 //
 // newHeader is inserted as-is. The caller is responsible for the leading
 // "## " prefix and any trailing newline normalization is left to the
 // existing content's line-ending convention (the function preserves the
-// newline that followed the original "## Unreleased" line, if any).
+// newline that followed the original lenient-detected heading line, if
+// any).
 //
-// Returns a wrapped bborbe/errors error if "## Unreleased" is not present.
-// The caller (execution step) maps this to error_category: unreleased_not_found.
+// Returns a wrapped bborbe/errors error if no non-version "## " heading is
+// present. The error message uses the literal phrase "unreleased header not
+// found" (lowercase) so the ErrorCategoryUnreleasedNotFound classifier in
+// git/error_classifier.go continues to match. The caller (execution step)
+// maps this to error_category: unreleased_not_found.
 //
 // The ctx parameter is used only for error wrapping consistency.
 // No IO, deterministic. Safe for concurrent use.
@@ -444,7 +535,7 @@ func RewriteUnreleasedHeader(
 	found := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !found && isHeading(line) && parseHeading(line) == "Unreleased" {
+		if !found && isHeading(line) && !isVersionHeader(parseHeading(line)) {
 			out.WriteString(newHeader)
 			out.WriteByte('\n')
 			found = true

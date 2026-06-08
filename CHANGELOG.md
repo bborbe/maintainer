@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- fix(agent/github-releaser): lenient unreleased-section detection — the changelog parser now treats the first H2 that is not a version header (`vX.Y.Z` / `X.Y.Z`) as the unreleased section, so `## unreleased`, `## Unreleased changes`, `## WIP`, `## Next`, and similar author variants release correctly. Mirrors the watcher lenient rule from spec 064 so end-to-end release behavior is identical. The on-disk heading is still canonicalized to `## vX.Y.Z` by `RewriteUnreleasedHeader` (lenient on input, canonical on output). `ExtractSectionBody` retains exact-match semantics for version-string lookups used by `steps_ai_review.go` (spec 065)
+
 ## v0.35.1
 
 - fix(watcher/github-release): lenient unreleased-section detection — the first H2 that is not a version header (vX.Y.Z / X.Y.Z) is now treated as the unreleased section, so "## unreleased", "## Unreleased changes", "## WIP", and similar variants release correctly instead of silently producing no task (spec 064)
