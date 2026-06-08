@@ -88,10 +88,10 @@ func ParseChangelog(content []byte) ChangelogSummary {
 		// Non-version H2 → only the FIRST non-version H2 opens the unreleased section.
 		// A later non-version heading (e.g. "## Next" after "## Unreleased") transitions
 		// the parser out of unreleased state so its bullets do not double-count
-		// (spec § Failure Modes row 4). The "first non-version wins" rule still allows
-		// a "## Unreleased" placed at the BOTTOM of the changelog after version
-		// headings to open unreleased — versions do not consume the first-non-version
-		// slot.
+		// (spec § Failure Modes row 4). Version headings do NOT consume the
+		// first-non-version slot: a "## WIP" that appears after one or more version
+		// headings still opens the unreleased section and its bullets ARE counted
+		// (see test fixtureVersionThenWIPBullets — load-bearing, not a quirk).
 		if !unreleasedOpened {
 			if isFirstH2 {
 				unreleasedIsFirstH2 = true

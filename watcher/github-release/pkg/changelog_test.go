@@ -251,6 +251,9 @@ const (
 - next
 `
 
+	// fixtureVersionThenWIPBullets: WIP after v0.35.0 IS the first non-version H2,
+	// so its bullets ARE counted (lenient detection). The trailing v1.0.0 does not
+	// displace v0.35.0 as LatestVersion (first version wins).
 	fixtureVersionThenWIPBullets = `# Changelog
 
 ## v0.35.0
@@ -259,8 +262,8 @@ const (
 
 ## WIP
 
-- accidental
-- should-not-count
+- first-wip-bullet
+- second-wip-bullet
 
 ## v1.0.0
 
