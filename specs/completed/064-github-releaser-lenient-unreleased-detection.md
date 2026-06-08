@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-06-08T09:34:12Z"
 generating: "2026-06-08T09:36:26Z"
 prompted: "2026-06-08T09:48:06Z"
 verifying: "2026-06-08T10:11:41Z"
+completed: "2026-06-08T14:08:25Z"
 branch: dark-factory/github-releaser-lenient-unreleased-detection
 ---
 
@@ -103,3 +104,16 @@ Expected:
 ## Do-Nothing Option
 
 Leave the literal match in place. The release pipeline continues to silently fail whenever an author varies the heading. Each failure costs operator attention to diagnose (no release, no log line). The cost of the fix is one function change plus tests; the cost of the do-nothing is recurring silent breakage. Not acceptable.
+
+## Verification Result
+
+**Verified:** 2026-06-08T13:55:33Z (HEAD 5be2a11)
+**Binary:** /Users/bborbe/Documents/workspaces/go/bin/dark-factory (v0.175.0)
+**Scenario:** Re-ran `## Verification` block from spec against HEAD: `make precommit` in `watcher/github-release/`, Ginkgo focus on "spec 064", literal-removal grep, CHANGELOG bullet provenance via merge commit.
+**Evidence:**
+- `cd watcher/github-release && make precommit` exits 0; coverage 82.5%.
+- `go test ./pkg -v -ginkgo.focus="spec 064"` runs 10 of 72 specs, all PASS — includes all 7 AC-named cases (`literal_Unreleased`, `lowercase_unreleased`, `extended_Unreleased_changes`, `WIP_heading`, `version_header_first_no_unreleased`, `empty_unreleased_section`, `trailing_whitespace_heading`) plus `version_header_first_then_wip`, `version_first_then_wip_with_bullets`, `second_non_version_h2_after_unreleased`.
+- `grep -n 'heading == "## Unreleased"' watcher/github-release/pkg/changelog.go` returns no match (exit 1) — literal removed.
+- `git show 189a76d:CHANGELOG.md` shows the `## Unreleased` bullet at merge time; bullet text persists at line 13 of HEAD CHANGELOG.md under `## v0.35.1` after auto-release `5be2a11`.
+- Rung 3 production proof: github-releaser autonomously cut v0.35.1 from the literal `## Unreleased` bullet introduced by PR #47 — daemon-of-self auto-release. Lenient-branch live-fire in prod awaits a future bborbe-repo PR with a typo'd heading; spec § Verification Rungs explicitly accepted the auto-release-of-self as the production proof.
+**Verdict:** PASS
