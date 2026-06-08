@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-08T09:34:12Z"
 generating: "2026-06-08T09:36:26Z"
 prompted: "2026-06-08T09:48:06Z"
+verifying: "2026-06-08T10:11:41Z"
 branch: dark-factory/github-releaser-lenient-unreleased-detection
 ---
 

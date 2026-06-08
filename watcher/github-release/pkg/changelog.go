@@ -20,8 +20,8 @@ import (
 //     placement for that operator feedback)
 //   - LatestVersion → Release.CurrentVersion (semver base for next bump)
 type ChangelogSummary struct {
-	UnreleasedBullets int    // count of "^- " lines under "## Unreleased"
-	UnreleasedIsFirst bool   // true if "## Unreleased" is the first "## " heading
+	UnreleasedBullets int    // count of "^- " lines under the first non-version "## " heading
+	UnreleasedIsFirst bool   // true if the first non-version "## " heading is the first "## " heading overall
 	LatestVersion     string // first "## vX.Y.Z" or "## X.Y.Z" header found; "" if none
 }
 
@@ -57,6 +57,7 @@ func ParseChangelog(content []byte) ChangelogSummary {
 
 	var inUnreleased bool
 	var seenAnyH2 bool
+	var unreleasedOpened bool
 	var unreleasedIsFirstH2 bool
 	var unreleasedBullets int
 	var latestVersion string
@@ -84,11 +85,22 @@ func ParseChangelog(content []byte) ChangelogSummary {
 			inUnreleased = false
 			continue
 		}
-		// Non-version H2 → unreleased section (lenient: any phrase counts).
-		if isFirstH2 {
-			unreleasedIsFirstH2 = true
+		// Non-version H2 → only the FIRST non-version H2 opens the unreleased section.
+		// A later non-version heading (e.g. "## Next" after "## Unreleased") transitions
+		// the parser out of unreleased state so its bullets do not double-count
+		// (spec § Failure Modes row 4). The "first non-version wins" rule still allows
+		// a "## Unreleased" placed at the BOTTOM of the changelog after version
+		// headings to open unreleased — versions do not consume the first-non-version
+		// slot.
+		if !unreleasedOpened {
+			if isFirstH2 {
+				unreleasedIsFirstH2 = true
+			}
+			inUnreleased = true
+			unreleasedOpened = true
+		} else {
+			inUnreleased = false
 		}
-		inUnreleased = true
 	}
 
 	return ChangelogSummary{

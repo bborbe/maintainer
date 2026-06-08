@@ -160,6 +160,16 @@ Intro paragraph
 			fixtureVersionThenWIP,
 			want{Bullets: 0, IsFirst: false, Latest: "v0.35.0"},
 		),
+		Entry(
+			"version_first_then_wip_with_bullets",
+			fixtureVersionThenWIPBullets,
+			want{Bullets: 2, IsFirst: false, Latest: "v0.35.0"},
+		),
+		Entry(
+			"second_non_version_h2_after_unreleased",
+			fixtureUnreleasedThenNext,
+			want{Bullets: 1, IsFirst: true, Latest: ""},
+		),
 	)
 })
 
@@ -239,5 +249,33 @@ const (
 ## v1.0.0
 
 - next
+`
+
+	fixtureVersionThenWIPBullets = `# Changelog
+
+## v0.35.0
+
+- shipped
+
+## WIP
+
+- accidental
+- should-not-count
+
+## v1.0.0
+
+- next
+`
+
+	fixtureUnreleasedThenNext = `# Changelog
+
+## Unreleased
+
+- real entry
+
+## Next
+
+- should-not-count
+- nor-this
 `
 )
