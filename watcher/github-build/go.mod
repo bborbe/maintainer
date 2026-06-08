@@ -2,7 +2,9 @@ module github.com/bborbe/maintainer/watcher/github-build
 
 go 1.26.4
 
-replace github.com/bborbe/maintainer/lib => ../../lib
+replace (
+	github.com/bborbe/maintainer/lib => ../../lib
+)
 
 require (
 	github.com/bborbe/agent/lib v0.65.0
