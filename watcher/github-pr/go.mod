@@ -2,9 +2,7 @@ module github.com/bborbe/maintainer/watcher/github-pr
 
 go 1.26.4
 
-replace (
-	github.com/bborbe/maintainer/lib => ../../lib
-)
+replace github.com/bborbe/maintainer/lib => ../../lib
 
 require (
 	github.com/bborbe/agent/lib v0.65.0
@@ -18,6 +16,7 @@ require (
 	github.com/bborbe/sentry v1.9.18
 	github.com/bborbe/service v1.10.0
 	github.com/bborbe/time v1.27.1
+	github.com/bborbe/validation v1.4.14
 	github.com/golang/glog v1.2.5
 	github.com/google/go-github/v62 v62.0.0
 	github.com/google/uuid v1.6.0
@@ -37,7 +36,6 @@ require (
 	github.com/bborbe/math v1.3.11 // indirect
 	github.com/bborbe/parse v1.10.13 // indirect
 	github.com/bborbe/strimzi v1.8.5 // indirect
-	github.com/bborbe/validation v1.4.14 // indirect
 	github.com/bborbe/vault-cli v0.68.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0 // indirect
