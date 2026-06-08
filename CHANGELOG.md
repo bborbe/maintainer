@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## unreleased
+## v0.36.0
 
 - feat(lib): add `CDBSchemaIDs` registry with `GithubPRReviewV1SchemaID` (`maintainer/githubprreview/v1`) and `GithubReleaserV1SchemaID` (`maintainer/githubreleaser/v1`) — first maintainer-owned CQRS schemas. Aggregate slice is consumed by `trading/strimzi/topic-controller/pkg/topics.go` (separate PR) to provision the matching Kafka topics. Adds `github.com/bborbe/cqrs v0.5.3` dep. No behavior change yet — schema definitions only; commands + senders + handlers follow in sibling PRs.
 
