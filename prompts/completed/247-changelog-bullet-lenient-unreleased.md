@@ -1,9 +1,14 @@
 ---
-status: approved
+status: failed
 spec: [065-github-releaser-agent-lenient-unreleased]
+container: maintainer-agent-lenient-exec-247-changelog-bullet-lenient-unreleased
+dark-factory-version: v0.175.0
 created: "2026-06-08T15:09:00Z"
 queued: "2026-06-08T15:37:26Z"
+started: "2026-06-08T15:52:10Z"
+completed: "2026-06-08T15:53:47Z"
 branch: dark-factory/github-releaser-agent-lenient-unreleased
+lastFailReason: 'validate completion report: completion report status: partial'
 ---
 
 <summary>

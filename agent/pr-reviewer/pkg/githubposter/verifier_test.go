@@ -120,48 +120,39 @@ var _ = Describe("ReviewVerifier", func() {
 		})
 	})
 
-	Context(
-		"verifier hard-excludes COMMENTED even when caller's allow-list includes it (spec 060)",
-		func() {
-			It(
-				"returns Found:false — verifier's internal exclusion overrides ExpectedStates",
-				func() {
-					// Even though the caller passes ExpectedStates=["COMMENTED"], the verifier's
-					// internal hard-exclusion (findReview skips COMMENTED) means a COMMENTED review
-					// at the head SHA is treated as a non-match. This documents the defense-in-depth
-					// invariant: COMMENTED is never a valid fresh-review state, independent of caller.
-					body := reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "COMMENTED"))
-					fakeClient.DoStub = func(_ *http.Request) (*http.Response, error) {
-						return makeHTTPResp(200, body), nil
-					}
-					result := verifier.VerifyReview(ctx, req("COMMENTED"))
-					Expect(result.Found).To(BeFalse())
-					Expect(result.Outcome).To(Equal("failed"))
-					Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
-					// parity with existing "review absent both attempts" — phantom-POST exhausts retries
-					Expect(result.Attempt).To(Equal(2))
-				},
-			)
+	Context("verifier hard-excludes COMMENTED even when caller's allow-list includes it (spec 060)", func() {
+		It("returns Found:false — verifier's internal exclusion overrides ExpectedStates", func() {
+			// Even though the caller passes ExpectedStates=["COMMENTED"], the verifier's
+			// internal hard-exclusion (findReview skips COMMENTED) means a COMMENTED review
+			// at the head SHA is treated as a non-match. This documents the defense-in-depth
+			// invariant: COMMENTED is never a valid fresh-review state, independent of caller.
+			body := reviewListJSON(reviewJSON(42, testBotLogin, testHeadSHA, "COMMENTED"))
+			fakeClient.DoStub = func(_ *http.Request) (*http.Response, error) {
+				return makeHTTPResp(200, body), nil
+			}
+			result := verifier.VerifyReview(ctx, req("COMMENTED"))
+			Expect(result.Found).To(BeFalse())
+			Expect(result.Outcome).To(Equal("failed"))
+			Expect(result.Class).To(Equal(pkg.ErrorClassTransient))
+			// parity with existing "review absent both attempts" — phantom-POST exhausts retries
+			Expect(result.Attempt).To(Equal(2))
+		})
 
-			It(
-				"finds APPROVED review even when a stale COMMENTED exists at the same head SHA",
-				func() {
-					// Defense-in-depth coexistence test: a pre-fix stale COMMENTED at the head SHA
-					// must not shadow a fresh APPROVED at the same SHA. findReview skips the
-					// COMMENTED entry and returns the APPROVED one.
-					body := reviewListJSON(
-						reviewJSON(41, testBotLogin, testHeadSHA, "COMMENTED"),
-						reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED"),
-					)
-					fakeClient.DoStub = func(_ *http.Request) (*http.Response, error) {
-						return makeHTTPResp(200, body), nil
-					}
-					result := verifier.VerifyReview(ctx, req("APPROVED"))
-					Expect(result.Found).To(BeTrue())
-					Expect(result.Outcome).To(Equal("success"))
-					Expect(result.FoundState).To(Equal("APPROVED"))
-				},
+		It("finds APPROVED review even when a stale COMMENTED exists at the same head SHA", func() {
+			// Defense-in-depth coexistence test: a pre-fix stale COMMENTED at the head SHA
+			// must not shadow a fresh APPROVED at the same SHA. findReview skips the
+			// COMMENTED entry and returns the APPROVED one.
+			body := reviewListJSON(
+				reviewJSON(41, testBotLogin, testHeadSHA, "COMMENTED"),
+				reviewJSON(42, testBotLogin, testHeadSHA, "APPROVED"),
 			)
-		},
-	)
+			fakeClient.DoStub = func(_ *http.Request) (*http.Response, error) {
+				return makeHTTPResp(200, body), nil
+			}
+			result := verifier.VerifyReview(ctx, req("APPROVED"))
+			Expect(result.Found).To(BeTrue())
+			Expect(result.Outcome).To(Equal("success"))
+			Expect(result.FoundState).To(Equal("APPROVED"))
+		})
+	})
 })
