@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(watcher/github-pr): add `TriggerPRReviewCommandExecutor` in `pkg/command/` — consumes `TriggerPRReviewCommand` messages from the in-pod Kafka topic and runs the single-PR review pipeline (GitHub fetch → filter → trust → downstream `CreateTaskCommand` publish). Maps deliberate skips (invalid URL / filter-rejected / untrusted author) to `cdb.ErrCommandObjectSkipped` and transient errors (GitHub 5xx / trust infra / Kafka send) to wrapped errors. Takes ownership of the `github_pr_published` metric (labels: create, skipped, kafka_error, trust_error) — the HTTP handler continues to increment in this prompt; prompt 3 strips the handler increments.
+
 ## v0.36.0
 
 - feat(lib): add `CDBSchemaIDs` registry with `GithubPRReviewV1SchemaID` (`maintainer/githubprreview/v1`) and `GithubReleaserV1SchemaID` (`maintainer/githubreleaser/v1`) — first maintainer-owned CQRS schemas. Aggregate slice is consumed by `trading/strimzi/topic-controller/pkg/topics.go` (separate PR) to provision the matching Kafka topics. Adds `github.com/bborbe/cqrs v0.5.3` dep. No behavior change yet — schema definitions only; commands + senders + handlers follow in sibling PRs.

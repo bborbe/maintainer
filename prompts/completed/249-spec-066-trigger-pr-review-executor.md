@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [066-cqrs-trigger-github-pr]
+summary: Added TriggerPRReviewCommandExecutor (pkg/command) with full exit-path table tests, handler/executor byte-identical parity test, crash-recovery retry test, and Prometheus metric ownership tests; refactored to satisfy funlen ≤ 80; all 24 pkg/command + 107 pkg tests pass; coverage 91.5% (pkg/command) and 96.5% (pkg) — prompt 4 owns make precommit per spec.
+container: maintainer-cqrs-trigger-exec-249-spec-066-trigger-pr-review-executor
+dark-factory-version: v0.175.0
 created: "2026-06-08T21:11:59Z"
 queued: "2026-06-08T21:49:51Z"
+started: "2026-06-08T21:56:31Z"
+completed: "2026-06-08T22:25:55Z"
 branch: dark-factory/cqrs-trigger-github-pr
 ---
 
