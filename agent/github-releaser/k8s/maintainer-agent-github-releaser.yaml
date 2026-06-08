@@ -31,7 +31,7 @@ spec:
     # subprocess as both the --model flag and the ANTHROPIC_MODEL env var.
     # ANTHROPIC_AUTH_TOKEN is sourced from the agent secret (teamvault MOPmQL).
     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-    ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+    ANTHROPIC_MODEL: MiniMax-M3-highspeed
     # GitHub App auth — pod mints an installation access token at startup. The
     # PEM content is injected as env var $PEM_KEY via the Secret's envFrom mount
     # (controller wires Secret keys as env vars, not files — see
