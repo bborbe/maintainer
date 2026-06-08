@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [066-cqrs-trigger-github-pr]
+summary: Shrunk the /trigger HTTP handler to a thin CQRS shell (parse URL, validate, publish TriggerPRReviewCommand, return 202) and added a legacy 9-arg factory adapter that keeps main.go compiling mid-rollout; full make precommit passes.
+container: maintainer-cqrs-trigger-exec-250-spec-066-shrink-trigger-handler
+dark-factory-version: v0.175.0
 created: "2026-06-08T21:11:59Z"
 queued: "2026-06-08T21:49:51Z"
+started: "2026-06-08T22:25:56Z"
+completed: "2026-06-08T22:40:44Z"
 branch: dark-factory/cqrs-trigger-github-pr
 ---
 

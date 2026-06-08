@@ -6,7 +6,6 @@ package command_test
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 
@@ -124,10 +123,15 @@ var _ = Describe("NewTriggerPRReviewCommandExecutor", func() {
 			func(_ *mocks.GitHubClient) {},
 			command.TriggerPRReviewCommand{URL: validPRURL},
 			outcomeSuccess, 1),
-		Entry("invalid url (non-github) → skipped",
+		Entry(
+			"invalid url (non-github) → skipped",
 			func(_ *mocks.GitHubClient) {},
-			command.TriggerPRReviewCommand{URL: "https://bitbucket.example.com/projects/owner/repos/repo/pull-requests/1"},
-			outcomeSkipped, 0),
+			command.TriggerPRReviewCommand{
+				URL: "https://bitbucket.example.com/projects/owner/repos/repo/pull-requests/1",
+			},
+			outcomeSkipped,
+			0,
+		),
 		Entry("malformed payload → skipped",
 			// We cannot easily make MarshalInto fail with a valid Event shape,
 			// so this entry exercises the "invalid url" path which the executor
@@ -143,7 +147,10 @@ var _ = Describe("NewTriggerPRReviewCommandExecutor", func() {
 			outcomeSkipped, 0),
 		Entry("untrusted author → skipped",
 			func(_ *mocks.GitHubClient) {
-				trustDecision.IsTrustedReturns(trust.NewResult(false, "author not in allowlist"), nil)
+				trustDecision.IsTrustedReturns(
+					trust.NewResult(false, "author not in allowlist"),
+					nil,
+				)
 			},
 			command.TriggerPRReviewCommand{URL: validPRURL},
 			outcomeSkipped, 0),
@@ -168,136 +175,122 @@ var _ = Describe("NewTriggerPRReviewCommandExecutor", func() {
 	)
 })
 
-var _ = Describe("executor vs handler payload parity (spec 066 AC: byte-identical downstream)", func() {
-	// This is the load-bearing AC for spec § Constraints: the downstream
-	// CreateTaskCommand payload MUST be byte-identical to today's
-	// singlePRTriggerHandler.ServeHTTP output. We wire the SAME dependencies
-	// into both call sites and assert deep-equal captured commands.
-	var (
-		ctx                context.Context
-		ghClient           *mocks.GitHubClient
-		taskCreationFilter *mocks.TaskCreationFilter
-		trustDecision      *mocks.Trust
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		ghClient = new(mocks.GitHubClient)
-		taskCreationFilter = new(mocks.TaskCreationFilter)
-		trustDecision = new(mocks.Trust)
-
-		taskCreationFilter.SkipReturns(false)
-		trustDecision.IsTrustedReturns(trust.NewResult(true, "trusted"), nil)
-		ghClient.GetPRDetailsReturns(pkg.PRDetails{
-			HeadSHA:     "abc123",
-			CloneURL:    "https://github.com/bborbe/repo.git",
-			BaseRef:     "main",
-			AuthorLogin: "bborbe",
-			Title:       "Feature: add support",
-			IsDraft:     false,
-		}, nil)
-	})
-
-	It("produces the same CreateCommand for trusted author (handler vs executor)", func() {
+var _ = Describe(
+	"executor vs handler payload parity (spec 066 AC: byte-identical downstream)",
+	func() {
+		// This is the load-bearing AC for spec § Constraints: the downstream
+		// CreateTaskCommand payload MUST be byte-identical to today's
+		// singlePRTriggerHandler.ServeHTTP output.
+		//
+		// Post-prompt-3 the HTTP handler is a thin shell: it publishes a
+		// TriggerPRReviewCommand to Kafka and returns 202. The full pipeline
+		// (GitHub fetch → filter → trust → downstream publish) lives in the
+		// executor. This describe block now verifies that the executor
+		// produces the expected CreateCommand for trusted / untrusted
+		// authors when fed a TriggerPRReviewCommand that originated from the
+		// new thin handler. (The old byte-identical handler-vs-executor
+		// comparison is no longer applicable because the handler no longer
+		// produces a CreateCommand directly.)
 		var (
-			handlerCmd   task.CreateCommand
-			executorCmd  task.CreateCommand
-			handlerCalls int
-			execCalls    int
+			ctx                context.Context
+			ghClient           *mocks.GitHubClient
+			taskCreationFilter *mocks.TaskCreationFilter
+			trustDecision      *mocks.Trust
 		)
 
-		// Handler path
-		handlerSender := new(taskmocks.TaskCreateCommandSender)
-		handlerSender.SendCommandStub = func(_ context.Context, c task.CreateCommand) error {
-			handlerCmd = c
-			handlerCalls++
-			return nil
-		}
-		h := handler.NewSinglePRTriggerHandler(
-			ghClient, handlerSender, taskCreationFilter, trustDecision,
-			"dev", 80, 200, "",
-			pkg.NewMetrics(),
-		)
-		req := httptest.NewRequest("POST", "/trigger?url="+validPRURL, nil)
-		resp := httptest.NewRecorder()
-		Expect(h.ServeHTTP(ctx, resp, req)).To(Succeed())
-		Expect(resp.Code).To(Equal(http.StatusOK))
-		Expect(handlerCalls).To(Equal(1))
+		BeforeEach(func() {
+			ctx = context.Background()
+			ghClient = new(mocks.GitHubClient)
+			taskCreationFilter = new(mocks.TaskCreationFilter)
+			trustDecision = new(mocks.Trust)
 
-		// Executor path
-		executorSender := new(taskmocks.TaskCreateCommandSender)
-		executorSender.SendCommandStub = func(_ context.Context, c task.CreateCommand) error {
-			executorCmd = c
-			execCalls++
-			return nil
-		}
-		_, _, err := command.RunTriggerPRReview(
-			ctx,
-			nil,
-			newCommandObject(command.TriggerPRReviewCommand{URL: validPRURL}),
-			ghClient, executorSender, taskCreationFilter, trustDecision,
-			"dev", 80, 200, "",
-			pkg.NewMetrics(),
-		)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(execCalls).To(Equal(1))
+			taskCreationFilter.SkipReturns(false)
+			trustDecision.IsTrustedReturns(trust.NewResult(true, "trusted"), nil)
+			ghClient.GetPRDetailsReturns(pkg.PRDetails{
+				HeadSHA:     "abc123",
+				CloneURL:    "https://github.com/bborbe/repo.git",
+				BaseRef:     "main",
+				AuthorLogin: "bborbe",
+				Title:       "Feature: add support",
+				IsDraft:     false,
+			}, nil)
+		})
 
-		// Byte-identical deep-equal
-		Expect(executorCmd).To(Equal(handlerCmd),
-			"executor must produce byte-identical CreateCommand to handler. diff: %s",
-			diffJSON(executorCmd, handlerCmd))
-	})
+		It("handler → executor produces a valid CreateCommand for trusted author", func() {
+			// Handler path: capture the TriggerPRReviewCommand the new
+			// thin handler publishes to Kafka.
+			trigSender := new(mocks.TriggerPRReviewCommandSender)
+			var publishedCmd command.TriggerPRReviewCommand
+			trigSender.SendCommandStub = func(_ context.Context, c command.TriggerPRReviewCommand) error {
+				publishedCmd = c
+				return nil
+			}
+			h := handler.NewSinglePRTriggerHandler(trigSender)
+			req := httptest.NewRequest("POST", "/trigger?url="+validPRURL, nil)
+			resp := httptest.NewRecorder()
+			Expect(h.ServeHTTP(ctx, resp, req)).To(Succeed())
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(publishedCmd.URL).To(Equal(validPRURL))
 
-	It("produces the same CreateCommand for untrusted author (handler vs executor)", func() {
-		trustDecision.IsTrustedReturns(trust.NewResult(false, "author not in allowlist"), nil)
+			// Executor path: feed the handler's published command back
+			// into the executor and capture the resulting CreateCommand.
+			executorSender := new(taskmocks.TaskCreateCommandSender)
+			var executorCmd task.CreateCommand
+			executorSender.SendCommandStub = func(_ context.Context, c task.CreateCommand) error {
+				executorCmd = c
+				return nil
+			}
+			_, _, err := command.RunTriggerPRReview(
+				ctx,
+				nil,
+				newCommandObject(publishedCmd),
+				ghClient, executorSender, taskCreationFilter, trustDecision,
+				"dev", 80, 200, "",
+				pkg.NewMetrics(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(executorCmd).NotTo(BeZero(),
+				"trusted author: executor must produce a non-zero CreateCommand")
+			// Phase / status reflect trust=true → in_progress routing
+			Expect(executorCmd.Frontmatter["phase"]).To(Equal("planning"))
+			Expect(executorCmd.Frontmatter["status"]).To(Equal("in_progress"))
+		})
 
-		var (
-			handlerCmd  task.CreateCommand
-			executorCmd task.CreateCommand
-		)
+		It("executor skips untrusted author and does not publish downstream", func() {
+			trustDecision.IsTrustedReturns(trust.NewResult(false, "author not in allowlist"), nil)
 
-		// Handler
-		handlerSender := new(taskmocks.TaskCreateCommandSender)
-		handlerSender.SendCommandStub = func(_ context.Context, c task.CreateCommand) error {
-			handlerCmd = c
-			return nil
-		}
-		h := handler.NewSinglePRTriggerHandler(
-			ghClient, handlerSender, taskCreationFilter, trustDecision,
-			"dev", 80, 200, "",
-			pkg.NewMetrics(),
-		)
-		req := httptest.NewRequest("POST", "/trigger?url="+validPRURL, nil)
-		resp := httptest.NewRecorder()
-		Expect(h.ServeHTTP(ctx, resp, req)).To(Succeed())
+			// Handler publishes a TriggerPRReviewCommand (handler is
+			// trust-agnostic in prompt 3 — the untrusted branch lives in
+			// the executor).
+			trigSender := new(mocks.TriggerPRReviewCommandSender)
+			var publishedCmd command.TriggerPRReviewCommand
+			trigSender.SendCommandStub = func(_ context.Context, c command.TriggerPRReviewCommand) error {
+				publishedCmd = c
+				return nil
+			}
+			h := handler.NewSinglePRTriggerHandler(trigSender)
+			req := httptest.NewRequest("POST", "/trigger?url="+validPRURL, nil)
+			resp := httptest.NewRecorder()
+			Expect(h.ServeHTTP(ctx, resp, req)).To(Succeed())
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
 
-		// Executor
-		executorSender := new(taskmocks.TaskCreateCommandSender)
-		executorSender.SendCommandStub = func(_ context.Context, c task.CreateCommand) error {
-			executorCmd = c
-			return nil
-		}
-		_, _, err := command.RunTriggerPRReview(
-			ctx,
-			nil,
-			newCommandObject(command.TriggerPRReviewCommand{URL: validPRURL}),
-			ghClient, executorSender, taskCreationFilter, trustDecision,
-			"dev", 80, 200, "",
-			pkg.NewMetrics(),
-		)
-		// Untrusted author → Skipped, no downstream publish
-		Expect(errors.Is(err, cdb.ErrCommandObjectSkipped)).To(BeTrue())
-		Expect(executorCmd).To(BeZero(), "untrusted author: executor must NOT publish downstream")
-		// Handler still published (handler does not return Skipped — it
-		// returns 200 and lets the trust branch route to human_review).
-		// The point of this test is that the executor's "no publish"
-		// behaviour matches the spec's "untrusted → Skipped" contract —
-		// not that handler and executor behave identically (they don't:
-		// the handler still publishes, the executor skips).
-		Expect(handlerCmd).NotTo(BeZero(),
-			"handler still publishes for untrusted (human_review branch)")
-	})
-})
+			// Executor must skip untrusted → ErrCommandObjectSkipped, no
+			// downstream publish.
+			executorSender := new(taskmocks.TaskCreateCommandSender)
+			_, _, err := command.RunTriggerPRReview(
+				ctx,
+				nil,
+				newCommandObject(publishedCmd),
+				ghClient, executorSender, taskCreationFilter, trustDecision,
+				"dev", 80, 200, "",
+				pkg.NewMetrics(),
+			)
+			Expect(errors.Is(err, cdb.ErrCommandObjectSkipped)).To(BeTrue())
+			Expect(executorSender.SendCommandCallCount()).To(Equal(0),
+				"untrusted author: executor must NOT publish downstream")
+		})
+	},
+)
 
 var _ = Describe("executor crash recovery (spec 066 AC 16)", func() {
 	// Proves at-least-once-via-idempotent-downstream: simulate a pod kill
@@ -391,20 +384,3 @@ var _ = Describe("executor crash recovery (spec 066 AC 16)", func() {
 			"retry must publish downstream exactly once")
 	})
 })
-
-// diffJSON marshals both values to JSON and returns a diff string for nicer
-// failure messages. It is used only by the parity test.
-func diffJSON(a, b interface{}) string {
-	aj, err := json.Marshal(a)
-	if err != nil {
-		return "marshal a failed: " + err.Error()
-	}
-	bj, err := json.Marshal(b)
-	if err != nil {
-		return "marshal b failed: " + err.Error()
-	}
-	if string(aj) == string(bj) {
-		return "<identical>"
-	}
-	return "handler=" + string(bj) + " executor=" + string(aj)
-}

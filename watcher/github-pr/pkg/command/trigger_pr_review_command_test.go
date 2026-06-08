@@ -100,8 +100,12 @@ var _ = Describe("TriggerPRReviewCommand.Validate", func() {
 			"", true, "url must not be empty"),
 		Entry("non-url string",
 			"not-a-url", true, ""),
-		Entry("bitbucket platform",
-			"https://bitbucket.example.com/projects/owner/repos/repo/pull-requests/1", true, "github platform"),
+		Entry(
+			"bitbucket platform",
+			"https://bitbucket.example.com/projects/owner/repos/repo/pull-requests/1",
+			true,
+			"github platform",
+		),
 		Entry("ftp scheme",
 			"ftp://github.com/owner/repo/pull/1", true, ""),
 	)
@@ -109,9 +113,9 @@ var _ = Describe("TriggerPRReviewCommand.Validate", func() {
 
 var _ = Describe("NewTriggerPRReviewCommandSender", func() {
 	var (
-		ctx              context.Context
-		cdbSender        *cqrsmocks.CDBCommandObjectSender
-		triggerSender   command.TriggerPRReviewCommandSender
+		ctx           context.Context
+		cdbSender     *cqrsmocks.CDBCommandObjectSender
+		triggerSender command.TriggerPRReviewCommandSender
 	)
 
 	BeforeEach(func() {
