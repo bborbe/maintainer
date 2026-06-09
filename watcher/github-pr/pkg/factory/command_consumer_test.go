@@ -15,6 +15,7 @@ import (
 	"github.com/bborbe/cqrs/base"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	kvmocks "github.com/bborbe/kv/mocks"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -57,6 +58,7 @@ var _ = Describe("CreateCommandConsumer", func() {
 			"dev", 80, 200, "",
 			pkg.NewMetrics(),
 			base.Branch("dev"),
+			libtime.NewCurrentDateTime(),
 		)
 		Expect(runFunc).NotTo(BeNil())
 	})

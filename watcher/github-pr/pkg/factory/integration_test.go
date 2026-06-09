@@ -13,6 +13,7 @@ import (
 	cdb "github.com/bborbe/cqrs/cdb"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	kvmocks "github.com/bborbe/kv/mocks"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -109,6 +110,7 @@ var _ = Describe("end-to-end command flow through wired consumer (spec 066 AC 11
 			trustDecision,
 			"dev", 80, 200, "",
 			metrics,
+			libtime.NewCurrentDateTime(),
 		)
 	})
 
@@ -142,6 +144,7 @@ var _ = Describe("end-to-end command flow through wired consumer (spec 066 AC 11
 				"dev", 80, 200, "",
 				metrics,
 				base.Branch("dev"),
+				libtime.NewCurrentDateTime(),
 			)
 			Expect(runFunc).NotTo(BeNil(),
 				"factory composition must succeed for the wired consumer")

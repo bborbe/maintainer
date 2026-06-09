@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [060-pr-reviewer-verdict-decides-review-event]
+spec: ["071"]
 summary: 'Replaced autoApprove-gated switch in mapVerdictAndSummary with a verdict-driven switch (approve→APPROVE, request-changes→REQUEST_CHANGES, no COMMENT fallback), dropped COMMENTED from verifier''s ExpectedStates and added a defense-in-depth COMMENTED filter in findReview, deleted the obsolete Entry from poster_test.go, and added a fix-prefix CHANGELOG entry under ## Unreleased.'
 container: maintainer-pr-verdict-exec-235-spec-060-fix-verdict-mapping
 dark-factory-version: v0.175.0

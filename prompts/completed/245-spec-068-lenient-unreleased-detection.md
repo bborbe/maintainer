@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [064-github-releaser-lenient-unreleased-detection]
+spec: ["068"]
 summary: Replaced literal '## Unreleased' match in ParseChangelog with structural H2-classification (first non-version H2 is the unreleased section); added 8 Ginkgo Entry rows; inserted '## Unreleased' fix bullet in root CHANGELOG.
 container: maintainer-lenient-unreleased-exec-245-spec-064-lenient-unreleased-detection
 dark-factory-version: v0.175.0

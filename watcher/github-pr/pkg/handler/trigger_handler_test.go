@@ -146,4 +146,74 @@ var _ = Describe("TriggerHandler", func() {
 			Expect(resp.Code).To(Equal(http.StatusAccepted))
 		})
 	})
+
+	Context("force query param (spec 067)", func() {
+		It("TestTriggerHandler_ParsesForceTrue", func() {
+			req := httptest.NewRequest(
+				"POST",
+				"/trigger?url=https://github.com/bborbe/repo/pull/42&force=true",
+				nil,
+			)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeTrue())
+		})
+
+		It("TestTriggerHandler_ParsesForceFalse", func() {
+			req := httptest.NewRequest(
+				"POST",
+				"/trigger?url=https://github.com/bborbe/repo/pull/42&force=false",
+				nil,
+			)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+
+			*sender = mocks.TriggerPRReviewCommandSender{}
+			req2 := httptest.NewRequest(
+				"POST",
+				"/trigger?url=https://github.com/bborbe/repo/pull/42",
+				nil,
+			)
+			resp2 := httptest.NewRecorder()
+			h.ServeHTTP(resp2, req2)
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd2 := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd2.Force).To(BeFalse())
+		})
+
+		It("TestTriggerHandler_ParsesForceAbsent", func() {
+			req := httptest.NewRequest(
+				"POST",
+				"/trigger?url=https://github.com/bborbe/repo/pull/42",
+				nil,
+			)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+		})
+
+		It("TestTriggerHandler_ParsesForceGarbage", func() {
+			req := httptest.NewRequest(
+				"POST",
+				"/trigger?url=https://github.com/bborbe/repo/pull/42&force=banana",
+				nil,
+			)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+		})
+	})
 })

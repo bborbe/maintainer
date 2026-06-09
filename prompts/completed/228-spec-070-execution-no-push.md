@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["061"]
+spec: ["070"]
 summary: 'Moved git push out of execution step: renamed executeDirectPush to executeLocalRelease, dropped ops.Push, added changelog.ReplaceUnreleasedBody helper, applied plan.RewrittenUnreleased body in a single commit (when plan.RewriteNeeded), persisted workdir+local tag in ResultOutput for ai-review, all 94 Ginkgo specs pass with make precommit exit 0'
 container: maintainer-changelog-rewrite-exec-228-spec-058-execution-no-push
 dark-factory-version: v0.174.1-dirty

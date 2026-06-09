@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [060-github-releaser-major-bump-guard]
+spec: ["071"]
 summary: 'Implemented spec 060 major-bump guard in github-releaser planning step: extended PlanOutput with AllowMajorBumpConfig/AllowMajorBumpFlag fields and PreconditionMajorBumpNotAllowed constant, threaded allowMajor through NewPlanningStep/factory.CreateAgent/entry points, merged resolveChangelogRewrite into resolveMaintainerConfig, inserted the major-bump guard in runClassification with both audit log lines, and updated factory_test.go; go build ./... exits 0'
 container: maintainer-major-bump-guard-exec-236-spec-060-guard-logic-planoutput-fields
 dark-factory-version: v0.175.0

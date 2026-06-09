@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [067-cqrs-trigger-github-release]
+spec: ["069"]
 summary: Added TriggerReleaseCheckCommandExecutor (cdb.CommandObjectExecutorTxFunc wrapping pkg.Watcher.Poll) plus _export_test.go and table-driven executor_test.go (81.5% coverage, 0 lint issues, make precommit green)
 container: maintainer-cqrs-trigger-release-exec-253-trigger-release-check-executor
 dark-factory-version: v0.175.0

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [067-cqrs-trigger-github-release]
+spec: ["069"]
 summary: Added TriggerReleaseCheckCommand payload, CQRS sender (with counterfeiter mock), and in-memory libkv.DB offset store to github-release watcher; tests + mocks + CHANGELOG entry all generated; make precommit exits 0
 container: maintainer-cqrs-trigger-release-exec-252-trigger-release-check-command-and-sender
 dark-factory-version: v0.175.0
