@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Moved /trigger HTTP handler to pkg/handler/trigger_handler.go (CQRS publish + 202), wired factory.CreateTriggerBuildCheckCommandSender+Handler, refactored CreateWatcher to return the sync producer for reuse, deleted legacy pkg/trigger_handler.go + its test, updated run-once and main_poll_loop tests, generated counterfeiter mock at mocks/trigger_handler.go; make precommit passes
+container: maintainer-cqrs-trigger-build-exec-259-cqrs-github-build-trigger-handler
+dark-factory-version: v0.175.0
 created: "2026-06-09T16:00:00Z"
 queued: "2026-06-09T16:21:18Z"
+started: "2026-06-09T16:43:01Z"
+completed: "2026-06-09T16:53:24Z"
 branch: dark-factory/cqrs-trigger-github-build
 ---
 

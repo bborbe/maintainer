@@ -78,11 +78,11 @@ var _ = Describe("Run", func() {
 				taskPhase string,
 				maxTitleLen int,
 				taskSuffix string,
-			) (pkg.Watcher, func(), error) {
+			) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
 				if len(brokers) == 0 {
-					return nil, nil, errors.New("create kafka create sender: brokers empty")
+					return nil, nil, nil, errors.New("create kafka create sender: brokers empty")
 				}
-				return mockWatcher, func() {}, nil
+				return mockWatcher, nil, func() {}, nil
 			}
 
 			setupFn()
@@ -140,8 +140,8 @@ var _ = Describe("Run", func() {
 				taskPhase string,
 				maxTitleLen int,
 				taskSuffix string,
-			) (pkg.Watcher, func(), error) {
-				return mockWatcher, func() {}, nil
+			) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
+				return mockWatcher, nil, func() {}, nil
 			}
 
 			err := app.Run(ctx, nil)
