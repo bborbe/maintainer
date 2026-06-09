@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.40.0
 
 - feat(watcher/github-pr): add `DeriveTaskIDForce` helper producing a salted UUID5 from `(owner, repo, number, sha, nonce)` so an operator-initiated force re-review can publish a `CreateTaskCommand` whose `TaskIdentifier` bypasses the agent controller's vault-file dedup skip (spec 072)
 - feat(watcher/github-pr): add `?force=true` query parameter to `POST /trigger` so operators can request a forced re-review against an already-reviewed head SHA — the executor derives a salted `TaskIdentifier` (extra nonce from the current time) so the agent controller's dedup-skip does not fire and a fresh vault file is created. Non-force requests are unchanged byte-for-byte. Unparseable `force` values fall back to `false` and the request still returns 202 (lenient default) (spec 072)
