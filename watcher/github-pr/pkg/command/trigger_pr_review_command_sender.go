@@ -25,17 +25,27 @@ type TriggerPRReviewCommandSender interface {
 	SendCommand(ctx context.Context, cmd TriggerPRReviewCommand) error
 }
 
-// NewTriggerPRReviewCommandSender creates a TriggerPRReviewCommandSender
-// using the given cdb.CommandObjectSender.
+// NewTriggerPRReviewCommandSender creates a TriggerPRReviewCommandSender.
+// The commandCreator and initiator are injected at construction time per
+// the cqrs/docs/producing-commands.md "Factory Wiring" pattern (matches
+// trading/frontend/command's reference impl) — built once at wiring, reused
+// across every SendCommand call. The commandObjectSender wraps the Kafka
+// sync producer.
 func NewTriggerPRReviewCommandSender(
+	commandCreator base.CommandCreator,
+	initiator cqrsiam.Initiator,
 	commandObjectSender cdb.CommandObjectSender,
 ) TriggerPRReviewCommandSender {
 	return &triggerPRReviewCommandSender{
+		commandCreator:      commandCreator,
+		initiator:           initiator,
 		commandObjectSender: commandObjectSender,
 	}
 }
 
 type triggerPRReviewCommandSender struct {
+	commandCreator      base.CommandCreator
+	initiator           cqrsiam.Initiator
 	commandObjectSender cdb.CommandObjectSender
 }
 
@@ -50,13 +60,10 @@ func (s *triggerPRReviewCommandSender) SendCommand(
 	if err != nil {
 		return errors.Wrapf(ctx, err, "parse TriggerPRReviewCommand event")
 	}
-	requestIDCh := make(chan base.RequestID, 1)
-	requestIDCh <- base.NewRequestID()
-	commandCreator := base.NewCommandCreator(requestIDCh)
 	commandObject := cdb.CommandObject{
-		Command: commandCreator.NewCommand(
+		Command: s.commandCreator.NewCommand(
 			TriggerPRReviewCommandOperation,
-			cqrsiam.Initiator("watcher-github-pr"),
+			s.initiator,
 			"",
 			event,
 		),

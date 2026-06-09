@@ -12,6 +12,7 @@ import (
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
+	cqrsiam "github.com/bborbe/cqrs/iam"
 	libkafka "github.com/bborbe/kafka"
 	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
@@ -91,12 +92,20 @@ func CreateWatcher(
 // command sender backed by a Kafka sync producer. This is the HTTP-side
 // sender: the /trigger handler publishes TriggerPRReviewCommand messages
 // through it.
+//
+// CommandCreator and Initiator are built once here and reused across every
+// SendCommand call (per cqrs/docs/producing-commands.md "Factory Wiring";
+// matches trading/frontend/command's reference impl).
 func CreateTriggerPRReviewCommandSender(
+	ctx context.Context,
 	syncProducer libkafka.SyncProducer,
 	branch base.Branch,
 ) command.TriggerPRReviewCommandSender {
-	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
-	return command.NewTriggerPRReviewCommandSender(sender)
+	return command.NewTriggerPRReviewCommandSender(
+		base.NewCommandCreator(base.RequestIDChannel(ctx)),
+		cqrsiam.Initiator("watcher-github-pr"),
+		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+	)
 }
 
 // CreateCommandConsumer wires a run.Func that consumes TriggerPRReviewCommand

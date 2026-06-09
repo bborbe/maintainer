@@ -7,7 +7,9 @@ package command_test
 import (
 	"context"
 
+	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
+	cqrsiam "github.com/bborbe/cqrs/iam"
 	cdbmocks "github.com/bborbe/cqrs/mocks"
 	"github.com/bborbe/errors"
 	. "github.com/onsi/ginkgo/v2"
@@ -16,6 +18,17 @@ import (
 	"github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/command"
 )
+
+// newTestCommandCreator returns a CommandCreator backed by a buffered channel
+// pre-populated with `n` request IDs. Suitable for unit tests that don't
+// want to plumb base.RequestIDChannel(ctx) and risk the channel blocking.
+func newTestCommandCreator(n int) base.CommandCreator {
+	ch := make(chan base.RequestID, n)
+	for i := 0; i < n; i++ {
+		ch <- base.NewRequestID()
+	}
+	return base.NewCommandCreator(ch)
+}
 
 var _ = Describe("TriggerPRReviewCommandSender.SendCommand", func() {
 	var (
@@ -28,7 +41,11 @@ var _ = Describe("TriggerPRReviewCommandSender.SendCommand", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		fakeCDB = new(cdbmocks.CDBCommandObjectSender)
-		sender = command.NewTriggerPRReviewCommandSender(fakeCDB)
+		sender = command.NewTriggerPRReviewCommandSender(
+			newTestCommandCreator(10),
+			cqrsiam.Initiator("test-watcher"),
+			fakeCDB,
+		)
 		validCmd = command.TriggerPRReviewCommand{
 			URL:   "https://github.com/bborbe/repo/pull/42",
 			Force: false,

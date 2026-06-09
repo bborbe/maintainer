@@ -27,7 +27,11 @@ import (
 var _ = Describe("CreateTriggerPRReviewCommandSender", func() {
 	It("returns a non-nil sender", func() {
 		syncProducer := new(libkafkamocks.KafkaSyncProducer)
-		sender := factory.CreateTriggerPRReviewCommandSender(syncProducer, base.Branch("dev"))
+		sender := factory.CreateTriggerPRReviewCommandSender(
+			context.Background(),
+			syncProducer,
+			base.Branch("dev"),
+		)
 		Expect(sender).NotTo(BeNil())
 	})
 })

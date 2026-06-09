@@ -10,6 +10,7 @@ import (
 
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
+	cqrsiam "github.com/bborbe/cqrs/iam"
 	cqrsmocks "github.com/bborbe/cqrs/mocks"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -121,7 +122,11 @@ var _ = Describe("NewTriggerPRReviewCommandSender", func() {
 	BeforeEach(func() {
 		ctx = context.Background()
 		cdbSender = &cqrsmocks.CDBCommandObjectSender{}
-		triggerSender = command.NewTriggerPRReviewCommandSender(cdbSender)
+		triggerSender = command.NewTriggerPRReviewCommandSender(
+			newTestCommandCreator(10),
+			cqrsiam.Initiator("test-watcher"),
+			cdbSender,
+		)
 	})
 
 	It("publishes one CommandObject keyed on the github-pr-review v1 schema", func() {
