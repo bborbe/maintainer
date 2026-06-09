@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Created TriggerBuildCheckCommand + sender + MemDB and generated counterfeiter mock for github-build watcher; all tests pass with -race
+container: maintainer-cqrs-trigger-build-exec-257-cqrs-github-build-command-sender-memdb
+dark-factory-version: v0.175.0
 created: "2026-06-09T16:00:00Z"
 queued: "2026-06-09T16:21:18Z"
+started: "2026-06-09T16:29:34Z"
+completed: "2026-06-09T16:38:26Z"
 branch: dark-factory/cqrs-trigger-github-build
 ---
 

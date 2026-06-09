@@ -12,6 +12,7 @@ require (
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/http v1.26.13
 	github.com/bborbe/kafka v1.23.2
+	github.com/bborbe/kv v1.21.2
 	github.com/bborbe/log v1.6.14
 	github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000
 	github.com/bborbe/run v1.9.28
@@ -33,7 +34,6 @@ require (
 	github.com/bborbe/argument/v2 v2.12.26 // indirect
 	github.com/bborbe/collection v1.20.13 // indirect
 	github.com/bborbe/k8s v1.14.3 // indirect
-	github.com/bborbe/kv v1.21.2 // indirect
 	github.com/bborbe/math v1.3.11 // indirect
 	github.com/bborbe/parse v1.10.13 // indirect
 	github.com/bborbe/strimzi v1.8.5 // indirect
