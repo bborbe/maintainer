@@ -125,7 +125,7 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage,
 	)
 
-	if err := w.Poll(ctx); err != nil {
+	if err := w.Poll(ctx, false); err != nil {
 		return errors.Wrap(ctx, err, "poll failed")
 	}
 	return nil
