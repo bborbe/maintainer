@@ -15,6 +15,7 @@ import (
 	"time"
 
 	libkafka "github.com/bborbe/kafka"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
@@ -78,6 +79,7 @@ var _ = Describe("Run", func() {
 				taskPhase string,
 				maxTitleLen int,
 				taskSuffix string,
+				currentDateTime libtime.CurrentDateTimeGetter,
 			) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
 				if len(brokers) == 0 {
 					return nil, nil, nil, errors.New("create kafka create sender: brokers empty")
@@ -140,6 +142,7 @@ var _ = Describe("Run", func() {
 				taskPhase string,
 				maxTitleLen int,
 				taskSuffix string,
+				currentDateTime libtime.CurrentDateTimeGetter,
 			) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
 				return mockWatcher, nil, func() {}, nil
 			}

@@ -28,10 +28,12 @@ import (
 //   - w.Poll(ctx) returns nil                  → nil, nil, nil (success)
 //
 // SendResultEnabled is false (spec Non-goal: fire-and-forget, no result topic).
-// The executor does NOT increment any metrics — the Watcher.Poll(ctx) call
+// The executor does NOT increment any metrics — the Watcher.Poll call
 // already owns IncPollCycle / IncPublished / IncReposScanned / IncFilterSkipped.
-// The executor does NOT read Scope or Force — both are reserved-unread
-// (spec Non-goal: per-repo filter UX and Force flag are separate specs).
+// The executor reads cmd.Force and forwards it to Watcher.Poll (spec 069):
+// when true, the red×red episode-lock arm of the state machine publishes a
+// salted CreateTaskCommand instead of skipping. The cmd.Scope field is still
+// reserved-unread (spec Non-goal: per-repo filter UX is a separate spec).
 func NewTriggerBuildCheckCommandExecutor(
 	watcher pkg.Watcher,
 ) cdb.CommandObjectExecutorTx {
@@ -65,7 +67,7 @@ func runTriggerBuildCheck(
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := watcher.Poll(ctx); err != nil {
+	if err := watcher.Poll(ctx, cmd.Force); err != nil {
 		// Transient: rate-limited, GitHub 5xx, cursor read error, etc.
 		// Framework emits Failure on the result topic, Kafka redelivers.
 		// The Watcher already logged per-cycle state; we just propagate.

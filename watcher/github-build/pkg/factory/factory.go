@@ -18,6 +18,7 @@ import (
 	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
 	"github.com/bborbe/run"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
 	lib "github.com/bborbe/maintainer/lib"
@@ -82,6 +83,7 @@ func CreateWatcher(
 	taskPhase string,
 	maxTitleLen int,
 	taskSuffix string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
 	syncProducer, producerCleanup, err := CreateSyncProducer(ctx, brokers)
 	if err != nil {
@@ -104,6 +106,7 @@ func CreateWatcher(
 		maintenanceLoader,
 		maxTitleLen,
 		taskSuffix,
+		currentDateTime,
 	)
 	return w, syncProducer, producerCleanup, nil
 }

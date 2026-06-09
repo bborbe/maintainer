@@ -138,6 +138,65 @@ var _ = Describe("NewTriggerBuildCheckCommandExecutor", func() {
 	)
 })
 
+var _ = Describe("executor force flag plumbing (spec 069)", func() {
+	var (
+		ctx     context.Context
+		watcher *mocks.Watcher
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		watcher = &mocks.Watcher{}
+	})
+
+	It("force=true ⇒ Poll(ctx, true)", func() {
+		commandObject := newCommandObject(
+			command.TriggerBuildCheckCommand{Force: true},
+		)
+		_, _, err := command.RunTriggerBuildCheck(ctx, nil, commandObject, watcher)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(watcher.PollCallCount()).To(Equal(1))
+		_, force := watcher.PollArgsForCall(0)
+		Expect(force).To(BeTrue())
+	})
+
+	It("force=false ⇒ Poll(ctx, false)", func() {
+		commandObject := newCommandObject(
+			command.TriggerBuildCheckCommand{Force: false},
+		)
+		_, _, err := command.RunTriggerBuildCheck(ctx, nil, commandObject, watcher)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(watcher.PollCallCount()).To(Equal(1))
+		_, force := watcher.PollArgsForCall(0)
+		Expect(force).To(BeFalse())
+	})
+
+	// The success log and the error-wrap message share the same `force=%t`
+	// formatter, so asserting the wrap message is sufficient evidence the
+	// same `force=<bool>` substring lands in the success log path.
+	It("force=true wrap message contains force=true", func() {
+		watcher.PollReturns(errors.Errorf(ctx, "rate limited"))
+		commandObject := newCommandObject(
+			command.TriggerBuildCheckCommand{Force: true},
+		)
+		_, _, err := command.RunTriggerBuildCheck(ctx, nil, commandObject, watcher)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("force=true"))
+	})
+
+	It("force=false wrap message contains force=false", func() {
+		watcher.PollReturns(errors.Errorf(ctx, "rate limited"))
+		commandObject := newCommandObject(
+			command.TriggerBuildCheckCommand{Force: false},
+		)
+		_, _, err := command.RunTriggerBuildCheck(ctx, nil, commandObject, watcher)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("force=false"))
+	})
+})
+
 var _ = Describe("executor crash recovery (spec 068 AC 26)", func() {
 	// Proves at-least-once-via-idempotent-downstream: simulate a pod kill
 	// mid-execution (context cancelled during watcher.Poll) and verify
@@ -168,7 +227,7 @@ var _ = Describe("executor crash recovery (spec 068 AC 26)", func() {
 		// context-cancelled error — same shape as a real watcher that
 		// gets SIGKILL'd in mid-Poll.
 		killedCtx, cancel := context.WithCancel(ctx)
-		watcher.PollStub = func(c context.Context) error {
+		watcher.PollStub = func(c context.Context, _ bool) error {
 			// Cancel mid-call, then return the context error like a real Watcher would.
 			cancel()
 			return c.Err()

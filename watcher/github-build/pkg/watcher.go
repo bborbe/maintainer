@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 	"github.com/google/uuid"
 
@@ -49,8 +51,13 @@ func isDependabotGraphUpdateWorkflow(run WorkflowRun) bool {
 }
 
 // Watcher polls GitHub Actions for build status changes.
+//
+// When force is true, the red×red episode-lock arm of the state machine
+// publishes a salted CreateTaskCommand instead of skipping (spec 069), so
+// operators can force a re-publish for a still-red build via the /trigger
+// HTTP path. The poll-interval loop always passes false.
 type Watcher interface {
-	Poll(ctx context.Context) error
+	Poll(ctx context.Context, force bool) error
 }
 
 // AllowlistSnapshot returns the current set of concrete "host/owner/repo"
@@ -88,6 +95,7 @@ func NewWatcher(
 	maintenanceLoader maintenance.Loader,
 	maxTitleLen int,
 	taskSuffix string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) Watcher {
 	return &buildWatcher{
 		githubClient:      githubClient,
@@ -102,6 +110,7 @@ func NewWatcher(
 		maintenanceLoader: maintenanceLoader,
 		maxTitleLen:       maxTitleLen,
 		taskSuffix:        taskSuffix,
+		currentDateTime:   currentDateTime,
 	}
 }
 
@@ -118,9 +127,10 @@ type buildWatcher struct {
 	maintenanceLoader maintenance.Loader
 	maxTitleLen       int
 	taskSuffix        string
+	currentDateTime   libtime.CurrentDateTimeGetter
 }
 
-func (w *buildWatcher) Poll(ctx context.Context) error {
+func (w *buildWatcher) Poll(ctx context.Context, force bool) error {
 	cursor, err := LoadCursor(ctx, w.cursorPath)
 	if err != nil {
 		return errors.Wrapf(ctx, err, "load cursor")
@@ -139,7 +149,7 @@ func (w *buildWatcher) Poll(ctx context.Context) error {
 			continue
 		}
 
-		if rateLimited := w.pollRepo(ctx, cursor, repoKey); rateLimited {
+		if rateLimited := w.pollRepo(ctx, cursor, repoKey, force); rateLimited {
 			break
 		}
 	}
@@ -161,7 +171,12 @@ func (w *buildWatcher) Poll(ctx context.Context) error {
 }
 
 // pollRepo processes one repo. Returns true when the outer loop should break (rate-limited).
-func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey string) bool {
+func (w *buildWatcher) pollRepo(
+	ctx context.Context,
+	cursor *Cursor,
+	repoKey string,
+	force bool,
+) bool {
 	owner, repo := splitRepoKey(repoKey)
 	repoState := GetOrCreateRepoState(cursor, repoKey)
 
@@ -202,11 +217,25 @@ func (w *buildWatcher) pollRepo(ctx context.Context, cursor *Cursor, repoKey str
 		return false
 	}
 
-	w.applyStateMachine(ctx, repoKey, repoState, currState, episodeSHA, failingRuns, owner, repo)
+	w.applyStateMachine(
+		ctx,
+		repoKey,
+		repoState,
+		currState,
+		episodeSHA,
+		failingRuns,
+		owner,
+		repo,
+		force,
+	)
 	return false
 }
 
 // applyStateMachine applies the green/red state machine for a single repo.
+//
+// When force is true and prevState==currState=="red", the episode-lock skip is
+// bypassed and a salted CreateTaskCommand is published (spec 069). All other
+// arms ignore force.
 func (w *buildWatcher) applyStateMachine(
 	ctx context.Context,
 	repoKey string,
@@ -214,6 +243,7 @@ func (w *buildWatcher) applyStateMachine(
 	currState, episodeSHA string,
 	failingRuns []WorkflowRun,
 	owner, repo string,
+	force bool,
 ) {
 	prevState := repoState.LastKnownState
 
@@ -246,8 +276,39 @@ func (w *buildWatcher) applyStateMachine(
 		repoState.LastKnownState = "red"
 		repoState.CurrentEpisodeSHA = episodeSHA
 
+	case prevState == "red" && currState == "red" && force:
+		// Spec 069: force=true on a still-red repo re-publishes with a salted
+		// TaskIdentifier so the agent controller's file-exists skip does NOT
+		// fire and a fresh vault task is created. Cursor state stays "red";
+		// CurrentEpisodeSHA is unchanged (the episode is the same; only the
+		// task identifier is salted to evade dedup).
+		overrides := w.maintenanceLoader.LoadOverrides(ctx, owner, repo, repoState.DefaultBranch)
+		effectiveAssignee := coalesceString(overrides.Assignee, w.assignee)
+		effectiveStatus := coalesceString(overrides.Status, w.taskStatus)
+		effectivePhase := coalesceString(overrides.Phase, w.taskPhase)
+		nonce := strconv.FormatInt(w.currentDateTime.Now().UnixMicro(), 10)
+		taskID := DeriveTaskIDForce(owner, repo, episodeSHA, nonce)
+		cmd := w.buildCreateTaskCommand(
+			ctx,
+			taskID,
+			owner,
+			repo,
+			episodeSHA,
+			failingRuns,
+			effectiveAssignee,
+			effectiveStatus,
+			effectivePhase,
+			overrides.IncludeLogs,
+		)
+		if err := w.createSender.SendCommand(ctx, cmd); err != nil {
+			glog.Errorf("publish create-task (force) failed repo=%s err=%v", repoKey, err)
+			w.metrics.IncPollError("kafka_error")
+			return
+		}
+		w.metrics.IncTaskPublished()
+
 	case prevState == "red" && currState == "red":
-		// Episode locked on first red; skip regardless of SHA change
+		// Episode locked on first red; skip regardless of SHA change (force=false)
 
 	case prevState == "red" && currState == "green":
 		w.metrics.IncStateTransition("red_to_green")
