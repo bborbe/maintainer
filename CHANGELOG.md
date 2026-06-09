@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(watcher/github-pr): add `DeriveTaskIDForce` helper producing a salted UUID5 from `(owner, repo, number, sha, nonce)` so an operator-initiated force re-review can publish a `CreateTaskCommand` whose `TaskIdentifier` bypasses the agent controller's vault-file dedup skip (spec 067)
+
 ## v0.38.0
 
 - feat(watcher/github-release): Add `TriggerReleaseCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerReleaseCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 067)
