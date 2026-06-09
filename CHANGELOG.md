@@ -8,6 +8,15 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(lib): Add `GithubBuildV1SchemaID` (`Group: "maintainer"`, `Kind: "githubbuild"`, `Version: "v1"`) to the CDBSchemaIDs registry, serializing to `maintainer-githubbuild-v1` (spec 068)
+- feat(watcher/github-build): Add `TriggerBuildCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerBuildCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 068)
+- feat: Add `TriggerBuildCheckCommandExecutor` invoking shared `pkg.Watcher.Poll` on consumed `TriggerBuildCheckCommand`s (spec 068)
+- refactor: Move /trigger HTTP handler from `pkg/trigger_handler.go` (in-process `chan struct{}` signal) to `pkg/handler/trigger_handler.go` (CQRS publish + 202); handler now depends only on `command.TriggerBuildCheckCommandSender` (spec 068)
+- refactor: Move Kafka sync producer lifecycle to `factory.CreateSyncProducer` and have `factory.CreateWatcher` return the producer for reuse across senders; main.go wires create-task and trigger-build-check senders from a single sync producer (spec 068)
+- feat: Wire github-build /trigger through Kafka command consumer — third run.Func, factory.CreateCommandConsumer (cdb.RunCommandConsumerTxDefault + lib.GithubBuildV1SchemaID), shared Watcher, MemDB offset store; factory AST control-flow assertion + integration clean-shutdown test (spec 068)
+
 ## v0.38.0
 
 - feat(watcher/github-release): Add `TriggerReleaseCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerReleaseCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 067)

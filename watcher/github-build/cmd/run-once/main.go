@@ -58,7 +58,8 @@ type Application struct {
 	CreateWatcher WatcherFactory
 }
 
-// WatcherFactory creates a Watcher and its cleanup function.
+// WatcherFactory creates a Watcher, the Kafka sync producer it built
+// internally, and a cleanup function that closes the producer.
 type WatcherFactory func(
 	ctx context.Context,
 	ghClient pkg.GitHubClient,
@@ -72,7 +73,7 @@ type WatcherFactory func(
 	taskPhase string,
 	maxTitleLen int,
 	taskSuffix string,
-) (pkg.Watcher, func(), error)
+) (pkg.Watcher, libkafka.SyncProducer, func(), error)
 
 func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	repoAllowlist, err := filter.ParseRepoAllowlist(a.RepoAllowlist)
@@ -119,7 +120,7 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}
 
-	w, cleanup, err := a.CreateWatcher(
+	w, _, cleanup, err := a.CreateWatcher(
 		ctx,
 		ghClient,
 		a.KafkaBrokers,

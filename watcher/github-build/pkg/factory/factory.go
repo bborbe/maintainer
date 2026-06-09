@@ -12,25 +12,42 @@ import (
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
+	cqrsiam "github.com/bborbe/cqrs/iam"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
+	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
 	"github.com/bborbe/run"
 	"github.com/golang/glog"
 
+	lib "github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/command"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-build/pkg/handler"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/maintenance"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/wildcard"
 )
 
-// CreateKafkaCreateSender constructs a typed create-task command sender backed by a Kafka sync producer.
-// The cleanup function closes the underlying sync producer on shutdown.
+// CreateKafkaCreateSender constructs a typed create-task command sender backed
+// by a pre-built Kafka sync producer. The caller owns the producer's
+// lifecycle (created in main.go so it can be reused across senders).
 func CreateKafkaCreateSender(
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
+) task.CreateCommandSender {
+	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	return task.NewCreateCommandSender(sender)
+}
+
+// CreateSyncProducer constructs a Kafka sync producer for the
+// maintainer-watcher-github-build binary. The returned cleanup closes the
+// producer on shutdown; main.go owns the lifecycle and defers the cleanup
+// so the producer can be reused across senders (create-task, trigger).
+func CreateSyncProducer(
 	ctx context.Context,
 	brokers libkafka.Brokers,
-	branch base.Branch,
-) (task.CreateCommandSender, func(), error) {
+) (libkafka.SyncProducer, func(), error) {
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		brokers,
@@ -39,16 +56,19 @@ func CreateKafkaCreateSender(
 	if err != nil {
 		return nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}
-	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
 	cleanup := func() {
 		if err := syncProducer.Close(); err != nil {
 			glog.Warningf("close kafka sync producer: %v", err)
 		}
 	}
-	return task.NewCreateCommandSender(sender), cleanup, nil
+	return syncProducer, cleanup, nil
 }
 
-// CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
+// CreateWatcher wires all dependencies and returns a ready-to-use Watcher
+// plus the Kafka sync producer it built internally (so the caller can reuse
+// it for additional senders, e.g. the HTTP-side trigger sender). The cleanup
+// function closes the sync producer on shutdown — the caller must defer it
+// (or wire it into its own shutdown sequence).
 func CreateWatcher(
 	ctx context.Context,
 	ghClient pkg.GitHubClient,
@@ -62,12 +82,13 @@ func CreateWatcher(
 	taskPhase string,
 	maxTitleLen int,
 	taskSuffix string,
-) (pkg.Watcher, func(), error) {
-	branch := base.Branch(stage)
-	createSender, cleanup, err := CreateKafkaCreateSender(ctx, brokers, branch)
+) (pkg.Watcher, libkafka.SyncProducer, func(), error) {
+	syncProducer, producerCleanup, err := CreateSyncProducer(ctx, brokers)
 	if err != nil {
-		return nil, nil, errors.Wrap(ctx, err, "create kafka create sender")
+		return nil, nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}
+	branch := base.Branch(stage)
+	createSender := CreateKafkaCreateSender(syncProducer, branch)
 	maintenanceLoader := maintenance.NewLoader(ghClient)
 	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(inputAllowlist)}
 	w := pkg.NewWatcher(
@@ -84,7 +105,67 @@ func CreateWatcher(
 		maxTitleLen,
 		taskSuffix,
 	)
-	return w, cleanup, nil
+	return w, syncProducer, producerCleanup, nil
+}
+
+// CreateTriggerBuildCheckCommandSender constructs a typed trigger-build-check
+// command sender backed by a Kafka sync producer. This is the HTTP-side
+// sender: the /trigger handler publishes TriggerBuildCheckCommand messages
+// through it.
+//
+// CommandCreator and Initiator are built once here and reused across every
+// SendCommand call (per cqrs/docs/producing-commands.md "Factory Wiring";
+// matches trading/frontend/command's reference impl).
+func CreateTriggerBuildCheckCommandSender(
+	ctx context.Context,
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
+) command.TriggerBuildCheckCommandSender {
+	return command.NewTriggerBuildCheckCommandSender(
+		base.NewCommandCreator(base.RequestIDChannel(ctx)),
+		cqrsiam.Initiator("watcher-github-build"),
+		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+	)
+}
+
+// CreateTriggerBuildCheckHandler wires the thin CQRS handler that publishes a
+// TriggerBuildCheckCommand to Kafka for each /trigger request.
+// All poll-cycle work lives in the in-pod command consumer (see
+// pkg/command.NewTriggerBuildCheckCommandExecutor).
+func CreateTriggerBuildCheckHandler(
+	sender command.TriggerBuildCheckCommandSender,
+) handler.TriggerBuildCheckHandler {
+	return handler.NewTriggerBuildCheckHandler(sender)
+}
+
+// CreateCommandConsumer wires a run.Func that consumes TriggerBuildCheckCommand
+// messages from the github-build watcher's request topic (identified by
+// lib.GithubBuildV1SchemaID) and runs them through the shared
+// Watcher.Poll(ctx) pipeline.
+//
+// The function is pure composition: no business logic, no conditionals.
+// It uses cdb.RunCommandConsumerTxDefault (auto-wraps the transaction) per
+// the go-cqrs/auto-tx-wrapper-no-manual-wrap rule — do NOT manually wrap
+// the executor with kv.NewTransactionMiddleware.
+func CreateCommandConsumer(
+	saramaClientProvider libkafka.SaramaClientProvider,
+	syncProducer libkafka.SyncProducer,
+	db libkv.DB,
+	watcher pkg.Watcher,
+	branch base.Branch,
+) run.Func {
+	executors := cdb.CommandObjectExecutorTxs{
+		command.NewTriggerBuildCheckCommandExecutor(watcher),
+	}
+	return cdb.RunCommandConsumerTxDefault(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		lib.GithubBuildV1SchemaID,
+		branch,
+		false, // ignoreUnsupported
+		executors,
+	)
 }
 
 // countWildcards returns the number of wildcard entries (host/owner/*) in the list.
