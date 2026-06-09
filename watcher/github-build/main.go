@@ -10,9 +10,11 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
@@ -30,11 +32,6 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/factory"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
 )
-
-// triggerBufferSize coalesces redundant /trigger calls into one pending poll;
-// the poll loop is the single executor, so a larger buffer would not run them
-// any sooner.
-const triggerBufferSize = 1
 
 func validateMaxTitleLen(ctx context.Context, maxTitleLen int) error {
 	if maxTitleLen <= 0 {
@@ -67,8 +64,11 @@ type application struct {
 	BuildTaskPhase  string `required:"false" arg:"build-task-phase"  env:"TASK_PHASE"    usage:"Frontmatter phase for published tasks; empty = omit field"`
 	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                                          default:"200"`
 	TaskSuffix      string `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"   usage:"Optional suffix appended to build-failure task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
+
+	TriggerHandler http.Handler
 }
 
+//nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 90+ lines, over the 80-line cap.
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err := validateMaxTitleLen(ctx, a.MaxTitleLen); err != nil {
 		return err
@@ -114,7 +114,9 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrap(ctx, err, "create allowlist snapshot")
 	}
 
-	w, cleanup, err := factory.CreateWatcher(
+	branch := base.Branch(a.Stage)
+
+	w, syncProducer, watcherCleanup, err := factory.CreateWatcher(
 		ctx,
 		ghClient,
 		a.KafkaBrokers,
@@ -131,21 +133,41 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
 	}
-	defer cleanup()
+	defer watcherCleanup()
+
+	// HTTP-side sender backs the /trigger handler.
+	triggerBuildCheckSender := factory.CreateTriggerBuildCheckCommandSender(
+		ctx,
+		syncProducer,
+		branch,
+	)
+	triggerHandler := factory.CreateTriggerBuildCheckHandler(triggerBuildCheckSender)
+	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
+
+	// In-pod command consumer: third run.Func alongside poll + HTTP.
+	// session-scoped offset store — replays the request topic from OffsetOldest
+	// on pod restart; safe because the downstream Watcher.Poll is idempotent
+	// via the per-(repo,run) cursor + per-task derived task_id.
+	saramaClientProvider := libkafka.NewSaramaClientProviderNew(a.KafkaBrokers)
+	db := pkg.NewMemDB()
+	commandConsumer := factory.CreateCommandConsumer(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		w, // shared with the poll-interval loop
+		branch,
+	)
 
 	glog.V(2).
 		Infof("maintainer-watcher-github-build starting stage=%s interval=%s listen=%s", a.Stage, a.PollInterval, a.Listen)
 
 	pollOnce := a.pollOnce(w)
 
-	// trigger is buffered (triggerBufferSize) so an HTTP /trigger never blocks:
-	// while a poll runs, further triggers coalesce into a single pending signal.
-	// The poll loop is the sole executor, so polls never overlap (single-flight).
-	trigger := make(chan struct{}, triggerBufferSize)
-
+	// Order: poll → HTTP → command consumer (spec 068 AC 9: three run.Funcs).
 	tasks := []run.Func{
-		a.runPollLoop(pollOnce, pollInterval, trigger),
-		a.createHTTPServer(trigger),
+		a.runPollLoop(pollOnce, pollInterval),
+		a.createHTTPServer(),
+		commandConsumer,
 	}
 	if refreshTask != nil {
 		tasks = append(tasks, refreshTask)
@@ -163,11 +185,14 @@ func (a *application) pollOnce(w pkg.Watcher) run.Func {
 func (a *application) runPollLoop(
 	poll run.Func,
 	interval time.Duration,
-	trigger <-chan struct{},
 ) run.Func {
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		// Fire one cycle immediately on start, then on each tick.
+		if err := poll(ctx); err != nil {
+			glog.Errorf("initial poll: %v", err)
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -177,17 +202,12 @@ func (a *application) runPollLoop(
 				if err := poll(ctx); err != nil {
 					glog.Errorf("poll cycle error: %v", err)
 				}
-			case <-trigger:
-				glog.V(2).Infof("poll loop: triggered via HTTP")
-				if err := poll(ctx); err != nil {
-					glog.Errorf("poll cycle error: %v", err)
-				}
 			}
 		}
 	}
 }
 
-func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
+func (a *application) createHTTPServer() run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
@@ -197,7 +217,7 @@ func (a *application) createHTTPServer(trigger chan<- struct{}) run.Func {
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(pkg.DefaultCursorPath)))
-		router.Path("/trigger").Handler(pkg.NewTriggerHandler(trigger))
+		router.Path("/trigger").Handler(a.TriggerHandler)
 		glog.V(2).Infof("http server listening on %s", a.Listen)
 		return libhttp.NewServer(a.Listen, router).Run(ctx)
 	}

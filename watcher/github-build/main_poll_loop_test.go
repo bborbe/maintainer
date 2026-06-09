@@ -29,7 +29,7 @@ var _ = Describe("runPollLoop", func() {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		loopFunc := app.runPollLoop(pollFunc, 10*time.Millisecond, make(chan struct{}))
+		loopFunc := app.runPollLoop(pollFunc, 10*time.Millisecond)
 
 		done := make(chan error, 1)
 		go func() {
@@ -46,7 +46,7 @@ var _ = Describe("runPollLoop", func() {
 		<-done
 	})
 
-	It("runs a poll when signalled via the trigger channel", func() {
+	It("exits cleanly when context is cancelled", func() {
 		app := &application{}
 		var pollCount atomic.Int64
 		pollFunc := func(_ context.Context) error {
@@ -55,25 +55,16 @@ var _ = Describe("runPollLoop", func() {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		// Long interval so the ticker never fires within the test window;
-		// any poll must come from the trigger.
-		trigger := make(chan struct{}, 1)
-		loopFunc := app.runPollLoop(pollFunc, time.Hour, trigger)
+		// Long interval so the ticker never fires within the test window.
+		loopFunc := app.runPollLoop(pollFunc, time.Hour)
 
 		done := make(chan error, 1)
 		go func() {
 			done <- loopFunc(ctx)
 		}()
 
-		trigger <- struct{}{}
-
-		Eventually(
-			func() int64 { return pollCount.Load() },
-			"500ms",
-			"10ms",
-		).Should(BeNumerically(">=", 1))
-
+		// Cancel immediately; loop should exit.
 		cancel()
-		<-done
+		Eventually(done, "500ms").Should(Receive(BeNil()))
 	})
 })
