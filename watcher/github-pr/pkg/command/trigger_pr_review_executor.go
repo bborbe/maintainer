@@ -284,8 +284,8 @@ func publishCreateCommand(
 	}
 	metrics.IncPRPublished("create")
 	glog.V(2).Infof(
-		"trigger executor: published task_id=%s pr=%s/%s#%d sha=%s",
-		taskIDStr, prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA,
+		"trigger executor: published task_id=%s pr=%s/%s#%d sha=%s force=%v",
+		taskIDStr, prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA, cmd.Force,
 	)
 	return nil, nil, nil
 }
