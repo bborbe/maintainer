@@ -20,7 +20,16 @@ import (
 // CreateTaskCommands to Kafka for github-releaser-agent to consume.
 type Watcher interface {
 	// Poll runs one scan cycle. Safe to call repeatedly on an interval.
-	Poll(ctx context.Context) error
+	//
+	// skipSHAUnchanged controls whether the SHA-unchanged dedup gate is
+	// composed into this cycle's filter chain. The poll-interval loop
+	// always passes false (today's behaviour: repos whose head SHA equals
+	// the recorded cursor are silently skipped). The /trigger HTTP path
+	// passes true when the operator requested ?force=true (spec 071) so
+	// every repo is reconsidered even when the cursor already matches —
+	// every other filter (allowlist, empty-unreleased, auto-release)
+	// still runs.
+	Poll(ctx context.Context, skipSHAUnchanged bool) error
 }
 
 // NewWatcher wires the watcher's collaborators.
@@ -56,7 +65,9 @@ type watcher struct {
 	taskCreationFilter filter.TaskCreationFilter
 }
 
-// Poll implements Watcher. One cycle:
+// Poll implements Watcher. When skipSHAUnchanged is true the cycle filter
+// chain omits SHAUnchangedFilter; every other filter is unaffected (spec 071).
+// One cycle:
 //  1. Load cursor (cold-start safe)
 //  2. ListRepos(owner) — abort cycle on rate_limited / github_error (no cursor save)
 //  3. For each repo (sequential):
@@ -68,7 +79,7 @@ type watcher struct {
 //     f. publisher.PublishCreate(release) — update cursor on true return
 //  4. SaveCursor (skip on abort)
 //  5. IncPollCycle("success")
-func (w *watcher) Poll(ctx context.Context) error {
+func (w *watcher) Poll(ctx context.Context, skipSHAUnchanged bool) error {
 	cursorState, err := LoadCursor(ctx, w.cursorPath)
 	if err != nil {
 		return errors.Wrapf(ctx, err, "load cursor path=%s", w.cursorPath)
@@ -87,10 +98,15 @@ func (w *watcher) Poll(ctx context.Context) error {
 	}
 	w.metrics.IncReposScanned(len(repos))
 
-	// Compose cycle-specific SHAUnchangedFilter into the chain.
-	cycleFilter := filter.TaskCreationFilters{
-		w.taskCreationFilter,
-		filter.NewSHAUnchangedFilter(NewCursorReader(cursorState)),
+	// Compose cycle-specific SHAUnchangedFilter into the chain unless the
+	// caller forced the cycle (spec 071). All other filters in
+	// w.taskCreationFilter are unaffected on both code paths.
+	cycleFilter := filter.TaskCreationFilters{w.taskCreationFilter}
+	if !skipSHAUnchanged {
+		cycleFilter = append(
+			cycleFilter,
+			filter.NewSHAUnchangedFilter(NewCursorReader(cursorState)),
+		)
 	}
 
 	abortReason := w.processRepos(ctx, cursorState, repos, cycleFilter)

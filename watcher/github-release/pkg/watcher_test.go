@@ -94,7 +94,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				staticFilters,
 			)
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			// Only docker-utils passes through (empty-repo skipped by EmptyUnreleasedFilter)
 			Expect(publisher.PublishCreateCallCount()).To(Equal(1))
@@ -147,7 +147,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				staticFilters,
 			)
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
 			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
@@ -179,7 +179,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				staticFilters,
 			)
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
 			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("github_error"))
@@ -236,7 +236,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 						staticFilters,
 					)
 
-					Expect(w.Poll(ctx)).To(Succeed())
+					Expect(w.Poll(ctx, false)).To(Succeed())
 
 					Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
 					Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
@@ -302,7 +302,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				staticFilters,
 			)
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
 			Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("rate_limited"))
@@ -353,7 +353,7 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 				staticFilters,
 			)
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			// Poll itself succeeds
 			Expect(metrics.IncPollCycleCallCount()).To(Equal(1))
@@ -368,6 +368,163 @@ var _ = Describe("pkg.Watcher.Poll", func() {
 			Expect(err).NotTo(HaveOccurred())
 			_, exists := loaded.Repos["github.com/bborbe/docker-utils"]
 			Expect(exists).To(BeFalse())
+		})
+	})
+
+	Describe(
+		"Poll(ctx, true) reconsiders repos whose head SHA matches the cursor (spec 071)",
+		func() {
+			var staticFilters filter.TaskCreationFilter
+
+			BeforeEach(func() {
+				staticFilters = filter.TaskCreationFilters{
+					filter.NewRepoAllowlistFilter(nil),
+					filter.NewEmptyUnreleasedFilter(),
+					filter.NewAutoReleaseFilter(),
+				}
+
+				ghClient.ListReposReturns([]pkg.Repo{
+					{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+				}, nil)
+
+				ghClient.GetMasterSHAReturns("d630ef3526cfc57fbdccd9ba53c5c3a02945e407", nil)
+				ghClient.GetChangelogContentReturns(
+					[]byte("## Unreleased\n\n- entry one\n\n## v1.7.7\n"), nil,
+				)
+				ghClient.GetMaintainerConfigReturns(
+					maintainerconfig.MaintainerConfig{
+						Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
+					}, nil,
+				)
+				publisher.PublishCreateReturns(true)
+
+				// Pre-populate cursor so docker-utils' LastSeenMasterSHA == headSHA.
+				// The next cycle's SHAUnchangedFilter (when composed) skips this repo.
+				Expect(pkg.SaveCursor(ctx, cursorPath, &pkg.Cursor{
+					Repos: map[string]*pkg.RepoState{
+						"github.com/bborbe/docker-utils": {
+							LastSeenMasterSHA: "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
+						},
+					},
+				})).To(Succeed())
+			})
+
+			It("Poll(ctx, false) skips docker-utils via sha_unchanged", func() {
+				w := pkg.NewWatcher(
+					ghClient, publisher, metrics, cursorPath, "bborbe", staticFilters,
+				)
+
+				Expect(w.Poll(ctx, false)).To(Succeed())
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(0))
+				Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
+
+				// At least one filter skip recorded sha_unchanged.
+				found := false
+				for i := 0; i < metrics.IncFilterSkippedCallCount(); i++ {
+					if metrics.IncFilterSkippedArgsForCall(i) == "sha_unchanged" {
+						found = true
+						break
+					}
+				}
+				Expect(found).To(BeTrue(), "expected sha_unchanged in IncFilterSkipped labels")
+
+				// Cursor file still exists.
+				_, err := os.Stat(cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("Poll(ctx, true) publishes docker-utils despite cursor match", func() {
+				w := pkg.NewWatcher(
+					ghClient, publisher, metrics, cursorPath, "bborbe", staticFilters,
+				)
+
+				Expect(w.Poll(ctx, true)).To(Succeed())
+
+				Expect(publisher.PublishCreateCallCount()).To(Equal(1))
+				_, release := publisher.PublishCreateArgsForCall(0)
+				Expect(release.Repo.Name).To(Equal("docker-utils"))
+
+				// No filter skip recorded sha_unchanged.
+				for i := 0; i < metrics.IncFilterSkippedCallCount(); i++ {
+					Expect(metrics.IncFilterSkippedArgsForCall(i)).
+						NotTo(Equal("sha_unchanged"),
+							"sha_unchanged should not appear when forced")
+				}
+
+				Expect(metrics.IncPollCycleArgsForCall(0)).To(Equal("success"))
+
+				// Cursor save invariant: file still exists and the entry equals
+				// the head SHA (cursor save still runs on forced cycles).
+				loaded, err := pkg.LoadCursor(ctx, cursorPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(
+					loaded.Repos["github.com/bborbe/docker-utils"].LastSeenMasterSHA,
+				).To(Equal("d630ef3526cfc57fbdccd9ba53c5c3a02945e407"))
+			})
+		},
+	)
+
+	Describe("Poll filter-chain composition (spec 071)", func() {
+		var staticFilters filter.TaskCreationFilter
+
+		BeforeEach(func() {
+			staticFilters = filter.TaskCreationFilters{
+				filter.NewRepoAllowlistFilter(nil),
+				filter.NewEmptyUnreleasedFilter(),
+				filter.NewAutoReleaseFilter(),
+			}
+
+			ghClient.ListReposReturns([]pkg.Repo{
+				{Owner: "bborbe", Name: "docker-utils", DefaultBranch: "master"},
+			}, nil)
+			ghClient.GetMasterSHAReturns("d630ef3526cfc57fbdccd9ba53c5c3a02945e407", nil)
+			ghClient.GetChangelogContentReturns(
+				[]byte("## Unreleased\n\n- entry one\n\n## v1.7.7\n"), nil,
+			)
+			ghClient.GetMaintainerConfigReturns(
+				maintainerconfig.MaintainerConfig{
+					Release: maintainerconfig.ReleaseConfig{AutoRelease: true},
+				}, nil,
+			)
+			publisher.PublishCreateReturns(true)
+
+			Expect(pkg.SaveCursor(ctx, cursorPath, &pkg.Cursor{
+				Repos: map[string]*pkg.RepoState{
+					"github.com/bborbe/docker-utils": {
+						LastSeenMasterSHA: "d630ef3526cfc57fbdccd9ba53c5c3a02945e407",
+					},
+				},
+			})).To(Succeed())
+		})
+
+		It("Poll(ctx, false) composes SHAUnchangedFilter into the cycle chain", func() {
+			w := pkg.NewWatcher(
+				ghClient, publisher, metrics, cursorPath, "bborbe", staticFilters,
+			)
+			Expect(w.Poll(ctx, false)).To(Succeed())
+
+			seen := false
+			for i := 0; i < metrics.IncFilterSkippedCallCount(); i++ {
+				if metrics.IncFilterSkippedArgsForCall(i) == "sha_unchanged" {
+					seen = true
+					break
+				}
+			}
+			Expect(seen).To(BeTrue(),
+				"sha_unchanged label proves SHAUnchangedFilter ran")
+		})
+
+		It("Poll(ctx, true) excludes SHAUnchangedFilter from the cycle chain", func() {
+			w := pkg.NewWatcher(
+				ghClient, publisher, metrics, cursorPath, "bborbe", staticFilters,
+			)
+			Expect(w.Poll(ctx, true)).To(Succeed())
+
+			for i := 0; i < metrics.IncFilterSkippedCallCount(); i++ {
+				Expect(metrics.IncFilterSkippedArgsForCall(i)).
+					NotTo(Equal("sha_unchanged"))
+			}
 		})
 	})
 })

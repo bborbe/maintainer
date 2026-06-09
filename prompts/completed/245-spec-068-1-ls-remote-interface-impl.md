@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [064-github-releaser-post-check-verdict-from-github-truth]
+spec: ["068"]
 summary: 'Added LsRemote method to GitOps interface + osExecGitOps impl with token-redaction + argv-only contract; regenerated counterfeiter mock; added 9 Ginkgo specs (5 subprocess integration + 4 parser unit tests) covering annotated/lightweight/empty/subcommand-error/argv-only/token-redaction fixtures; 100% coverage on new code; CHANGELOG entry under ## Unreleased.'
 container: maintainer-release-postcheck-exec-245-spec-064-1-ls-remote-interface-impl
 dark-factory-version: v0.175.0

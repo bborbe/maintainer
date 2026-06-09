@@ -112,6 +112,11 @@ func CreateTriggerPRReviewCommandSender(
 // messages from the github-pr watcher's request topic and runs them through
 // the single-PR review pipeline (GitHub fetch → filter → trust → publish).
 //
+// currentDateTime is the injected libtime.CurrentDateTimeGetter passed through
+// to the trigger executor so it can derive a time-salted task identifier when
+// the TriggerPRReviewCommand has Force=true (spec 067). The non-force path
+// does not consult the clock.
+//
 // The function is pure composition: no business logic, no conditionals.
 // It uses cdb.RunCommandConsumerTxDefault (auto-wraps the transaction) per
 // the go-cqrs/auto-tx-wrapper-no-manual-wrap rule — do NOT manually wrap
@@ -130,6 +135,7 @@ func CreateCommandConsumer(
 	taskSuffix string,
 	metrics pkg.Metrics,
 	branch base.Branch,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) run.Func {
 	executors := cdb.CommandObjectExecutorTxs{
 		command.NewTriggerPRReviewCommandExecutor(
@@ -142,6 +148,7 @@ func CreateCommandConsumer(
 			maxTitleLen,
 			taskSuffix,
 			metrics,
+			currentDateTime,
 		),
 	}
 	return cdb.RunCommandConsumerTxDefault(

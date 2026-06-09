@@ -57,4 +57,48 @@ var _ = Describe("TaskID", func() {
 			Expect(a).To(Equal(b))
 		})
 	})
+
+	Describe("DeriveForce", func() {
+		It(
+			"produces a different UUID than DeriveTaskID for the same (owner, repo, number, sha)",
+			func() {
+				canonical := pkg.DeriveTaskID("bborbe", "code-reviewer", 42, "abc123def456789a")
+				salted := pkg.DeriveTaskIDForce(
+					"bborbe",
+					"code-reviewer",
+					42,
+					"abc123def456789a",
+					"nonce-1",
+				)
+				Expect(salted).NotTo(Equal(canonical))
+			},
+		)
+
+		It("is stable for identical (owner, repo, number, sha, nonce) inputs", func() {
+			a := pkg.DeriveTaskIDForce("bborbe", "code-reviewer", 42, "abc123def456789a", "nonce-x")
+			b := pkg.DeriveTaskIDForce("bborbe", "code-reviewer", 42, "abc123def456789a", "nonce-x")
+			Expect(a).To(Equal(b))
+		})
+
+		It(
+			"produces different UUIDs for the same (owner, repo, number, sha) but different nonces",
+			func() {
+				a := pkg.DeriveTaskIDForce(
+					"bborbe",
+					"code-reviewer",
+					42,
+					"abc123def456789a",
+					"nonce-a",
+				)
+				b := pkg.DeriveTaskIDForce(
+					"bborbe",
+					"code-reviewer",
+					42,
+					"abc123def456789a",
+					"nonce-b",
+				)
+				Expect(a).NotTo(Equal(b))
+			},
+		)
+	})
 })

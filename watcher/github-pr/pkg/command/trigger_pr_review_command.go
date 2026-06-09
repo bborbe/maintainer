@@ -22,9 +22,11 @@ const TriggerPRReviewCommandOperation base.CommandOperation = "trigger-pr-review
 // It is published to the github-pr watcher's request topic by the /trigger
 // HTTP handler and consumed by the in-pod command consumer.
 //
-// URL is the GitHub PR URL the operator wants reviewed. Force is reserved
-// for the prerequisite Force-flag task; this spec plumbs the field but
-// the executor does not branch on it.
+// URL is the GitHub PR URL the operator wants reviewed. Force, when true,
+// causes the executor to derive a salted TaskIdentifier via
+// pkg.DeriveTaskIDForce (microsecond-resolution time nonce) so the agent
+// controller's vault-file dedup skip does NOT fire and a fresh review task
+// is created for the same head SHA (spec 069).
 type TriggerPRReviewCommand struct {
 	URL   string `json:"url"`
 	Force bool   `json:"force,omitempty"`

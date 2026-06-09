@@ -58,8 +58,9 @@ var _ = Describe("NewTriggerReleaseCheckCommandExecutor", func() {
 	})
 
 	// NOTE: validate-fail is NOT exercised as a table entry below. Reason:
-	// the github-release command's Validate is empty (both Scope and Force
-	// are reserved-unread, so there is nothing to reject today). The only
+	// the github-release command's Validate is empty (Scope is still
+	// reserved-unread and Force is just a boolean — nothing to reject
+	// today). The only
 	// way to force a framework-level "CommandObject.Validate" failure in
 	// a unit test is to construct a CommandObject whose
 	// Command.Operation doesn't match the executor's expected operation
@@ -138,6 +139,67 @@ var _ = Describe("NewTriggerReleaseCheckCommandExecutor", func() {
 	)
 })
 
+var _ = Describe("executor force flag plumbing (spec 071)", func() {
+	var (
+		ctx     context.Context
+		watcher *mocks.Watcher
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		watcher = &mocks.Watcher{}
+	})
+
+	It("force=true ⇒ Poll(ctx, true)", func() {
+		commandObject := newCommandObject(
+			command.TriggerReleaseCheckCommand{Force: true},
+		)
+		_, _, err := command.RunTriggerReleaseCheck(ctx, nil, commandObject, watcher)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(watcher.PollCallCount()).To(Equal(1))
+		_, skip := watcher.PollArgsForCall(0)
+		Expect(skip).To(BeTrue())
+	})
+
+	It("force=false ⇒ Poll(ctx, false)", func() {
+		commandObject := newCommandObject(
+			command.TriggerReleaseCheckCommand{Force: false},
+		)
+		_, _, err := command.RunTriggerReleaseCheck(ctx, nil, commandObject, watcher)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(watcher.PollCallCount()).To(Equal(1))
+		_, skip := watcher.PollArgsForCall(0)
+		Expect(skip).To(BeFalse())
+	})
+
+	// The error-wrap message and the success log line share the same
+	// `force=%t` formatter at lines 73 and 77 of trigger_release_check_executor.go,
+	// so asserting the wrap message is sufficient evidence the same
+	// `force=<bool>` substring lands in the success log path. This avoids
+	// inventing glog-capture test infrastructure the repo does not have.
+	It("force=true wrap message contains force=true", func() {
+		watcher.PollReturns(errors.Errorf(ctx, "rate limited"))
+		commandObject := newCommandObject(
+			command.TriggerReleaseCheckCommand{Force: true},
+		)
+		_, _, err := command.RunTriggerReleaseCheck(ctx, nil, commandObject, watcher)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("force=true"))
+	})
+
+	It("force=false wrap message contains force=false", func() {
+		watcher.PollReturns(errors.Errorf(ctx, "rate limited"))
+		commandObject := newCommandObject(
+			command.TriggerReleaseCheckCommand{Force: false},
+		)
+		_, _, err := command.RunTriggerReleaseCheck(ctx, nil, commandObject, watcher)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("force=false"))
+	})
+})
+
 var _ = Describe("executor crash recovery (spec 067 AC 19)", func() {
 	// Proves at-least-once-via-idempotent-downstream: simulate a pod kill
 	// mid-execution (context cancelled during watcher.Poll) and verify
@@ -163,7 +225,7 @@ var _ = Describe("executor crash recovery (spec 067 AC 19)", func() {
 		// context-cancelled error — same shape as a real watcher that
 		// gets SIGKILL'd in mid-Poll.
 		killedCtx, cancel := context.WithCancel(ctx)
-		watcher.PollStub = func(c context.Context) error {
+		watcher.PollStub = func(c context.Context, _ bool) error {
 			// Cancel mid-call, then return the context error like a real Watcher would.
 			cancel()
 			return c.Err()

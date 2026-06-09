@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [060-pr-reviewer-verdict-decides-review-event]
+spec: ["071"]
 container: maintainer-pr-verdict-exec-234-spec-060-tdd-failing-test
 dark-factory-version: v0.175.0
 created: "2026-06-03T15:10:31Z"

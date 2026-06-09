@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [060-github-releaser-major-bump-guard]
+spec: ["071"]
 summary: Wired --allow-major / ALLOW_MAJOR CLI flag through both application structs and the BuildEnv helper; both entry points and the test suite compile and pass with the new fifth BuildEnv parameter
 container: maintainer-major-bump-guard-exec-235-spec-060-cli-flag-buildenv-allowmajor
 dark-factory-version: v0.175.0

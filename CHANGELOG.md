@@ -14,6 +14,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## v0.39.0
 
+- feat(watcher/github-release): `POST /trigger?force=true` now bypasses the SHA-unchanged dedup filter for exactly one poll cycle so operators can re-run the watcher even when every repo's head SHA matches the recorded cursor. All other filters (allowlist, empty-unreleased, auto-release) still run; cursor save semantics are unchanged. Absent or unparseable `?force` values resolve to `false` (today's behaviour). Closes the asymmetry with the sibling github-pr watcher's force flag (spec 069). (spec 071)
 - feat(lib): Add `GithubBuildV1SchemaID` (`Group: "maintainer"`, `Kind: "githubbuild"`, `Version: "v1"`) to the CDBSchemaIDs registry, serializing to `maintainer-githubbuild-v1` (spec 068)
 - feat(watcher/github-build): Add `TriggerBuildCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerBuildCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 068)
 - feat: Add `TriggerBuildCheckCommandExecutor` invoking shared `pkg.Watcher.Poll` on consumed `TriggerBuildCheckCommand`s (spec 068)

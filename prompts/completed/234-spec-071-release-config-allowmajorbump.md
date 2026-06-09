@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: [060-github-releaser-major-bump-guard]
+spec: ["071"]
 summary: Added AllowMajorBump field to lib/maintainerconfig ReleaseConfig with godoc, 3 DescribeTable entries, 1 strict-parse It case, and CHANGELOG entry; all 22 specs pass.
 container: maintainer-major-bump-guard-exec-234-spec-060-release-config-allowmajorbump
 dark-factory-version: v0.175.0
