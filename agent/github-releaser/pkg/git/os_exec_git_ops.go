@@ -185,6 +185,54 @@ func (g *osExecGitOps) CommittedFiles(ctx context.Context, workdir string) ([]st
 	return files, nil
 }
 
+// LsRemote shells out `git ls-remote <cloneURL> refs/tags/<tag>` and returns
+// the dereferenced commit SHA. For an annotated tag, the `^{}` line wins;
+// for a lightweight tag, the only emitted line is returned. A missing tag
+// on the remote returns ("", nil) — the caller treats that as a no-op.
+func (g *osExecGitOps) LsRemote(ctx context.Context, cloneURL, ref, tag string) (string, error) {
+	// git ls-remote <cloneURL> refs/tags/<tag>
+	// cloneURL is authed by caller from validated frontmatter; tag comes from
+	// plan.NextVersionHeader which the planning step validated. The full
+	// ref-path is a separate argv element — Git itself does the ref-expansion.
+	// #nosec G204 -- cloneURL is authed by caller from validated frontmatter; tag comes from plan.NextVersionHeader which the planning step validated
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", cloneURL, "refs/tags/"+tag)
+	cmd.Env = g.cmdEnv()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", errors.Errorf(
+			ctx,
+			"git ls-remote: %s",
+			redactToken(strings.TrimSpace(stderr.String())),
+		)
+	}
+	sha := parseLsRemoteOutput(out, tag)
+	glog.V(2).Infof("git ls-remote succeeded: ref=%s tag=%s sha=%s", ref, tag, sha)
+	return sha, nil
+}
+
+// parseLsRemoteOutput extracts the preferred SHA from `git ls-remote` output
+// for the given tag. The dereferenced commit SHA (the `^{}` line) wins for
+// annotated tags; for lightweight tags the only emitted line IS the commit
+// SHA, and is returned. Returns "" if neither line is present (remote has
+// no refs/tags/<tag>). Exposed for testing via ParseLsRemoteOutputForTest.
+func parseLsRemoteOutput(out []byte, tag string) string {
+	derefSuffix := "refs/tags/" + tag + "^{}"
+	plainSuffix := "refs/tags/" + tag
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasSuffix(strings.TrimSpace(line), derefSuffix) {
+			return strings.TrimSpace(strings.Fields(line)[0])
+		}
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasSuffix(strings.TrimSpace(line), plainSuffix) {
+			return strings.TrimSpace(strings.Fields(line)[0])
+		}
+	}
+	return ""
+}
+
 // redactToken strips x-access-token:<TOK>@ patterns from stderr to prevent
 // GH_TOKEN from landing in error logs. Git can echo the URL with embedded
 // credentials on auth/clone failures (e.g.

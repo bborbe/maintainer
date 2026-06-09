@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/github-releaser): add `git.GitOps.LsRemote(ctx, cloneURL, ref, tag) (sha string, err error)` — read-only `git ls-remote refs/tags/<tag>` query that returns the dereferenced commit SHA for annotated tags (the `^{}` line) and the tag-object SHA for lightweight tags; returns `("", nil)` when the tag is absent on the remote. Counterfeiter mock regenerated, unit tests cover annotated / lightweight / empty / subcommand-error / argv-only / token-redaction fixtures. The post-check verdict-upgrade behavior lands in a follow-up prompt (spec 064 prompt 2). No agent behavior change in this seam
+
 ## v0.36.0
 
 - feat(lib): add `CDBSchemaIDs` registry with `GithubPRReviewV1SchemaID` (`maintainer/githubprreview/v1`) and `GithubReleaserV1SchemaID` (`maintainer/githubreleaser/v1`) — first maintainer-owned CQRS schemas. Aggregate slice is consumed by `trading/strimzi/topic-controller/pkg/topics.go` (separate PR) to provision the matching Kafka topics. Adds `github.com/bborbe/cqrs v0.5.3` dep. No behavior change yet — schema definitions only; commands + senders + handlers follow in sibling PRs.

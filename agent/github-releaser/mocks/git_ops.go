@@ -56,6 +56,22 @@ type GitOps struct {
 		result1 []string
 		result2 error
 	}
+	LsRemoteStub        func(context.Context, string, string, string) (string, error)
+	lsRemoteMutex       sync.RWMutex
+	lsRemoteArgsForCall []struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 string
+	}
+	lsRemoteReturns struct {
+		result1 string
+		result2 error
+	}
+	lsRemoteReturnsOnCall map[int]struct {
+		result1 string
+		result2 error
+	}
 	PushStub        func(context.Context, string, ...string) error
 	pushMutex       sync.RWMutex
 	pushArgsForCall []struct {
@@ -279,6 +295,73 @@ func (fake *GitOps) CommittedFilesReturnsOnCall(i int, result1 []string, result2
 	}
 	fake.committedFilesReturnsOnCall[i] = struct {
 		result1 []string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitOps) LsRemote(arg1 context.Context, arg2 string, arg3 string, arg4 string) (string, error) {
+	fake.lsRemoteMutex.Lock()
+	ret, specificReturn := fake.lsRemoteReturnsOnCall[len(fake.lsRemoteArgsForCall)]
+	fake.lsRemoteArgsForCall = append(fake.lsRemoteArgsForCall, struct {
+		arg1 context.Context
+		arg2 string
+		arg3 string
+		arg4 string
+	}{arg1, arg2, arg3, arg4})
+	stub := fake.LsRemoteStub
+	fakeReturns := fake.lsRemoteReturns
+	fake.recordInvocation("LsRemote", []interface{}{arg1, arg2, arg3, arg4})
+	fake.lsRemoteMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *GitOps) LsRemoteCallCount() int {
+	fake.lsRemoteMutex.RLock()
+	defer fake.lsRemoteMutex.RUnlock()
+	return len(fake.lsRemoteArgsForCall)
+}
+
+func (fake *GitOps) LsRemoteCalls(stub func(context.Context, string, string, string) (string, error)) {
+	fake.lsRemoteMutex.Lock()
+	defer fake.lsRemoteMutex.Unlock()
+	fake.LsRemoteStub = stub
+}
+
+func (fake *GitOps) LsRemoteArgsForCall(i int) (context.Context, string, string, string) {
+	fake.lsRemoteMutex.RLock()
+	defer fake.lsRemoteMutex.RUnlock()
+	argsForCall := fake.lsRemoteArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+}
+
+func (fake *GitOps) LsRemoteReturns(result1 string, result2 error) {
+	fake.lsRemoteMutex.Lock()
+	defer fake.lsRemoteMutex.Unlock()
+	fake.LsRemoteStub = nil
+	fake.lsRemoteReturns = struct {
+		result1 string
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *GitOps) LsRemoteReturnsOnCall(i int, result1 string, result2 error) {
+	fake.lsRemoteMutex.Lock()
+	defer fake.lsRemoteMutex.Unlock()
+	fake.LsRemoteStub = nil
+	if fake.lsRemoteReturnsOnCall == nil {
+		fake.lsRemoteReturnsOnCall = make(map[int]struct {
+			result1 string
+			result2 error
+		})
+	}
+	fake.lsRemoteReturnsOnCall[i] = struct {
+		result1 string
 		result2 error
 	}{result1, result2}
 }
