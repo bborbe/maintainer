@@ -19,3 +19,13 @@ var SameStringSetForTest = sameStringSet
 // DeriveUnprefixedVersionForTest exposes the unexported deriveUnprefixedVersion
 // helper so the external _test package can exercise it directly.
 var DeriveUnprefixedVersionForTest = deriveUnprefixedVersion
+
+// NormalizeCloneURLToHTTPSForTest exposes the unexported
+// normalizeCloneURLToHTTPS helper so the external _test package can
+// exercise the SCP / SSH / HTTPS forms directly.
+var NormalizeCloneURLToHTTPSForTest = normalizeCloneURLToHTTPS
+
+// InjectTokenForTest exposes the unexported injectToken helper so the
+// external _test package can exercise the token-prefix transformation
+// and the empty-token / non-HTTPS passthrough branches directly.
+var InjectTokenForTest = injectToken
