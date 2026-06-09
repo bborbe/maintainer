@@ -434,8 +434,8 @@ var _ = Describe("force-true branch (spec 067)", func() {
 			IsDraft:     false,
 		}, nil)
 
-		// Pin a deterministic start time for the fake clock. 1ns resolution
-		// is enough — the nonce uses UnixNano so any non-equal value
+		// Pin a deterministic start time for the fake clock. 1µs resolution
+		// is enough — the nonce uses UnixMicro so any non-equal value
 		// produces a different nonce.
 		fakeNow = libtime.NewDateTime(2026, 6, 9, 12, 0, 0, 0, time.UTC)
 		currentDateTime = libtime.CurrentDateTimeGetterFunc(
@@ -536,9 +536,9 @@ var _ = Describe("force-true branch (spec 067)", func() {
 		)
 		Expect(ok).To(BeTrue())
 
-		// Advance the fake clock by 1ns — nonce (UnixNano) differs, so
+		// Advance the fake clock by 1µs — nonce (UnixMicro) differs, so
 		// the salted identifier must differ.
-		fakeNow = fakeNow.Add(libtime.Nanosecond)
+		fakeNow = fakeNow.Add(libtime.Microsecond)
 
 		second, ok := captureCreateCommand(
 			command.TriggerPRReviewCommand{URL: validPRURL, Force: true},

@@ -258,7 +258,7 @@ func publishCreateCommand(
 	var taskIDStr string
 	if cmd.Force {
 		nonce := strconv.FormatInt(
-			currentDateTime.Now().Time().UnixNano(), 10,
+			currentDateTime.Now().UnixMicro(), 10,
 		)
 		taskIDStr = pkg.DeriveTaskIDForce(
 			prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA, nonce,

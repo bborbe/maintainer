@@ -61,7 +61,7 @@ After this work, operators can request a forced re-review by appending `?force=t
 - Query-param boolean parsing uses `libparse.ParseBoolDefault` from `github.com/bborbe/parse` (see `~/.claude/plugins/marketplaces/coding/docs/go-parse-pattern.md`).
 - CQRS layering rules from `~/.claude/plugins/marketplaces/coding/docs/go-cqrs.md` apply: HTTP handler stays thin (parse → publish); business logic lives in the executor.
 - Unparseable `force` query-param values resolve to `false` (lenient default via `libparse.ParseBoolDefault`). The handler MUST NOT return HTTP 400 for an unparseable `force` value; the request proceeds as if `force` were omitted. This decision is operator-facing and frozen here, not deferred to test-commit time.
-- The time-derived nonce uses nanosecond resolution: `strconv.FormatInt(currentDateTimeGetter.Now().UnixNano(), 10)`. This is fine enough that any human-driven trigger cadence (≥1 ms apart) produces distinct nonces, and on a clock-frozen test the nonce is deterministic per fixed clock value.
+- The time-derived nonce uses microsecond resolution: `strconv.FormatInt(currentDateTimeGetter.Now().UnixMicro(), 10)`. Microsecond stays within `libtime.DateTime`'s public API (no `.Time()` escape hatch — `UnixNano()` isn't exposed on `libtime.DateTime`, only `Unix()` and `UnixMicro()`). Microsecond is still ~1000× finer than human-driven trigger cadence (≥1 ms apart) and deterministic on a clock-frozen test.
 
 ## Failure Modes
 
