@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.39.0
 
 - feat(lib): Add `GithubBuildV1SchemaID` (`Group: "maintainer"`, `Kind: "githubbuild"`, `Version: "v1"`) to the CDBSchemaIDs registry, serializing to `maintainer-githubbuild-v1` (spec 068)
 - feat(watcher/github-build): Add `TriggerBuildCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerBuildCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 068)
