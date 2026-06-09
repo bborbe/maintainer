@@ -40,3 +40,29 @@ var _ = Describe("DeriveTaskID", func() {
 		Expect(buildDerived).NotTo(Equal(prDerived))
 	})
 })
+
+var _ = Describe("DeriveTaskIDForce", func() {
+	const (
+		owner      = "bborbe"
+		repo       = "maintainer"
+		episodeSHA = "abc123def456abc123def456abc123def456abcd"
+	)
+
+	It("DeriveTaskIDForce differs from canonical for the same (owner, repo, episodeSHA)", func() {
+		canonical := pkg.DeriveTaskID(owner, repo, episodeSHA)
+		salted := pkg.DeriveTaskIDForce(owner, repo, episodeSHA, "x")
+		Expect(salted).NotTo(Equal(canonical))
+	})
+
+	It("DeriveTaskIDForce stable for same nonce", func() {
+		a := pkg.DeriveTaskIDForce(owner, repo, episodeSHA, "nonce-x")
+		b := pkg.DeriveTaskIDForce(owner, repo, episodeSHA, "nonce-x")
+		Expect(a).To(Equal(b))
+	})
+
+	It("DeriveTaskIDForce differs across nonces", func() {
+		a := pkg.DeriveTaskIDForce(owner, repo, episodeSHA, "nonce-a")
+		b := pkg.DeriveTaskIDForce(owner, repo, episodeSHA, "nonce-b")
+		Expect(a).NotTo(Equal(b))
+	})
+})
