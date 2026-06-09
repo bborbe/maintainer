@@ -17,14 +17,13 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/command"
 )
 
+//counterfeiter:generate -o ../../mocks/single_pr_trigger_handler.go --fake-name SinglePRTriggerHandler . SinglePRTriggerHandler
+
 // SinglePRTriggerHandler handles POST /trigger?url=<pr_url>.
 // The handler is intentionally thin: parse the URL, validate it
 // synchronously, publish a TriggerPRReviewCommand to Kafka, and
 // return HTTP 202. All GitHub API access, filter evaluation, and
 // trust decision logic is owned by the in-pod command consumer.
-//
-//counterfeiter:generate -o ../../mocks/single_pr_trigger_handler.go --fake-name SinglePRTriggerHandler . SinglePRTriggerHandler
-
 type SinglePRTriggerHandler = libhttp.WithError
 
 // NewSinglePRTriggerHandler returns a handler that publishes a

@@ -17,26 +17,20 @@ import (
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
 )
 
-var _ = Describe("NewSinglePRTriggerHandler", func() {
+var _ = Describe("CreateSinglePRTriggerHandler", func() {
 	var sender *mocks.TriggerPRReviewCommandSender
 
 	BeforeEach(func() {
 		sender = new(mocks.TriggerPRReviewCommandSender)
 	})
 
-	It("panics when sender is nil", func() {
-		Expect(func() {
-			factory.NewSinglePRTriggerHandler(nil)
-		}).To(PanicWith("sender is required"))
-	})
-
-	It("returns a non-nil handler when sender is non-nil", func() {
-		handler := factory.NewSinglePRTriggerHandler(sender)
+	It("returns a non-nil handler", func() {
+		handler := factory.CreateSinglePRTriggerHandler(sender)
 		Expect(handler).NotTo(BeNil())
 	})
 
 	It("handler responds to a request", func() {
-		handler := factory.NewSinglePRTriggerHandler(sender)
+		handler := factory.CreateSinglePRTriggerHandler(sender)
 		wrapped := libhttp.NewErrorHandler(handler)
 		sender.SendCommandReturns(nil)
 		req := httptest.NewRequest(

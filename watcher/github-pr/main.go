@@ -293,7 +293,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	// HTTP-side sender backs the /trigger handler.
 	triggerPRReviewSender := factory.CreateTriggerPRReviewCommandSender(syncProducer, branch)
-	triggerHandler := factory.NewSinglePRTriggerHandler(triggerPRReviewSender)
+	triggerHandler := factory.CreateSinglePRTriggerHandler(triggerPRReviewSender)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
 	// In-pod command consumer: third run.Func alongside poll + HTTP.
