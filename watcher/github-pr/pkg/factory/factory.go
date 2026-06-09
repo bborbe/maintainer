@@ -13,11 +13,15 @@ import (
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
 	libkafka "github.com/bborbe/kafka"
+	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
+	"github.com/bborbe/run"
 	libtime "github.com/bborbe/time"
 
+	lib "github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/lib/githubapp"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/command"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
@@ -48,7 +52,7 @@ func CreateKafkaSender(
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.
 func CreateWatcher(
-	httpClient *http.Client,
+	ghClient pkg.GitHubClient,
 	createSender task.CreateCommandSender,
 	cursorPath string,
 	startTime libtime.DateTime,
@@ -61,7 +65,6 @@ func CreateWatcher(
 	maxTitleLen int,
 	taskSuffix string,
 ) pkg.Watcher {
-	ghClient := pkg.NewGitHubClient(httpClient)
 	publisher := pkg.NewTaskPublisher(
 		createSender,
 		trustDecision,
@@ -81,5 +84,64 @@ func CreateWatcher(
 		startTime,
 		scope,
 		taskCreationFilter,
+	)
+}
+
+// CreateTriggerPRReviewCommandSender constructs a typed trigger-PR-review
+// command sender backed by a Kafka sync producer. This is the HTTP-side
+// sender: the /trigger handler publishes TriggerPRReviewCommand messages
+// through it.
+func CreateTriggerPRReviewCommandSender(
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
+) command.TriggerPRReviewCommandSender {
+	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	return command.NewTriggerPRReviewCommandSender(sender)
+}
+
+// CreateCommandConsumer wires a run.Func that consumes TriggerPRReviewCommand
+// messages from the github-pr watcher's request topic and runs them through
+// the single-PR review pipeline (GitHub fetch → filter → trust → publish).
+//
+// The function is pure composition: no business logic, no conditionals.
+// It uses cdb.RunCommandConsumerTxDefault (auto-wraps the transaction) per
+// the go-cqrs/auto-tx-wrapper-no-manual-wrap rule — do NOT manually wrap
+// the executor with kv.NewTransactionMiddleware.
+func CreateCommandConsumer(
+	saramaClientProvider libkafka.SaramaClientProvider,
+	syncProducer libkafka.SyncProducer,
+	db libkv.DB,
+	ghClient pkg.GitHubClient,
+	createSender task.CreateCommandSender,
+	taskCreationFilter filter.TaskCreationFilter,
+	trustDecision trust.Trust,
+	stage string,
+	maxSlugLen int,
+	maxTitleLen int,
+	taskSuffix string,
+	metrics pkg.Metrics,
+	branch base.Branch,
+) run.Func {
+	executors := cdb.CommandObjectExecutorTxs{
+		command.NewTriggerPRReviewCommandExecutor(
+			ghClient,
+			createSender,
+			taskCreationFilter,
+			trustDecision,
+			stage,
+			maxSlugLen,
+			maxTitleLen,
+			taskSuffix,
+			metrics,
+		),
+	}
+	return cdb.RunCommandConsumerTxDefault(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		lib.GithubPRReviewV1SchemaID,
+		branch,
+		false, // ignoreUnsupported
+		executors,
 	)
 }

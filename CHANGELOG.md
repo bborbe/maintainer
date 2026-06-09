@@ -10,7 +10,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- feat(watcher/github-pr): add `TriggerPRReviewCommandExecutor` in `pkg/command/` — consumes `TriggerPRReviewCommand` messages from the in-pod Kafka topic and runs the single-PR review pipeline (GitHub fetch → filter → trust → downstream `CreateTaskCommand` publish). Maps deliberate skips (invalid URL / filter-rejected / untrusted author) to `cdb.ErrCommandObjectSkipped` and transient errors (GitHub 5xx / trust infra / Kafka send) to wrapped errors. Takes ownership of the `github_pr_published` metric (labels: create, skipped, kafka_error, trust_error) — the HTTP handler continues to increment in this prompt; prompt 3 strips the handler increments.
+- feat(watcher/github-pr): split /trigger into CQRS pair — HTTP handler validates the PR URL and publishes a `TriggerPRReviewCommand` to Kafka (returns 202), an in-pod command consumer (third `run.Func` alongside the poll loop and HTTP server) runs the GitHub fetch + filter + trust + downstream `CreateTaskCommand` publish. Pod crashes mid-trigger survive via Kafka redelivery (downstream task_id is derived and idempotent). HTTP wire shape changes from `200 + {status,task_id,repo,pr_number,head_sha}` to `202 + {status,url}`; filter-skip and trust-reject become silent in the HTTP response (visible in `github_pr_published{result="skipped"|"kafka_error"|"trust_error"}` metrics). The `/admin/trigger` mount path and the `GithubPRReviewV1SchemaID` are unchanged.
+- test(watcher/github-pr): add `TriggerPRReviewCommand` operation constant, sender, executor, byte-identical payload parity, crash-recovery, panicking-GitHub-client, clean-shutdown, and end-to-end command flow tests (spec 066)
 
 ## v0.36.0
 

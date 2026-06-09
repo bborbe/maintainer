@@ -28,6 +28,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	lib "github.com/bborbe/maintainer/lib"
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
@@ -271,23 +272,41 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrap(ctx, err, "resolve auth")
 	}
 
+	// Shared instances — both the poll-loop watcher and the command consumer use them.
+	ghClient := pkg.NewGitHubClient(httpClient)
+	metrics := pkg.NewMetrics()
+
 	w := factory.CreateWatcher(
-		httpClient,
+		ghClient,
 		createSender,
 		pkg.DefaultCursorPath,
 		startTime,
 		a.RepoScope,
 		taskCreationFilter,
 		a.Stage,
-		pkg.NewMetrics(),
+		metrics,
 		trustDecision,
 		a.MaxSlugLen,
 		a.MaxTitleLen,
 		a.TaskSuffix,
 	)
 
-	triggerHandler := factory.CreateSinglePRTriggerHandler(
-		httpClient,
+	// HTTP-side sender backs the /trigger handler.
+	triggerPRReviewSender := factory.CreateTriggerPRReviewCommandSender(syncProducer, branch)
+	triggerHandler := factory.NewSinglePRTriggerHandler(triggerPRReviewSender)
+	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
+
+	// In-pod command consumer: third run.Func alongside poll + HTTP.
+	// session-scoped offset store — replays the request topic from OffsetOldest
+	// on pod restart; safe because the downstream CreateTaskCommand is idempotent
+	// via the derived task_id.
+	saramaClientProvider := libkafka.NewSaramaClientProviderNew(a.KafkaBrokers)
+	db := factory.NewMemDB()
+	commandConsumer := factory.CreateCommandConsumer(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		ghClient, // shared with the watcher
 		createSender,
 		taskCreationFilter,
 		trustDecision,
@@ -295,18 +314,20 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.MaxSlugLen,
 		a.MaxTitleLen,
 		a.TaskSuffix,
-		pkg.NewMetrics(),
+		metrics, // shared with the watcher
+		branch,
 	)
-	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
 	glog.V(2).
-		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen)
+		Infof("maintainer-watcher-github-pr starting stage=%s scope=%s interval=%s listen=%s schema=%s", a.Stage, a.RepoScope, a.PollInterval, a.Listen, lib.GithubPRReviewV1SchemaID)
 
 	pollOnce := a.pollOnce(w)
 
+	// Order: poll → HTTP → command consumer (spec 066 AC 9: three run.Funcs).
 	return run.CancelOnFirstFinish(ctx,
 		a.runPollLoop(pollOnce, pollInterval),
 		a.createHTTPServer(pollOnce),
+		commandConsumer,
 	)
 }
 

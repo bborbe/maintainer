@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [066-cqrs-trigger-github-pr]
+summary: Wired the third run.Func (CreateCommandConsumer) into run.CancelOnFirstFinish, added CreateTriggerPRReviewCommandSender + NewMemDB factories, deleted the legacy handler adapter, added clean-shutdown + end-to-end integration tests, and updated CHANGELOG.md. make precommit passes with exit code 0.
+container: maintainer-cqrs-trigger-exec-251-spec-066-wire-command-consumer
+dark-factory-version: v0.175.0
 created: "2026-06-08T21:11:59Z"
 queued: "2026-06-08T21:49:51Z"
+started: "2026-06-09T05:49:01Z"
+completed: "2026-06-09T06:13:36Z"
 branch: dark-factory/cqrs-trigger-github-pr
 ---
 
