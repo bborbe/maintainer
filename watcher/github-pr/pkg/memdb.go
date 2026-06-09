@@ -31,7 +31,7 @@ func NewMemDB() libkv.DB {
 }
 
 type memDB struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	buckets map[string]map[string][]byte
 	stats   libkv.Stats
 }
@@ -49,8 +49,8 @@ func (d *memDB) View(
 	ctx context.Context,
 	fn func(ctx context.Context, tx libkv.Tx) error,
 ) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return fn(ctx, &memTx{db: d})
 }
 
@@ -70,11 +70,17 @@ func (d *memDB) Remove() error {
 }
 
 func (d *memDB) Stats(ctx context.Context) (*libkv.Stats, error) {
-	return &d.stats, nil
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	s := d.stats
+	return &s, nil
 }
 
 func (d *memDB) StatsDetailed(ctx context.Context) (*libkv.Stats, error) {
-	return &d.stats, nil
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	s := d.stats
+	return &s, nil
 }
 
 type memTx struct {

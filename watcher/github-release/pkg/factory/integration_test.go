@@ -200,11 +200,9 @@ var _ = Describe("crash recovery (spec 067 AC 19 — at-least-once via idempoten
 		watcher.PollReturns(nil)
 		_, _, err = executor.HandleCommand(context.Background(), nil, commandObject)
 		Expect(err).NotTo(HaveOccurred())
-		Eventually(
-			func() int { return watcher.PollCallCount() },
-			30*time.Second,
-			100*time.Millisecond,
-		).
-			Should(BeNumerically(">=", 2))
+		// PollCallCount is synchronous (counterfeiter increments before HandleCommand
+		// returns), so a direct assertion is correct here — `Eventually` would be
+		// misleading polling on an already-settled value.
+		Expect(watcher.PollCallCount()).To(BeNumerically(">=", 2))
 	})
 })

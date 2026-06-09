@@ -54,7 +54,7 @@ func (h *triggerReleaseCheckHandler) ServeHTTP(
 		)
 	}
 
-	glog.V(2).Infof("trigger accepted")
+	glog.V(2).Infof("trigger accepted op=%s", command.TriggerReleaseCheckCommandOperation)
 	return writeAccepted(resp)
 }
 
