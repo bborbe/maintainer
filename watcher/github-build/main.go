@@ -22,6 +22,7 @@ import (
 	"github.com/bborbe/run"
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -116,6 +117,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	branch := base.Branch(a.Stage)
 
+	currentDateTime := libtime.NewCurrentDateTime()
 	w, syncProducer, watcherCleanup, err := factory.CreateWatcher(
 		ctx,
 		ghClient,
@@ -129,6 +131,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.BuildTaskPhase,
 		a.MaxTitleLen,
 		a.TaskSuffix,
+		currentDateTime, // spec 069: clock for force=true salt nonce
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
@@ -178,7 +181,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 func (a *application) pollOnce(w pkg.Watcher) run.Func {
 	return func(ctx context.Context) error {
 		glog.V(2).Infof("poll cycle start stage=%s", a.Stage)
-		return w.Poll(ctx)
+		return w.Poll(ctx, false)
 	}
 }
 

@@ -12,10 +12,11 @@ import (
 )
 
 type Watcher struct {
-	PollStub        func(context.Context) error
+	PollStub        func(context.Context, bool) error
 	pollMutex       sync.RWMutex
 	pollArgsForCall []struct {
 		arg1 context.Context
+		arg2 bool
 	}
 	pollReturns struct {
 		result1 error
@@ -27,18 +28,19 @@ type Watcher struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *Watcher) Poll(arg1 context.Context) error {
+func (fake *Watcher) Poll(arg1 context.Context, arg2 bool) error {
 	fake.pollMutex.Lock()
 	ret, specificReturn := fake.pollReturnsOnCall[len(fake.pollArgsForCall)]
 	fake.pollArgsForCall = append(fake.pollArgsForCall, struct {
 		arg1 context.Context
-	}{arg1})
+		arg2 bool
+	}{arg1, arg2})
 	stub := fake.PollStub
 	fakeReturns := fake.pollReturns
-	fake.recordInvocation("Poll", []interface{}{arg1})
+	fake.recordInvocation("Poll", []interface{}{arg1, arg2})
 	fake.pollMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1
@@ -52,17 +54,17 @@ func (fake *Watcher) PollCallCount() int {
 	return len(fake.pollArgsForCall)
 }
 
-func (fake *Watcher) PollCalls(stub func(context.Context) error) {
+func (fake *Watcher) PollCalls(stub func(context.Context, bool) error) {
 	fake.pollMutex.Lock()
 	defer fake.pollMutex.Unlock()
 	fake.PollStub = stub
 }
 
-func (fake *Watcher) PollArgsForCall(i int) context.Context {
+func (fake *Watcher) PollArgsForCall(i int) (context.Context, bool) {
 	fake.pollMutex.RLock()
 	defer fake.pollMutex.RUnlock()
 	argsForCall := fake.pollArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *Watcher) PollReturns(result1 error) {

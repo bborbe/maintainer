@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["069"]
+spec: ["072"]
 summary: 'Added DeriveTaskIDForce helper + 3 Ginkgo tests in watcher/github-pr/pkg/, CHANGELOG ## Unreleased bullet; make precommit exits 0'
 container: maintainer-trigger-force-exec-252-spec-067-derive-task-id-force-helper
 dark-factory-version: v0.175.0

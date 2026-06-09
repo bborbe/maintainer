@@ -18,3 +18,18 @@ func DeriveTaskID(owner, repo, episodeSHA string) uuid.UUID {
 	key := owner + "/" + repo + "#build-" + episodeSHA
 	return uuid.NewSHA1(buildWatcherNamespace, []byte(key))
 }
+
+// DeriveTaskIDForce returns a salted task identifier for an operator-forced
+// re-publish of a build-failure episode (spec 069). The salt is a caller-supplied
+// nonce — typically a microsecond timestamp from libtime.CurrentDateTimeGetter — so
+// successive forced re-publishes for the same (owner, repo, episodeSHA) produce
+// distinct identifiers and the agent controller's deterministic-ID dedup-skip does
+// NOT fire. Pure function; nonce uniqueness is the caller's responsibility.
+//
+// Key format: "<owner>/<repo>#build-<episodeSHA>!<nonce>". The "!" separator is
+// invalid in GitHub owners/repos and in hex SHAs, so the salted keyspace cannot
+// collide with the canonical DeriveTaskID keyspace for any (owner, repo, sha) tuple.
+func DeriveTaskIDForce(owner, repo, episodeSHA, nonce string) uuid.UUID {
+	key := owner + "/" + repo + "#build-" + episodeSHA + "!" + nonce
+	return uuid.NewSHA1(buildWatcherNamespace, []byte(key))
+}

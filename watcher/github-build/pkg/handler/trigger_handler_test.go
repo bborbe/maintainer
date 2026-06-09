@@ -130,6 +130,53 @@ var _ = Describe("TriggerHandler", func() {
 			},
 		)
 	})
+
+	Context("force query param (spec 069)", func() {
+		It("publishes Force=true when ?force=true", func() {
+			req := httptest.NewRequest("POST", "/trigger?force=true", nil)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeTrue())
+			Expect(sentCmd.Scope).To(BeEmpty())
+		})
+
+		It("publishes Force=false when ?force=false", func() {
+			req := httptest.NewRequest("POST", "/trigger?force=false", nil)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+		})
+
+		It("publishes Force=false when ?force is absent", func() {
+			req := httptest.NewRequest("POST", "/trigger", nil)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+		})
+
+		It("publishes Force=false when ?force=garbage (parse fallback)", func() {
+			req := httptest.NewRequest("POST", "/trigger?force=banana", nil)
+			resp := httptest.NewRecorder()
+			h.ServeHTTP(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.Force).To(BeFalse())
+		})
+	})
 })
 
 // panickingWatcher is a minimal pkg.Watcher implementation that panics on
@@ -137,7 +184,7 @@ var _ = Describe("TriggerHandler", func() {
 // the handler has no indirect reference path to a Watcher.
 type panickingWatcher struct{}
 
-func (p *panickingWatcher) Poll(_ context.Context) error {
+func (p *panickingWatcher) Poll(_ context.Context, _ bool) error {
 	panic("panickingWatcher: handler should never reach me")
 }
 

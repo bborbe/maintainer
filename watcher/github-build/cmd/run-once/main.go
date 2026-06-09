@@ -15,6 +15,7 @@ import (
 	libkafka "github.com/bborbe/kafka"
 	libsentry "github.com/bborbe/sentry"
 	"github.com/bborbe/service"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
 	repoallowlist "github.com/bborbe/maintainer/lib/repoallowlist"
@@ -73,6 +74,7 @@ type WatcherFactory func(
 	taskPhase string,
 	maxTitleLen int,
 	taskSuffix string,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) (pkg.Watcher, libkafka.SyncProducer, func(), error)
 
 func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
@@ -133,11 +135,12 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.BuildTaskPhase,
 		a.MaxTitleLen,
 		a.TaskSuffix,
+		libtime.NewCurrentDateTime(),
 	)
 	if err != nil {
 		return errors.Wrap(ctx, err, "create watcher")
 	}
 	defer cleanup()
 
-	return w.Poll(ctx)
+	return w.Poll(ctx, false)
 }

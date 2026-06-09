@@ -12,6 +12,7 @@ import (
 	"time"
 
 	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -54,6 +55,7 @@ var _ = Describe("Watcher", func() {
 			ml,
 			pkg.DefaultMaxTitleLen,
 			"",
+			libtime.NewCurrentDateTime(),
 		)
 	}
 
@@ -73,7 +75,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd := createSender.SendCommandArgsForCall(0)
@@ -99,11 +101,11 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 
 				// second poll still green
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 			})
 		})
@@ -128,10 +130,10 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd := createSender.SendCommandArgsForCall(0)
 				Expect(cmd.Frontmatter["episode_sha"]).To(Equal("sha-b"))
@@ -154,11 +156,11 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
 				// second poll: same SHA still failing
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1)) // no new publish
 			})
 		})
@@ -179,13 +181,13 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
 				_, firstCmd := createSender.SendCommandArgsForCall(0)
 				Expect(firstCmd.Frontmatter["episode_sha"]).To(Equal("sha-a"))
 
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				// no new publish — episode is locked on first red SHA
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
@@ -209,10 +211,10 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1)) // no new publish
 
 				loaded, err := pkg.LoadCursor(ctx, cursorPath)
@@ -236,7 +238,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 
 				loaded, err := pkg.LoadCursor(ctx, cursorPath)
@@ -255,7 +257,7 @@ var _ = Describe("Watcher", func() {
 				createSender.SendCommandReturns(os.ErrProcessDone)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed()) // poll succeeds; kafka error is logged
+				Expect(w.Poll(ctx, false)).To(Succeed()) // poll succeeds; kafka error is logged
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
@@ -278,7 +280,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo-a", "owner/repo-b"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				// repo-b must still have been processed
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
@@ -296,7 +298,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo-a", "owner/repo-b"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				// repo-b was not reached due to rate-limit break
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
@@ -311,7 +313,7 @@ var _ = Describe("Watcher", func() {
 				Expect(os.WriteFile(cursorPath, []byte("{invalid-json"), 0600)).To(Succeed())
 
 				w := makeWatcher([]string{"owner/repo"})
-				err := w.Poll(ctx)
+				err := w.Poll(ctx, false)
 				Expect(err).To(HaveOccurred())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 			})
@@ -366,17 +368,17 @@ var _ = Describe("Watcher", func() {
 				w := makeWatcher([]string{"owner/repo"})
 
 				// t0: green → no publish
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 
 				// t1: green → red → publish with episode sha-a
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd1 := createSender.SendCommandArgsForCall(0)
 				Expect(cmd1.Frontmatter["episode_sha"]).To(Equal("sha-a"))
 
 				// t2: red → red (sha-b) → no publish, episode SHA stays sha-a
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 
 				cursor, err := pkg.LoadCursor(ctx, cursorPath)
@@ -384,7 +386,7 @@ var _ = Describe("Watcher", func() {
 				Expect(cursor.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal("sha-a"))
 
 				// t3: red → green → no publish
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				cursor, err = pkg.LoadCursor(ctx, cursorPath)
 				Expect(err).NotTo(HaveOccurred())
@@ -392,7 +394,7 @@ var _ = Describe("Watcher", func() {
 				Expect(cursor.Repos["owner/repo"].CurrentEpisodeSHA).To(Equal(""))
 
 				// t4: green → red with sha-c → new publish, new episode
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(createSender.SendCommandCallCount()).To(Equal(2))
 				_, cmd4 := createSender.SendCommandArgsForCall(1)
 				Expect(cmd4.Frontmatter["episode_sha"]).To(Equal("sha-c"))
@@ -426,7 +428,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd := createSender.SendCommandArgsForCall(0)
@@ -448,7 +450,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				// latest run is success → state is green → no publish
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
@@ -463,7 +465,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 				_, cmd := createSender.SendCommandArgsForCall(0)
@@ -489,7 +491,7 @@ var _ = Describe("Watcher", func() {
 					}, nil)
 
 					w := makeWatcher([]string{"github.com/owner/repo"})
-					Expect(w.Poll(ctx)).To(Succeed())
+					Expect(w.Poll(ctx, false)).To(Succeed())
 
 					// GitHub API must receive the stripped owner and repo — not the host
 					Expect(ghClient.GetDefaultBranchCallCount()).To(Equal(1))
@@ -536,6 +538,7 @@ var _ = Describe("Watcher", func() {
 				ml,
 				pkg.DefaultMaxTitleLen,
 				"",
+				libtime.NewCurrentDateTime(),
 			)
 		}
 
@@ -557,7 +560,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(10, "sha-custom"), nil)
 
 			w := makeCustomWatcher([]string{"owner/repo"}, "other-agent", "backlog", "")
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -572,7 +575,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(20, "sha-human"), nil)
 
 			w := makeCustomWatcher([]string{"owner/repo"}, "human", "todo", "")
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -585,7 +588,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(21, "sha-planner"), nil)
 
 			w := makeCustomWatcher([]string{"owner/repo"}, "build-fix-planner", "todo", "")
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -598,7 +601,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(11, "sha-phase"), nil)
 
 			w := makeCustomWatcher([]string{"owner/repo"}, "build-fixer-agent", "todo", "planning")
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -610,7 +613,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRun(12, "sha-nophase"), nil)
 
 			w := makeCustomWatcher([]string{"owner/repo"}, "build-fixer-agent", "todo", "")
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -635,6 +638,7 @@ var _ = Describe("Watcher", func() {
 				loader,
 				pkg.DefaultMaxTitleLen,
 				"",
+				libtime.NewCurrentDateTime(),
 			)
 		}
 
@@ -674,7 +678,7 @@ var _ = Describe("Watcher", func() {
 			maintenanceLoader.LoadOverridesReturns(maintenance.GithubBuildConfig{})
 
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -694,7 +698,7 @@ var _ = Describe("Watcher", func() {
 			})
 
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -712,7 +716,7 @@ var _ = Describe("Watcher", func() {
 			})
 
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -729,7 +733,7 @@ var _ = Describe("Watcher", func() {
 			})
 
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -744,7 +748,7 @@ var _ = Describe("Watcher", func() {
 			})
 
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -756,11 +760,11 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetDefaultBranchReturns("main", nil)
 			ghClient.GetWorkflowRunsReturns(singleFailingRunMaint("sha-red"), nil)
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 			callsAfterFirst := maintenanceLoader.LoadOverridesCallCount()
 			Expect(callsAfterFirst).To(Equal(1))
 
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(callsAfterFirst))
 		})
 
@@ -768,8 +772,8 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetDefaultBranchReturns("main", nil)
 			ghClient.GetWorkflowRunsReturns(singleSuccessRunMaint("sha-green"), nil)
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(0))
 			Expect(createSender.SendCommandCallCount()).To(Equal(0))
 		})
@@ -778,12 +782,12 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetDefaultBranchReturns("main", nil)
 			ghClient.GetWorkflowRunsReturnsOnCall(0, singleFailingRunMaint("sha-red"), nil)
 			w := makeWatcherWithLoader([]string{"owner/repo"}, maintenanceLoader)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 			callsAfterRed := maintenanceLoader.LoadOverridesCallCount()
 			Expect(callsAfterRed).To(Equal(1))
 
 			ghClient.GetWorkflowRunsReturnsOnCall(1, singleSuccessRunMaint("sha-green"), nil)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 			Expect(maintenanceLoader.LoadOverridesCallCount()).To(Equal(callsAfterRed))
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 		})
@@ -816,7 +820,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -841,7 +845,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -866,7 +870,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -906,7 +910,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -939,6 +943,7 @@ var _ = Describe("Watcher", func() {
 				maintenanceLoaderWithLogs,
 				pkg.DefaultMaxTitleLen,
 				"",
+				libtime.NewCurrentDateTime(),
 			)
 		}
 
@@ -970,7 +975,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetJobLogReturns([]byte(logContent), nil)
 
 			w := makeWatcherWithLogs(true)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -987,7 +992,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetWorkflowRunsReturns(singleFailingRunWithJobID("sha-nologs"), nil)
 
 			w := makeWatcherWithLogs(false)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -1001,7 +1006,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetJobLogReturns(nil, os.ErrNotExist)
 
 			w := makeWatcherWithLogs(true)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -1017,7 +1022,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetJobLogReturns(nil, nil)
 
 			w := makeWatcherWithLogs(true)
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -1054,7 +1059,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			_, cmd := createSender.SendCommandArgsForCall(0)
@@ -1069,7 +1074,7 @@ var _ = Describe("Watcher", func() {
 			ghClient.GetJobsForRunReturns(nil, stderrors.New("http 503 service unavailable"))
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			// Publish still succeeds despite jobs API failure
 			Expect(createSender.SendCommandCallCount()).To(Equal(1))
@@ -1084,7 +1089,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			_, cmd := createSender.SendCommandArgsForCall(0)
 			Expect(cmd.Body).To(ContainSubstring("| CI | build | ? |"))
@@ -1105,7 +1110,7 @@ var _ = Describe("Watcher", func() {
 			}, nil)
 
 			w := makeWatcher([]string{"owner/repo"})
-			Expect(w.Poll(ctx)).To(Succeed())
+			Expect(w.Poll(ctx, false)).To(Succeed())
 
 			// Exactly 2 calls — one per failing run (not one per job or step)
 			Expect(ghClient.GetJobsForRunCallCount()).To(Equal(2))
@@ -1123,12 +1128,12 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				firstCallCount := ghClient.GetJobsForRunCallCount()
 				Expect(firstCallCount).To(Equal(1))
 
 				// Second poll: red→red — no publish, no GetJobsForRun call
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 				Expect(ghClient.GetJobsForRunCallCount()).To(Equal(firstCallCount))
 				Expect(createSender.SendCommandCallCount()).To(Equal(1)) // still only 1 publish
 			},
@@ -1157,7 +1162,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				// Zero tasks — the Dependabot workflow is filtered out
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
@@ -1178,7 +1183,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(0))
 			})
@@ -1208,7 +1213,7 @@ var _ = Describe("Watcher", func() {
 					}, nil)
 
 					w := makeWatcher([]string{"owner/repo"})
-					Expect(w.Poll(ctx)).To(Succeed())
+					Expect(w.Poll(ctx, false)).To(Succeed())
 
 					Expect(createSender.SendCommandCallCount()).To(Equal(1))
 					_, cmd := createSender.SendCommandArgsForCall(0)
@@ -1237,7 +1242,7 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			})
@@ -1257,10 +1262,116 @@ var _ = Describe("Watcher", func() {
 				}, nil)
 
 				w := makeWatcher([]string{"owner/repo"})
-				Expect(w.Poll(ctx)).To(Succeed())
+				Expect(w.Poll(ctx, false)).To(Succeed())
 
 				Expect(createSender.SendCommandCallCount()).To(Equal(1))
 			})
+		})
+	})
+
+	// Force arm (spec 069): with prevState=="red" && currState=="red", the
+	// state machine normally skips (episode lock). When force=true the
+	// arm publishes a CreateTaskCommand whose TaskIdentifier is salted
+	// via DeriveTaskIDForce so the controller's deterministic-ID dedup
+	// does not fire and a fresh vault task is created.
+	Describe("force arm (spec 069)", func() {
+		const (
+			owner      = "owner"
+			repo       = "repo"
+			repoKey    = "owner/repo"
+			episodeSHA = "abc123def456"
+		)
+
+		var fakeNow libtime.DateTime
+		var clock libtime.CurrentDateTimeGetter
+
+		// makeForceWatcher constructs a watcher with the locked-red cursor
+		// pre-populated and an injectable clock so the microsecond nonce
+		// is deterministic per test.
+		makeForceWatcher := func() pkg.Watcher {
+			// Pre-populate cursor: repo is red with episodeSHA.
+			cursor := &pkg.Cursor{
+				Repos: map[string]*pkg.RepoState{
+					repoKey: {
+						LastKnownState:    "red",
+						CurrentEpisodeSHA: episodeSHA,
+						DefaultBranch:     "main",
+					},
+				},
+			}
+			Expect(pkg.SaveCursor(ctx, cursorPath, cursor)).To(Succeed())
+
+			// GitHub still reports red on the same SHA (red×red case).
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					Name:       "CI",
+					HeadSHA:    episodeSHA,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+					CreatedAt:  time.Now(),
+				},
+			}, nil)
+
+			ml := new(mocks.MaintenanceLoader)
+			ml.LoadOverridesReturns(maintenance.GithubBuildConfig{})
+			return pkg.NewWatcher(
+				ghClient,
+				createSender,
+				metrics,
+				filter.RepoFilters{},
+				pkg.NewStaticSnapshot([]string{repoKey}),
+				cursorPath,
+				"build-fixer-agent",
+				"todo",
+				"",
+				ml,
+				pkg.DefaultMaxTitleLen,
+				"",
+				clock,
+			)
+		}
+
+		BeforeEach(func() {
+			fakeNow = libtime.DateTime(time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC))
+			clock = libtime.CurrentDateTimeGetterFunc(func() libtime.DateTime { return fakeNow })
+		})
+
+		It("Poll(ctx, false) does NOT publish on red×red (episode lock holds)", func() {
+			w := makeForceWatcher()
+			Expect(w.Poll(ctx, false)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(0))
+		})
+
+		It("Poll(ctx, true) publishes exactly once with salted TaskIdentifier", func() {
+			w := makeForceWatcher()
+			Expect(w.Poll(ctx, true)).To(Succeed())
+
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, cmd := createSender.SendCommandArgsForCall(0)
+
+			canonical := pkg.DeriveTaskID(owner, repo, episodeSHA).String()
+			Expect(string(cmd.TaskIdentifier)).NotTo(Equal(canonical),
+				"force arm must use DeriveTaskIDForce, not the canonical DeriveTaskID")
+		})
+
+		It("two Poll(ctx, true) with clock advance produce distinct TaskIdentifiers", func() {
+			w := makeForceWatcher()
+
+			Expect(w.Poll(ctx, true)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, first := createSender.SendCommandArgsForCall(0)
+
+			// Advance clock by 1µs so UnixMicro() returns a different nonce.
+			fakeNow = libtime.DateTime(time.Time(fakeNow).Add(time.Microsecond))
+
+			Expect(w.Poll(ctx, true)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(2))
+			_, second := createSender.SendCommandArgsForCall(1)
+
+			Expect(string(first.TaskIdentifier)).NotTo(Equal(string(second.TaskIdentifier)),
+				"two forced publishes with distinct nonces must yield distinct identifiers")
 		})
 	})
 })
