@@ -15,10 +15,12 @@ import (
 	cqrsiam "github.com/bborbe/cqrs/iam"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"
+	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
 	"github.com/bborbe/run"
 	"github.com/golang/glog"
 
+	lib "github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/command"
 	"github.com/bborbe/maintainer/watcher/github-build/pkg/filter"
@@ -134,6 +136,36 @@ func CreateTriggerBuildCheckHandler(
 	sender command.TriggerBuildCheckCommandSender,
 ) handler.TriggerBuildCheckHandler {
 	return handler.NewTriggerBuildCheckHandler(sender)
+}
+
+// CreateCommandConsumer wires a run.Func that consumes TriggerBuildCheckCommand
+// messages from the github-build watcher's request topic (identified by
+// lib.GithubBuildV1SchemaID) and runs them through the shared
+// Watcher.Poll(ctx) pipeline.
+//
+// The function is pure composition: no business logic, no conditionals.
+// It uses cdb.RunCommandConsumerTxDefault (auto-wraps the transaction) per
+// the go-cqrs/auto-tx-wrapper-no-manual-wrap rule — do NOT manually wrap
+// the executor with kv.NewTransactionMiddleware.
+func CreateCommandConsumer(
+	saramaClientProvider libkafka.SaramaClientProvider,
+	syncProducer libkafka.SyncProducer,
+	db libkv.DB,
+	watcher pkg.Watcher,
+	branch base.Branch,
+) run.Func {
+	executors := cdb.CommandObjectExecutorTxs{
+		command.NewTriggerBuildCheckCommandExecutor(watcher),
+	}
+	return cdb.RunCommandConsumerTxDefault(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		lib.GithubBuildV1SchemaID,
+		branch,
+		false, // ignoreUnsupported
+		executors,
+	)
 }
 
 // countWildcards returns the number of wildcard entries (host/owner/*) in the list.

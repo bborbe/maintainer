@@ -68,7 +68,7 @@ type application struct {
 	TriggerHandler http.Handler
 }
 
-//nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 85 lines, 5 over the 80-line cap.
+//nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 90+ lines, over the 80-line cap.
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	if err := validateMaxTitleLen(ctx, a.MaxTitleLen); err != nil {
 		return err
@@ -144,14 +144,30 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	triggerHandler := factory.CreateTriggerBuildCheckHandler(triggerBuildCheckSender)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
+	// In-pod command consumer: third run.Func alongside poll + HTTP.
+	// session-scoped offset store — replays the request topic from OffsetOldest
+	// on pod restart; safe because the downstream Watcher.Poll is idempotent
+	// via the per-(repo,run) cursor + per-task derived task_id.
+	saramaClientProvider := libkafka.NewSaramaClientProviderNew(a.KafkaBrokers)
+	db := pkg.NewMemDB()
+	commandConsumer := factory.CreateCommandConsumer(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		w, // shared with the poll-interval loop
+		branch,
+	)
+
 	glog.V(2).
 		Infof("maintainer-watcher-github-build starting stage=%s interval=%s listen=%s", a.Stage, a.PollInterval, a.Listen)
 
 	pollOnce := a.pollOnce(w)
 
+	// Order: poll → HTTP → command consumer (spec 068 AC 9: three run.Funcs).
 	tasks := []run.Func{
 		a.runPollLoop(pollOnce, pollInterval),
 		a.createHTTPServer(),
+		commandConsumer,
 	}
 	if refreshTask != nil {
 		tasks = append(tasks, refreshTask)
@@ -173,6 +189,10 @@ func (a *application) runPollLoop(
 	return func(ctx context.Context) error {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		// Fire one cycle immediately on start, then on each tick.
+		if err := poll(ctx); err != nil {
+			glog.Errorf("initial poll: %v", err)
+		}
 		for {
 			select {
 			case <-ctx.Done():

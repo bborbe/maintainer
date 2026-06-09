@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: 'Wired factory.CreateCommandConsumer (cdb.RunCommandConsumerTxDefault + lib.GithubBuildV1SchemaID), added command_consumer_test.go (AST control-flow assertion) and integration_test.go (clean-shutdown + end-to-end), and rewired main.go to run three run.Funcs under run.CancelOnFirstFinish (poll loop → HTTP server → command consumer). All checks pass: precommit exits 0, all 12 factory specs and 10 main package specs pass, and all spec verification greps match expectations.'
+container: maintainer-cqrs-trigger-build-exec-260-cqrs-github-build-factory-wiring
+dark-factory-version: v0.175.0
 created: "2026-06-09T16:00:00Z"
 queued: "2026-06-09T16:21:18Z"
+started: "2026-06-09T16:53:25Z"
+completed: "2026-06-09T17:03:45Z"
 branch: dark-factory/cqrs-trigger-github-build
 ---
 
