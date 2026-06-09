@@ -234,6 +234,22 @@ var _ = Describe("AIReviewStep", func() {
 		return review
 	}
 
+	// extractReviewWarning returns the typed ReviewWarningOutput for
+	// the `## Review Warning` block. Returns nil when the section is
+	// absent (the override branch did not fire) — callers assert on
+	// the typed fields directly.
+	extractReviewWarning := func(md *agentlib.Markdown) *pkg.ReviewWarningOutput {
+		warning, err := agentlib.ExtractSection[pkg.ReviewWarningOutput](
+			context.Background(),
+			md,
+			"## Review Warning",
+		)
+		if err != nil {
+			return nil
+		}
+		return warning
+	}
+
 	Describe("Name", func() {
 		It("returns github-release-ai-review", func() {
 			Expect(step.Name()).To(Equal("github-release-ai-review"))
@@ -923,6 +939,237 @@ var _ = Describe("AIReviewStep", func() {
 					Expect(review.Checks.UnexpectedFileChange).To(BeTrue())
 					Expect(review.FailedChecks).To(ContainElement(pkg.CheckUnexpectedFileChange))
 					Expect(review.UnexpectedFiles).To(ContainElement("plugin.json"))
+				},
+			)
+		})
+
+		// Spec 064 — ai_review review-warning override. When the local
+		// review rejects a release but the remote confirms the tag is
+		// already at the agent's expected SHA (released) or at a
+		// different SHA (superseded), the task closes as `completed`
+		// and a `## Review Warning` block is appended to the task body
+		// alongside the rejected `## Review` verdict. The override is a
+		// SUB-DECISION on the existing `!approved` path; the existing
+		// `human_review` path stands when the remote is empty or the
+		// LsRemote query errors.
+		Context("review-warning override (spec 064)", func() {
+			// taskWithResultFull wires ## Result + frontmatter with
+			// the `clone_url` and `ref` keys required by
+			// checkReviewOverride (the default taskWithResult helper
+			// omits them). Tests that drive the override path need
+			// these keys present.
+			taskWithResultFull := func(
+				commitSHA, tag, outcome, workdir string,
+			) string {
+				const fm = "---\n" +
+					"status: in_progress\n" +
+					"phase: ai_review\n" +
+					"assignee: github-releaser-agent\n" +
+					"task_type: github-release\n" +
+					"repo: bborbe/example\n" +
+					"task_identifier: gh-release-001\n" +
+					"clone_url: https://github.com/bborbe/example.git\n" +
+					"ref: main\n" +
+					"---\n\n"
+				plan := "## Plan\n\n" +
+					"```json\n" +
+					`{"outcome":"ready","next_version":"1.0.0","next_version_header":"## v1.0.0","original_unreleased":"- feat: add foo\n"}` + "\n" +
+					"```\n\n"
+				result := "## Result\n\n" +
+					"```json\n" +
+					fmt.Sprintf(
+						`{"outcome":%q,"path":"direct-push","commit_sha":%q,"tag":%q,"workdir":%q,"local_tag":%q}`,
+						outcome,
+						commitSHA,
+						tag,
+						workdir,
+						tag,
+					) + "\n" +
+					"```\n"
+				return fm + plan + result
+			}
+
+			// driveRejectingFaithfulnessLLM makes the LLM call return
+			// a faithfulness fail (one entry silently dropped). The
+			// verifier is configured to pass the structural checks
+			// (TagExists + ResolveTagCommit) so the rollup is driven
+			// purely by CheckFaithfulness.
+			driveRejectingFaithfulnessLLM := func() {
+				fakeClient.TagExistsReturns("abc123", nil)
+				fakeClient.ResolveTagCommitReturns("abc123", nil)
+				fakeClient.FetchChangelogReturns(
+					[]byte("## v1.2.8\n\n- feat: add foo\n"),
+					nil,
+				)
+				resp := map[string]interface{}{
+					"per_entry": []map[string]string{
+						{
+							"entry":   "- fix: bar",
+							"verdict": "silent-drop",
+							"note":    "missing",
+						},
+					},
+					"extras":  []map[string]string{},
+					"overall": pkg.OverallFail,
+				}
+				fakeRunner.RunReturns(
+					&claudelib.ClaudeResult{Result: mustJSON(resp)},
+					nil,
+				)
+			}
+
+			// (a) remote SHA matches expected → completed + ## Review
+			// Warning. The new branch is taken; the workdir cleanup
+			// sentinel is set so the on-disk clone is removed at the
+			// terminal transition.
+			It(
+				"remote SHA matches expected → completed, ## Review Warning, ## Review preserved",
+				func() {
+					driveRejectingFaithfulnessLLM()
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+					fakeOps.LsRemoteReturns("abc123", nil)
+
+					result, md := runStep(
+						taskWithResultFull("abc123", "v1.2.8", "released", tmpDir),
+					)
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("done"))
+
+					Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+					Expect(fakeOps.PushCallCount()).To(Equal(0))
+
+					Expect(md.Frontmatter["status"]).To(Equal("completed"))
+					Expect(md.Frontmatter["phase"]).To(Equal("done"))
+
+					// ## Review (rejected verdict) preserved.
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+					Expect(review.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
+
+					// ## Review Warning appended.
+					warning := extractReviewWarning(md)
+					Expect(warning).NotTo(BeNil())
+					Expect(warning.FailedChecks).To(ContainElement(pkg.CheckFaithfulness))
+					Expect(warning.PlannedVersion).To(Equal("v1.2.8"))
+					Expect(warning.ObservedRemoteSHA).To(Equal("abc123"))
+					Expect(warning.Note).To(ContainSubstring("review rejected"))
+					Expect(warning.Note).To(ContainSubstring("abc123"))
+				},
+			)
+
+			// (b) remote SHA differs from expected → completed +
+			// ## Review Warning (superseded mirror). The override
+			// fires on a non-matching SHA too, but the warning's
+			// ObservedRemoteSHA records the remote's value, not the
+			// agent's expected one.
+			It(
+				"remote SHA differs from expected → completed, ## Review Warning, ObservedRemoteSHA = remote SHA",
+				func() {
+					driveRejectingFaithfulnessLLM()
+					DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+					fakeOps.LsRemoteReturns("deadbee", nil)
+
+					result, md := runStep(
+						taskWithResultFull("abc123", "v1.2.8", "released", tmpDir),
+					)
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("done"))
+					Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+					Expect(md.Frontmatter["status"]).To(Equal("completed"))
+					Expect(md.Frontmatter["phase"]).To(Equal("done"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeFalse())
+
+					warning := extractReviewWarning(md)
+					Expect(warning).NotTo(BeNil())
+					Expect(warning.PlannedVersion).To(Equal("v1.2.8"))
+					Expect(warning.ObservedRemoteSHA).To(Equal("deadbee"))
+				},
+			)
+
+			// (c) remote empty → existing human_review path stands.
+			// checkReviewOverride returns nil on the empty result; the
+			// `!approved` branch falls through to finishHumanReview.
+			It("remote empty → human_review, no ## Review Warning block", func() {
+				driveRejectingFaithfulnessLLM()
+				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+				fakeOps.LsRemoteReturns("", nil)
+
+				result, md := runStep(
+					taskWithResultFull("abc123", "v1.2.8", "released", tmpDir),
+				)
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(result.NextPhase).To(Equal("human_review"))
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeFalse())
+				Expect(extractReviewWarning(md)).To(BeNil())
+			})
+
+			// (d) LsRemote errors → existing human_review path stands.
+			// The error is logged via glog.V(2) (redacted) but the
+			// verdict-downgrade does NOT happen — the empty/error
+			// branches both short-circuit checkReviewOverride to nil.
+			It("LsRemote errors → human_review, no ## Review Warning block", func() {
+				driveRejectingFaithfulnessLLM()
+				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+				fakeOps.LsRemoteReturns("", errors.New("ls-remote boom"))
+
+				result, md := runStep(
+					taskWithResultFull("abc123", "v1.2.8", "released", tmpDir),
+				)
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(result.NextPhase).To(Equal("human_review"))
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeFalse())
+				Expect(extractReviewWarning(md)).To(BeNil())
+			})
+
+			// (e) happy path (Approved=true) is unchanged — the new
+			// branch is unreachable. LsRemote must NOT be called.
+			It("Approved=true happy path is unchanged (no LsRemote, no ## Review Warning)", func() {
+				DeferCleanup(func() { _ = os.RemoveAll(tmpDir) })
+				fakeOps.LsRemoteReturns("abc123", nil)
+
+				result, md := runStep(
+					taskWithResultFull("abc123", "v1.0.0", "released", tmpDir),
+				)
+
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("done"))
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(0))
+
+				review := extractReview(md)
+				Expect(review.Approved).To(BeTrue())
+				Expect(extractReviewWarning(md)).To(BeNil())
+			})
+
+			// (f) short-circuit path (Result.Outcome == "failed") is
+			// unchanged. The new branch is unreachable. LsRemote
+			// must NOT be called.
+			It(
+				"Result.Outcome=failed short-circuits without LsRemote (no ## Review Warning)",
+				func() {
+					fakeOps.LsRemoteReturns("abc123", nil)
+
+					result, md := runStep(taskWithFailedResult())
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("done"))
+					Expect(fakeOps.LsRemoteCallCount()).To(Equal(0))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeTrue())
+					Expect(extractReviewWarning(md)).To(BeNil())
 				},
 			)
 		})

@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [064-github-releaser-post-check-verdict-from-github-truth]
+summary: 'Added review-warning override on the ai_review !approved path: a rejected review that coincides with a confirmed remote tag now writes a ## Review Warning block and closes the task as completed (preserving the rejected ## Review verdict durably), while the existing human_review path stands when the remote is empty or LsRemote errors. Extracted url_helpers to package level, added 6 Ginkgo specs, updated CHANGELOG, and make precommit exits 0.'
+container: maintainer-release-postcheck-exec-247-spec-064-3-ai-review-verdict-write
+dark-factory-version: v0.175.0
 created: "2026-06-08T16:30:00Z"
 queued: "2026-06-08T18:48:42Z"
+started: "2026-06-09T06:54:12Z"
+completed: "2026-06-09T07:13:34Z"
 branch: dark-factory/github-releaser-post-check-verdict-from-github-truth
 ---
 
