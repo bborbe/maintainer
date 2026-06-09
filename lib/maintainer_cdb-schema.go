@@ -12,6 +12,7 @@ import "github.com/bborbe/cqrs/cdb"
 var CDBSchemaIDs = cdb.SchemaIDs{
 	GithubPRReviewV1SchemaID,
 	GithubReleaserV1SchemaID,
+	GithubBuildV1SchemaID,
 }
 
 // GithubPRReviewV1SchemaID is the schema for the github-pr watcher's command
@@ -29,5 +30,14 @@ var GithubPRReviewV1SchemaID = cdb.SchemaID{
 var GithubReleaserV1SchemaID = cdb.SchemaID{
 	Group:   "maintainer",
 	Kind:    "githubreleaser",
+	Version: "v1",
+}
+
+// GithubBuildV1SchemaID is the schema for the github-build watcher's
+// command topic. Carries Trigger-style commands consumed by the watcher pod
+// to drive the build-fixer pipeline.
+var GithubBuildV1SchemaID = cdb.SchemaID{
+	Group:   "maintainer",
+	Kind:    "githubbuild",
 	Version: "v1",
 }
