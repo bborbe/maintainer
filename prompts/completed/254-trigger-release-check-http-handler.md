@@ -1,8 +1,12 @@
 ---
-status: approved
+status: completed
 spec: [067-cqrs-trigger-github-release]
+container: maintainer-cqrs-trigger-release-exec-254-trigger-release-check-http-handler
+dark-factory-version: v0.175.0
 created: "2026-06-09T00:00:00Z"
 queued: "2026-06-09T10:57:42Z"
+started: "2026-06-09T11:19:17Z"
+completed: "2026-06-09T11:29:07Z"
 branch: dark-factory/cqrs-trigger-github-release
 ---
 
