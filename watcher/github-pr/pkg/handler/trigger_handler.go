@@ -11,6 +11,7 @@ import (
 
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
+	libparse "github.com/bborbe/parse"
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/lib/prurl"
@@ -46,13 +47,18 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 	req *http.Request,
 ) error {
 	rawURL := req.URL.Query().Get("url")
+	force := libparse.ParseBoolDefault(
+		ctx,
+		req.URL.Query().Get("force"),
+		false,
+	)
 	if err := validateTriggerURL(ctx, rawURL); err != nil {
 		return err
 	}
 
 	if err := h.sender.SendCommand(ctx, command.TriggerPRReviewCommand{
 		URL:   rawURL,
-		Force: false,
+		Force: force,
 	}); err != nil {
 		return libhttp.WrapWithStatusCode(
 			errors.Wrap(ctx, err, "send TriggerPRReviewCommand"),
