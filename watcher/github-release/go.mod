@@ -13,11 +13,13 @@ require (
 	github.com/bborbe/errors v1.5.13
 	github.com/bborbe/http v1.26.13
 	github.com/bborbe/kafka v1.23.2
+	github.com/bborbe/kv v1.21.2
 	github.com/bborbe/log v1.6.14
 	github.com/bborbe/maintainer/lib v0.0.0-00010101000000-000000000000
 	github.com/bborbe/run v1.9.28
 	github.com/bborbe/sentry v1.9.18
 	github.com/bborbe/service v1.10.0
+	github.com/bborbe/validation v1.4.14
 	github.com/golang/glog v1.2.5
 	github.com/google/go-github/v84 v84.0.0
 	github.com/google/uuid v1.6.0
@@ -32,12 +34,10 @@ require (
 	github.com/bborbe/argument/v2 v2.12.26 // indirect
 	github.com/bborbe/collection v1.20.13 // indirect
 	github.com/bborbe/k8s v1.14.3 // indirect
-	github.com/bborbe/kv v1.21.2 // indirect
 	github.com/bborbe/math v1.3.11 // indirect
 	github.com/bborbe/parse v1.10.13 // indirect
 	github.com/bborbe/strimzi v1.8.5 // indirect
 	github.com/bborbe/time v1.27.1 // indirect
-	github.com/bborbe/validation v1.4.14 // indirect
 	github.com/bborbe/vault-cli v0.68.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0 // indirect
