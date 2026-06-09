@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["069"]
+spec: ["072"]
 container: maintainer-cqrs-trigger-release-exec-254-trigger-release-check-http-handler
 dark-factory-version: v0.175.0
 created: "2026-06-09T00:00:00Z"

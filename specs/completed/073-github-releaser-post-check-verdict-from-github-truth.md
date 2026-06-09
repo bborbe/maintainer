@@ -9,6 +9,7 @@ prompted: "2026-06-08T16:29:04Z"
 verifying: "2026-06-09T07:13:35Z"
 completed: "2026-06-09T16:30:32Z"
 branch: dark-factory/github-releaser-post-check-verdict-from-github-truth
+previous_id: 064
 ---
 
 ## Summary

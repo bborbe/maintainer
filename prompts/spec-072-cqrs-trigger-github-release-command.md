@@ -1,6 +1,6 @@
 ---
 status: pending
-spec: ["069"]
+spec: ["072"]
 created: "2026-06-09T16:20:25Z"
 branch: dark-factory/cqrs-trigger-github-release
 ---
