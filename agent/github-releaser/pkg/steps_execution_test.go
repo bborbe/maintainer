@@ -1525,11 +1525,13 @@ task_identifier: gh-release-bborbe-example-master-plugin
 		)
 
 		It(
-			"failure path participates: Clone fails → s.fail fires post-check with LsRemote returning a SHA → superseded",
+			"failure path participates: Clone fails → s.fail fires post-check with LsRemote returning a SHA → superseded → AgentStatusDone (no retry-storm)",
 			func() {
 				// Drive Run to a failure (Clone errors out), LsRemote
 				// returns a non-empty SHA so the superseded branch
-				// fires on the failure path.
+				// fires on the failure path. The verdict upgrade flips
+				// the returned status from Failed to Done so the
+				// controller does NOT retry on a completed task.
 				fakeOps := &gitmocks.GitOps{}
 				fakeOps.CloneReturns(errors.Errorf(context.Background(), "auth failed"))
 				fakeOps.LsRemoteReturns("deadbee", nil)
@@ -1539,7 +1541,12 @@ task_identifier: gh-release-bborbe-example-master-plugin
 				step := pkg.NewExecutionStep(fakeOps, "test-token")
 				result, err := step.Run(context.Background(), md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				// Verdict was upgraded → Done, not Failed. Without this
+				// the controller would re-fire, redo clone/commit/tag
+				// every cycle, and the idempotency guard would keep
+				// the verdict stable but waste the work indefinitely.
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(result.NextPhase).To(Equal("ai_review"))
 
 				// Post-check fired (Clone failure path still calls LsRemote).
 				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))

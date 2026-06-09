@@ -474,6 +474,21 @@ func (s *executionStep) fail(
 	// postCheck still fires the superseded branch if a later release
 	// already won the slot.
 	s.postCheck(ctx, md, taskID, tag, authedURL, ref, expectedSHA)
+	// If the post-check upgraded the verdict (status flipped to
+	// "completed"), surface that to the controller. Returning Failed
+	// after the frontmatter says completed produces a retry-storm: the
+	// controller re-fires the agent, the execution step re-runs
+	// clone/commit/tag, the idempotency guard short-circuits the
+	// post-check, and we return Failed again — every cycle redoes the
+	// work without advancing the verdict. The post-check's Resolution
+	// block is the deciding fact; ai_review still gets to run for the
+	// structural checks on the resulting body.
+	if status, _ := md.Frontmatter.String("status"); status == "completed" {
+		return &agentlib.Result{
+			Status:    agentlib.AgentStatusDone,
+			NextPhase: "ai_review",
+		}, nil
+	}
 	return &agentlib.Result{
 		Status:  agentlib.AgentStatusFailed,
 		Message: msg,
@@ -544,6 +559,23 @@ func (s *executionStep) postCheck(
 			tag,
 			"",
 			"no-op-already-terminal",
+		)
+		return
+	}
+
+	// 1b. Missing-context guard. The early s.fail sites (validatePlan
+	// and extractFrontmatter failures) cannot populate taskID or the
+	// authed URL — calling LsRemote would waste a network round-trip on
+	// a malformed URL (the empty cloneURL path produces
+	// "https://x-access-token:<TOK>@" with no host). Bail before the
+	// shell-out; the existing failure verdict stands.
+	if taskID == "" || authedURL == "" {
+		glog.V(2).Infof(
+			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s",
+			taskID,
+			tag,
+			"",
+			"no-op-missing-context",
 		)
 		return
 	}
