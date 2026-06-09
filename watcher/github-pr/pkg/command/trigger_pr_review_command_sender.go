@@ -11,6 +11,7 @@ import (
 	cdb "github.com/bborbe/cqrs/cdb"
 	cqrsiam "github.com/bborbe/cqrs/iam"
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/lib"
 )
@@ -64,5 +65,7 @@ func (s *triggerPRReviewCommandSender) SendCommand(
 	if err := s.commandObjectSender.SendCommandObject(ctx, commandObject); err != nil {
 		return errors.Wrapf(ctx, err, "send TriggerPRReviewCommand to Kafka")
 	}
+	glog.V(2).
+		Infof("trigger sender: published op=%s url=%s", TriggerPRReviewCommandOperation, cmd.URL)
 	return nil
 }

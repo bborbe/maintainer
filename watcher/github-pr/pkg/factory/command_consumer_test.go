@@ -84,12 +84,12 @@ var _ = Describe("CreateCommandConsumer", func() {
 
 var _ = Describe("NewMemDB", func() {
 	It("returns a non-nil DB", func() {
-		db := factory.NewMemDB()
+		db := pkg.NewMemDB()
 		Expect(db).NotTo(BeNil())
 	})
 
 	It("implements the libkv.DB interface (Sync, Close, Remove, Stats are callable)", func() {
-		db := factory.NewMemDB()
+		db := pkg.NewMemDB()
 		Expect(db.Sync()).To(Succeed())
 		Expect(db.Close()).To(Succeed())
 		Expect(db.Remove()).To(Succeed())

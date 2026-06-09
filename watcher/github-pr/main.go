@@ -301,7 +301,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	// on pod restart; safe because the downstream CreateTaskCommand is idempotent
 	// via the derived task_id.
 	saramaClientProvider := libkafka.NewSaramaClientProviderNew(a.KafkaBrokers)
-	db := factory.NewMemDB()
+	db := pkg.NewMemDB()
 	commandConsumer := factory.CreateCommandConsumer(
 		saramaClientProvider,
 		syncProducer,
