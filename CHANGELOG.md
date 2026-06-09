@@ -13,6 +13,8 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - feat(watcher/github-release): Add `TriggerReleaseCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerReleaseCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 067)
 - feat: Add TriggerReleaseCheckCommandExecutor invoking shared pkg.Watcher.Poll on consumed commands
 - feat: Add thin HTTP /trigger handler that publishes TriggerReleaseCheckCommand to Kafka and returns 202
+- feat: Wire github-release /trigger through Kafka command consumer — third run.Func, factory.CreateCommandConsumer, shared Watcher, MemDB offset store
+- test: Add clean-shutdown and crash-recovery integration tests for the wired command consumer
 
 ## v0.37.0
 

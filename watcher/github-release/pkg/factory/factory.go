@@ -6,16 +6,23 @@
 package factory
 
 import (
+	"context"
 	"net/http"
 
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
+	cqrsiam "github.com/bborbe/cqrs/iam"
 	libkafka "github.com/bborbe/kafka"
+	libkv "github.com/bborbe/kv"
 	"github.com/bborbe/log"
+	"github.com/bborbe/run"
 
+	lib "github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/command"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-release/pkg/handler"
 )
 
 // CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
@@ -72,5 +79,64 @@ func CreateWatcher(
 		cursorPath,
 		owner,
 		taskCreationFilter,
+	)
+}
+
+// CreateTriggerReleaseCheckCommandSender constructs a typed trigger-release-check
+// command sender backed by a Kafka sync producer. This is the HTTP-side
+// sender: the /trigger handler publishes TriggerReleaseCheckCommand messages
+// through it.
+//
+// CommandCreator and Initiator are built once here and reused across every
+// SendCommand call (per cqrs/docs/producing-commands.md "Factory Wiring";
+// matches trading/frontend/command's reference impl).
+func CreateTriggerReleaseCheckCommandSender(
+	ctx context.Context,
+	syncProducer libkafka.SyncProducer,
+	branch base.Branch,
+) command.TriggerReleaseCheckCommandSender {
+	return command.NewTriggerReleaseCheckCommandSender(
+		base.NewCommandCreator(base.RequestIDChannel(ctx)),
+		cqrsiam.Initiator("watcher-github-release"),
+		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+	)
+}
+
+// CreateTriggerReleaseCheckHandler wires the thin CQRS handler that publishes a
+// TriggerReleaseCheckCommand to Kafka for each /trigger request.
+// All poll-cycle work lives in the in-pod command consumer (see
+// pkg/command.NewTriggerReleaseCheckCommandExecutor).
+func CreateTriggerReleaseCheckHandler(
+	sender command.TriggerReleaseCheckCommandSender,
+) handler.TriggerReleaseCheckHandler {
+	return handler.NewTriggerReleaseCheckHandler(sender)
+}
+
+// CreateCommandConsumer wires a run.Func that consumes TriggerReleaseCheckCommand
+// messages from the github-release watcher's request topic and runs them through
+// the shared Watcher.Poll(ctx) pipeline.
+//
+// The function is pure composition: no business logic, no conditionals.
+// It uses cdb.RunCommandConsumerTxDefault (auto-wraps the transaction) per
+// the go-cqrs/auto-tx-wrapper-no-manual-wrap rule — do NOT manually wrap
+// the executor with kv.NewTransactionMiddleware.
+func CreateCommandConsumer(
+	saramaClientProvider libkafka.SaramaClientProvider,
+	syncProducer libkafka.SyncProducer,
+	db libkv.DB,
+	watcher pkg.Watcher,
+	branch base.Branch,
+) run.Func {
+	executors := cdb.CommandObjectExecutorTxs{
+		command.NewTriggerReleaseCheckCommandExecutor(watcher),
+	}
+	return cdb.RunCommandConsumerTxDefault(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		lib.GithubReleaserV1SchemaID,
+		branch,
+		false, // ignoreUnsupported
+		executors,
 	)
 }
