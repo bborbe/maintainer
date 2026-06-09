@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["061"]
+spec: ["070"]
 summary: Refactored BumpMarketplaceJson (gocognit 54→pass) and rewriteVersionValue (gocognit 29→pass) into scopeTracker, lineHasVersionKey, writeLine, extractExistingVersion, formatRewrittenVersion, locateVersionColon, parseVersionValuePart, parseQuotedVersionValue, parseUnquotedVersionValue — nolint count 0, all 64 tests pass, coverage 96.3% (>= 94.9% floor), public API frozen.
 container: maintainer-refactor-complexity-exec-227-spec-058-manifest-complexity-refactor
 dark-factory-version: v0.174.1-dirty

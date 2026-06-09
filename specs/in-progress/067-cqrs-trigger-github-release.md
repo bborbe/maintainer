@@ -1,11 +1,12 @@
 ---
-status: prompted
+status: verifying
 tags:
     - dark-factory
     - spec
 approved: "2026-06-09T10:07:19Z"
 generating: "2026-06-09T09:06:20Z"
 prompted: "2026-06-09T10:27:30Z"
+verifying: "2026-06-09T16:42:59Z"
 branch: dark-factory/cqrs-trigger-github-release
 ---
 

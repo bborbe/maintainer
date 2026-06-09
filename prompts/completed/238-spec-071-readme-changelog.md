@@ -1,7 +1,7 @@
 ---
 status: rejected
 originalStatus: failed
-spec: [060-github-releaser-major-bump-guard]
+spec: ["071"]
 container: maintainer-major-bump-guard-exec-238-spec-060-readme-changelog
 dark-factory-version: v0.175.0
 created: "2026-06-03T15:05:00Z"
