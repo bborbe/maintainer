@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(watcher/github-build): `POST /trigger?force=true` now bypasses the `red × red` episode-lock skip and publishes a CreateTaskCommand with a salted `TaskIdentifier` (via new `pkg.DeriveTaskIDForce`) so operators can force a re-publish for a still-red build even when the episode is already locked. The agent controller's deterministic-ID dedup-skip does not fire for the salted ID, so a fresh vault task is created. Absent or unparseable `?force` values resolve to `false` (today's behaviour, byte-identical non-force path). Closes the force-flag rollout across all three maintainer watchers (siblings: spec 069 github-pr, spec 071 github-release). (spec 069)
+
 ## v0.39.0
 
 - feat(lib): Add `GithubBuildV1SchemaID` (`Group: "maintainer"`, `Kind: "githubbuild"`, `Version: "v1"`) to the CDBSchemaIDs registry, serializing to `maintainer-githubbuild-v1` (spec 068)
