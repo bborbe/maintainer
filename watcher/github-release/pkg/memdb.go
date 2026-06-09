@@ -15,10 +15,8 @@ import (
 // NewMemDB returns a session-scoped, in-process libkv.DB implementation.
 // It exists because libkv itself does not ship a public NewMemDB constructor
 // (the upstream bborbe/kv package exposes only NewDBWithMetrics). The
-// github-pr watcher's command consumer needs an offset store; this in-memory
-// implementation gives it one without requiring a PVC (see spec 066 AC 9
-// rationale: replay-from-OffsetOldest on restart is safe because the
-// downstream CreateTaskCommand is idempotent via derived task_id).
+// github-release watcher's command consumer needs an offset store; this
+// in-memory implementation gives it one without requiring a PVC.
 //
 // The implementation is intentionally minimal — it implements only the
 // methods the offset-store / consumer wiring touches: Update, View, Sync,

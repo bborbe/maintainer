@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	lib "github.com/bborbe/maintainer/lib"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/auth"
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/factory"
@@ -53,8 +55,11 @@ type application struct {
 	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (preferred auth path)"`
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
+
+	TriggerHandler http.Handler
 }
 
+//nolint:funlen // wires Run from validated config — extracting any chunk hurts readability without reducing complexity. 82 lines, 2 over the 80-line cap.
 func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	pollInterval, err := time.ParseDuration(a.PollInterval)
 	if err != nil {
@@ -90,8 +95,9 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}()
 
+	branch := base.Branch(a.Stage)
 	metrics := pkg.NewMetrics(nil)
-	sender := factory.CreateKafkaSender(syncProducer, base.Branch(a.Stage))
+	sender := factory.CreateKafkaSender(syncProducer, branch)
 	staticFilters := factory.CreateStaticFilters(allowlist)
 
 	w := factory.CreateWatcher(
@@ -104,9 +110,32 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.Stage,
 	)
 
+	// HTTP-side sender backs the /trigger handler.
+	triggerReleaseCheckSender := factory.CreateTriggerReleaseCheckCommandSender(
+		ctx,
+		syncProducer,
+		branch,
+	)
+	triggerHandler := factory.CreateTriggerReleaseCheckHandler(triggerReleaseCheckSender)
+	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
+
+	// In-pod command consumer: third run.Func alongside poll + HTTP.
+	// session-scoped offset store — replays the request topic from OffsetOldest
+	// on pod restart; safe because the downstream CreateTaskCommand is idempotent
+	// via the derived task_id.
+	saramaClientProvider := libkafka.NewSaramaClientProviderNew(a.KafkaBrokers)
+	db := pkg.NewMemDB()
+	commandConsumer := factory.CreateCommandConsumer(
+		saramaClientProvider,
+		syncProducer,
+		db,
+		w, // shared with the poll-interval loop
+		branch,
+	)
+
 	glog.V(2).Infof(
-		"maintainer-watcher-github-release starting stage=%s owner=%s interval=%s listen=%s",
-		a.Stage, a.Owner, pollInterval, a.Listen,
+		"maintainer-watcher-github-release starting stage=%s owner=%s interval=%s listen=%s schema=%s",
+		a.Stage, a.Owner, a.PollInterval, a.Listen, lib.GithubReleaserV1SchemaID,
 	)
 
 	poll := func(ctx context.Context) error {
@@ -114,23 +143,25 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return w.Poll(ctx)
 	}
 
+	// Order: poll → HTTP → command consumer (spec 067 AC 9: three run.Funcs).
 	return run.CancelOnFirstFinish(ctx,
 		a.pollLoop(poll, pollInterval),
-		a.createHTTPServer(poll),
+		a.createHTTPServer(),
+		commandConsumer,
 	)
 }
 
 // createHTTPServer serves the mandatory triple (/healthz, /readiness, /metrics)
-// per coding-guidelines/go-k8s-binary-conventions.md plus /trigger, which runs
-// one poll cycle on demand (mirrors watcher/github-pr /check) so operators can
-// force a scan without waiting for the poll interval.
-func (a *application) createHTTPServer(poll run.Func) run.Func {
+// per coding-guidelines/go-k8s-binary-conventions.md plus /trigger, which
+// publishes a TriggerReleaseCheckCommand to Kafka for in-pod consumption by
+// the command consumer (see factory.CreateCommandConsumer).
+func (a *application) createHTTPServer() run.Func {
 	return func(ctx context.Context) error {
 		router := mux.NewRouter()
 		router.Path("/healthz").Handler(libhttp.NewPrintHandler("OK"))
 		router.Path("/readiness").Handler(libhttp.NewPrintHandler("OK"))
 		router.Path("/metrics").Handler(promhttp.Handler())
-		router.Path("/trigger").Handler(libhttp.NewBackgroundRunHandler(ctx, poll))
+		router.Path("/trigger").Handler(a.TriggerHandler)
 		router.Path("/resetcursor/{repo:.+}").
 			Handler(libhttp.NewDangerousHandlerWrapper(pkg.NewResetCursorHandler(a.CursorPath)))
 		router.Path("/setcursor/{repo:.+}").
