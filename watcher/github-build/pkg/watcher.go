@@ -306,6 +306,10 @@ func (w *buildWatcher) applyStateMachine(
 			return
 		}
 		w.metrics.IncTaskPublished()
+		// NOTE: IncStateTransition("green_to_red") is NOT incremented on the force
+		// path — the state didn't actually transition (it was already red), so
+		// labeling it as green_to_red would be misleading. Force publishes count
+		// only toward IncTaskPublished (spec 069).
 
 	case prevState == "red" && currState == "red":
 		// Episode locked on first red; skip regardless of SHA change (force=false)

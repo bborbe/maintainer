@@ -1268,4 +1268,110 @@ var _ = Describe("Watcher", func() {
 			})
 		})
 	})
+
+	// Force arm (spec 069): with prevState=="red" && currState=="red", the
+	// state machine normally skips (episode lock). When force=true the
+	// arm publishes a CreateTaskCommand whose TaskIdentifier is salted
+	// via DeriveTaskIDForce so the controller's deterministic-ID dedup
+	// does not fire and a fresh vault task is created.
+	Describe("force arm (spec 069)", func() {
+		const (
+			owner      = "owner"
+			repo       = "repo"
+			repoKey    = "owner/repo"
+			episodeSHA = "abc123def456"
+		)
+
+		var fakeNow libtime.DateTime
+		var clock libtime.CurrentDateTimeGetter
+
+		// makeForceWatcher constructs a watcher with the locked-red cursor
+		// pre-populated and an injectable clock so the microsecond nonce
+		// is deterministic per test.
+		makeForceWatcher := func() pkg.Watcher {
+			// Pre-populate cursor: repo is red with episodeSHA.
+			cursor := &pkg.Cursor{
+				Repos: map[string]*pkg.RepoState{
+					repoKey: {
+						LastKnownState:    "red",
+						CurrentEpisodeSHA: episodeSHA,
+						DefaultBranch:     "main",
+					},
+				},
+			}
+			Expect(pkg.SaveCursor(ctx, cursorPath, cursor)).To(Succeed())
+
+			// GitHub still reports red on the same SHA (red×red case).
+			ghClient.GetDefaultBranchReturns("main", nil)
+			ghClient.GetWorkflowRunsReturns([]pkg.WorkflowRun{
+				{
+					WorkflowID: 1,
+					Name:       "CI",
+					HeadSHA:    episodeSHA,
+					Conclusion: "failure",
+					HTMLURL:    "https://github.com/owner/repo/actions/runs/1",
+					CreatedAt:  time.Now(),
+				},
+			}, nil)
+
+			ml := new(mocks.MaintenanceLoader)
+			ml.LoadOverridesReturns(maintenance.GithubBuildConfig{})
+			return pkg.NewWatcher(
+				ghClient,
+				createSender,
+				metrics,
+				filter.RepoFilters{},
+				pkg.NewStaticSnapshot([]string{repoKey}),
+				cursorPath,
+				"build-fixer-agent",
+				"todo",
+				"",
+				ml,
+				pkg.DefaultMaxTitleLen,
+				"",
+				clock,
+			)
+		}
+
+		BeforeEach(func() {
+			fakeNow = libtime.DateTime(time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC))
+			clock = libtime.CurrentDateTimeGetterFunc(func() libtime.DateTime { return fakeNow })
+		})
+
+		It("Poll(ctx, false) does NOT publish on red×red (episode lock holds)", func() {
+			w := makeForceWatcher()
+			Expect(w.Poll(ctx, false)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(0))
+		})
+
+		It("Poll(ctx, true) publishes exactly once with salted TaskIdentifier", func() {
+			w := makeForceWatcher()
+			Expect(w.Poll(ctx, true)).To(Succeed())
+
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, cmd := createSender.SendCommandArgsForCall(0)
+
+			canonical := pkg.DeriveTaskID(owner, repo, episodeSHA).String()
+			Expect(string(cmd.TaskIdentifier)).NotTo(Equal(canonical),
+				"force arm must use DeriveTaskIDForce, not the canonical DeriveTaskID")
+		})
+
+		It("two Poll(ctx, true) with clock advance produce distinct TaskIdentifiers", func() {
+			w := makeForceWatcher()
+
+			Expect(w.Poll(ctx, true)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+			_, first := createSender.SendCommandArgsForCall(0)
+
+			// Advance clock by 1µs so UnixMicro() returns a different nonce.
+			fakeNow = libtime.DateTime(time.Time(fakeNow).Add(time.Microsecond))
+
+			Expect(w.Poll(ctx, true)).To(Succeed())
+			Expect(createSender.SendCommandCallCount()).To(Equal(2))
+			_, second := createSender.SendCommandArgsForCall(1)
+
+			Expect(string(first.TaskIdentifier)).NotTo(Equal(string(second.TaskIdentifier)),
+				"two forced publishes with distinct nonces must yield distinct identifiers")
+		})
+	})
 })
