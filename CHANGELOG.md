@@ -12,6 +12,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 - feat(lib): Add `GithubBuildV1SchemaID` (`Group: "maintainer"`, `Kind: "githubbuild"`, `Version: "v1"`) to the CDBSchemaIDs registry, serializing to `maintainer-githubbuild-v1` (spec 068)
 - feat(watcher/github-build): Add `TriggerBuildCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerBuildCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 068)
+- feat: Add `TriggerBuildCheckCommandExecutor` invoking shared `pkg.Watcher.Poll` on consumed `TriggerBuildCheckCommand`s (spec 068)
 
 ## v0.38.0
 

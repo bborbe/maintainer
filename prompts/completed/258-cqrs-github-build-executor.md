@@ -1,7 +1,12 @@
 ---
-status: approved
+status: completed
+summary: Added TriggerBuildCheckCommandExecutor (constructor, export-test, table-driven + crash-recovery tests) mirroring the github-release spec-067 implementation; uses lib.GithubBuildV1SchemaID and the github-build pkg.Watcher mock; precommit exits 0 and coverage on runTriggerBuildCheck is 100%.
+container: maintainer-cqrs-trigger-build-exec-258-cqrs-github-build-executor
+dark-factory-version: v0.175.0
 created: "2026-06-09T16:00:00Z"
 queued: "2026-06-09T16:21:18Z"
+started: "2026-06-09T16:38:27Z"
+completed: "2026-06-09T16:43:00Z"
 branch: dark-factory/cqrs-trigger-github-build
 ---
 
