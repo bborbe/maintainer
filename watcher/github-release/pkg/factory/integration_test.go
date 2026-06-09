@@ -117,92 +117,14 @@ var _ = Describe("end-to-end command flow through wired executor (spec 067 AC 8 
 	)
 })
 
-var _ = Describe("crash recovery (spec 067 AC 19 — at-least-once via idempotent Watcher)", func() {
-	// Proves at-least-once-via-idempotent-downstream: simulate a pod kill
-	// mid-execution (context cancelled during watcher.Poll) and verify
-	// that on retry the same Watcher.Poll call runs again from scratch
-	// (i.e. PollCallCount==1 on the fresh Watcher — the framework's
-	// redelivery is responsible for the second invocation overall).
-	//
-	// Note: the executor-level crash-recovery test (covering the same
-	// at-least-once contract via command.RunTriggerReleaseCheck) lives
-	// in pkg/command/trigger_release_check_executor_test.go. This factory
-	// test is the parallel one that drives the wired factory
-	// composition to confirm the executor wired in via
-	// factory.CreateCommandConsumer is the same one that respects
-	// ctx cancellation in the same way.
-	//
-	// goleak: not used here (not a project dep) — rely on the
-	// ctx-cancellation contract only.
-	var (
-		ctx      context.Context
-		watcher  *mocks.Watcher
-		executor cdb.CommandObjectExecutorTx
-	)
-
-	BeforeEach(func() {
-		ctx = context.Background()
-		watcher = new(mocks.Watcher)
-		executor = command.NewTriggerReleaseCheckCommandExecutor(watcher)
-	})
-
-	newCommandObject := func() cdb.CommandObject {
-		evt, err := base.ParseEvent(ctx, command.TriggerReleaseCheckCommand{Scope: "bborbe/repo"})
-		Expect(err).NotTo(HaveOccurred())
-		return cdb.CommandObject{
-			Command: base.Command{
-				Operation: command.TriggerReleaseCheckCommandOperation,
-				Data:      evt,
-			},
-			SchemaID: lib.GithubReleaserV1SchemaID,
-		}
-	}
-
-	It("a killed invocation can be retried and Poll runs once on a fresh watcher", func() {
-		// Round 1: simulate a real Watcher that respects context
-		// cancellation. The stub honours ctx.Err() and returns the
-		// context-cancelled error — same shape as a real watcher that
-		// gets SIGKILL'd in mid-Poll.
-		killedCtx, cancel := context.WithCancel(ctx)
-		watcher.PollStub = func(c context.Context) error {
-			cancel()
-			return c.Err()
-		}
-
-		commandObject := newCommandObject()
-
-		_, _, err := executor.HandleCommand(killedCtx, nil, commandObject)
-		Expect(err).To(HaveOccurred(),
-			"killed invocation must return a transient error so Kafka redelivers")
-		Expect(err).NotTo(MatchError(cdb.ErrCommandObjectSkipped),
-			"killed invocation must NOT be classified as Skipped (transient, not deliberate)")
-		Expect(err.Error()).To(ContainSubstring("poll cycle from trigger"),
-			"killed invocation must be wrapped with poll-cycle context")
-		Expect(watcher.PollCallCount()).To(Equal(1),
-			"killed invocation must have called Poll once before failing")
-
-		// Round 2: fresh context, fresh Watcher (PollReturns(nil)).
-		// The same commandObject is reused (Kafka would redeliver it as-is).
-		freshWatcher := new(mocks.Watcher)
-		freshWatcher.PollReturns(nil)
-		freshExecutor := command.NewTriggerReleaseCheckCommandExecutor(freshWatcher)
-
-		_, _, err = freshExecutor.HandleCommand(context.Background(), nil, commandObject)
-		Expect(err).NotTo(HaveOccurred(), "retry must succeed: %v", err)
-		Expect(freshWatcher.PollCallCount()).To(Equal(1),
-			"retry must invoke Poll on the fresh Watcher exactly once")
-
-		// Spec AC 19 headline durability claim: Kafka redelivery
-		// produces at-least-once execution. We measure this by
-		// re-invoking on the same fakeWatcher (representing a
-		// third redelivery on the same consumer instance) and
-		// asserting the cumulative PollCallCount reaches 2.
-		watcher.PollReturns(nil)
-		_, _, err = executor.HandleCommand(context.Background(), nil, commandObject)
-		Expect(err).NotTo(HaveOccurred())
-		// PollCallCount is synchronous (counterfeiter increments before HandleCommand
-		// returns), so a direct assertion is correct here — `Eventually` would be
-		// misleading polling on an already-settled value.
-		Expect(watcher.PollCallCount()).To(BeNumerically(">=", 2))
-	})
-})
+// NOTE: the at-least-once-via-idempotent-downstream crash-recovery contract
+// (spec 067 AC 19) is covered by the executor-level test at
+// pkg/command/trigger_release_check_executor_test.go.
+//
+// A previous duplicate block here covered the same scenario through the
+// factory's CreateCommandConsumer wiring. PR-review iter-2 noted the overlap;
+// the factory composition itself is verified by the `CreateCommandConsumer
+// body has no control flow` AST test in command_consumer_test.go + the
+// integration test's non-nil run.Func + executor-invocation assertions
+// elsewhere in this file. The pure crash-recovery proof belongs at the
+// executor layer where the contract is observable.

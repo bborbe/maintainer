@@ -48,6 +48,11 @@ func (h *triggerReleaseCheckHandler) ServeHTTP(
 ) error {
 	// Both fields are reserved-unread; build a zero-value command.
 	if err := h.sender.SendCommand(ctx, command.TriggerReleaseCheckCommand{}); err != nil {
+		// 502 BadGateway over 500/503: upstream Kafka is the proximate cause,
+		// not this service. 500 implies an unexpected handler bug; 503 implies
+		// this service is unhealthy. Kafka publish failure is neither — it's
+		// an upstream gateway dependency, so 502 is the most accurate signal
+		// for operators + observability tools.
 		return libhttp.WrapWithStatusCode(
 			errors.Wrap(ctx, err, "send TriggerReleaseCheckCommand"),
 			http.StatusBadGateway,

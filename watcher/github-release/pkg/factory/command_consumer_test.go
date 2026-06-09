@@ -10,6 +10,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
+	"runtime"
 
 	"github.com/bborbe/cqrs/base"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
@@ -51,8 +53,15 @@ var _ = Describe("CreateCommandConsumer", func() {
 	})
 
 	It("CreateCommandConsumer body has no control flow", func() {
+		// Resolve factory.go relative to THIS test file so the test runs
+		// correctly regardless of CWD (e.g. when go test is invoked from
+		// the module root with ./... rather than from the package dir).
+		_, thisFile, _, ok := runtime.Caller(0)
+		Expect(ok).To(BeTrue(), "runtime.Caller failed")
+		factoryPath := filepath.Join(filepath.Dir(thisFile), "factory.go")
+
 		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, "factory.go", nil, parser.AllErrors)
+		file, err := parser.ParseFile(fset, factoryPath, nil, parser.AllErrors)
 		Expect(err).NotTo(HaveOccurred())
 		var fn *ast.FuncDecl
 		for _, decl := range file.Decls {

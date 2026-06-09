@@ -8,7 +8,6 @@ import (
 	"context"
 
 	"github.com/bborbe/cqrs/base"
-	"github.com/bborbe/validation"
 )
 
 // TriggerReleaseCheckCommandOperation is the Kafka command operation for
@@ -33,6 +32,6 @@ type TriggerReleaseCheckCommand struct {
 // accepted because both fields are reserved-unread — there's no
 // per-request field with meaning today. A future spec will add
 // per-repo or per-stage validation here.
-func (cmd TriggerReleaseCheckCommand) Validate(ctx context.Context) error {
-	return validation.All{}.Validate(ctx)
+func (cmd TriggerReleaseCheckCommand) Validate(_ context.Context) error {
+	return nil
 }
