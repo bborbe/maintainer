@@ -385,6 +385,10 @@ func (s *aiReviewStep) checkReviewOverride(
 		return nil
 	}
 	if sha == "" {
+		glog.V(2).Infof(
+			"ai_review review-override: tag=%s sha=empty (no override)",
+			result.LocalTag,
+		)
 		return nil
 	}
 	failedChecks := append([]string{}, output.FailedChecks...)

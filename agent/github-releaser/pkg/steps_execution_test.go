@@ -1656,6 +1656,72 @@ task_identifier: gh-release-bborbe-example-master-terminal
 		)
 
 		It(
+			"idempotency on already-terminal aborted: frontmatter status=aborted → LsRemote NEVER called",
+			func() {
+				// Twin of the status=completed idempotency case: the
+				// guard MUST short-circuit on aborted too, otherwise an
+				// aborted task could be silently mutated by a re-fire.
+				abortedMD := `---
+status: aborted
+phase: done
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/example
+clone_url: https://github.com/bborbe/example.git
+ref: master
+current_version: v1.2.7
+task_identifier: gh-release-bborbe-example-master-aborted
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "patch",
+  "reasoning": "fix-only batch",
+  "current_version": "v1.2.7",
+  "next_version": "1.2.8",
+  "next_version_header": "## v1.2.8",
+  "header_prefix_style": "v",
+  "bullets": ["fix: thing"]
+}
+` + "```" + `
+
+`
+
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					return nil
+				}
+				fakeOps.CommitReturns("abc1234", nil)
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				md, err := agentlib.ParseMarkdown(context.Background(), abortedMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Guard fired before LsRemote — same contract as the
+				// status=completed case.
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(0))
+
+				// Status stays aborted; no ## Resolution block appended.
+				Expect(md.Frontmatter["status"]).To(Equal("aborted"))
+				_, found := md.FindSection("## Resolution")
+				Expect(
+					found,
+				).To(BeFalse(), "post-check must not append ## Resolution on aborted")
+			},
+		)
+
+		It(
 			"idempotent re-fire: second Run against an already-released task does NOT re-consult the remote",
 			func() {
 				// This exercises the re-fire case where the FIRST run
