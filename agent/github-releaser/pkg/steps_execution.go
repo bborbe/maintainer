@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	agentlib "github.com/bborbe/agent/lib"
 	"github.com/bborbe/errors"
@@ -20,6 +21,12 @@ import (
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/git"
 	"github.com/bborbe/maintainer/agent/github-releaser/pkg/plugin"
 )
+
+// lsRemoteTimeout caps the post-check's `git ls-remote` round-trip so
+// a stalled GitHub, DNS hang, or TCP backoff cannot block the agent
+// indefinitely. 30s is generous compared to the typical sub-second
+// round-trip and small compared to the agent's overall step budget.
+const lsRemoteTimeout = 30 * time.Second
 
 // changelogFileName is the only file the execution step rewrites in the
 // cloned target repo. Spec 049 § Non-goals explicitly defers mono-repo
@@ -99,7 +106,6 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 			"",
 			"",
 			"",
-			"",
 		)
 	}
 
@@ -114,7 +120,6 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 			strings.TrimPrefix(plan.NextVersionHeader, "## "),
 			injectToken(normalizeCloneURLToHTTPS(cloneURL), s.ghToken),
 			ref,
-			"",
 		)
 	}
 
@@ -254,7 +259,7 @@ func (s *executionStep) executeLocalRelease(
 	authedURL string,
 ) (sha, tagName string, _ *agentlib.Result) {
 	if err := s.ops.Clone(ctx, authedURL, ref, workdir); err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 
@@ -263,7 +268,7 @@ func (s *executionStep) executeLocalRelease(
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 			errors.Wrapf(ctx, err, "detect plugin manifests in %s", workdir),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 
@@ -277,7 +282,7 @@ func (s *executionStep) executeLocalRelease(
 			category = git.ErrorCategoryUnknown
 		}
 		result, _ := s.fail(ctx, md, category, errors.Wrapf(ctx, err, "read %s", changelogPath),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 
@@ -294,7 +299,7 @@ func (s *executionStep) executeLocalRelease(
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
 				errors.Wrap(ctx, err, "replace ## Unreleased body"),
-				taskID, tag, authedURL, ref, "")
+				taskID, tag, authedURL, ref)
 			return "", "", result
 		}
 	}
@@ -307,13 +312,13 @@ func (s *executionStep) executeLocalRelease(
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
 			errors.Wrap(ctx, err, "rewrite ## Unreleased"),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 	if err := os.WriteFile(changelogPath, rewritten, 0o644); err != nil { // #nosec G306,G703 -- standard perms; workdir is os.TempDir-rooted
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 			errors.Wrapf(ctx, err, "write %s", changelogPath),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 
@@ -327,7 +332,7 @@ func (s *executionStep) executeLocalRelease(
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 				errors.Wrapf(ctx, err, "read %s", manifestAbsPath),
-				taskID, tag, authedURL, ref, "")
+				taskID, tag, authedURL, ref)
 			return "", "", result
 		}
 
@@ -339,20 +344,20 @@ func (s *executionStep) executeLocalRelease(
 		} else {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 				errors.Errorf(ctx, "unsupported manifest type: %s", manifestPath),
-				taskID, tag, authedURL, ref, "")
+				taskID, tag, authedURL, ref)
 			return "", "", result
 		}
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryPluginManifestInvalid,
 				errors.Wrapf(ctx, err, "bump %s", manifestPath),
-				taskID, tag, authedURL, ref, "")
+				taskID, tag, authedURL, ref)
 			return "", "", result
 		}
 
 		if err := os.WriteFile(manifestAbsPath, rewrittenManifest, 0o644); err != nil { // #nosec G306,G703 -- standard perms; workdir is os.TempDir-rooted
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 				errors.Wrapf(ctx, err, "write %s", manifestAbsPath),
-				taskID, tag, authedURL, ref, "")
+				taskID, tag, authedURL, ref)
 			return "", "", result
 		}
 	}
@@ -362,7 +367,7 @@ func (s *executionStep) executeLocalRelease(
 	commitPaths := append([]string{changelogFileName}, detectedManifests...)
 	sha, err = s.ops.Commit(ctx, workdir, "release "+tagName, commitPaths...)
 	if err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 	// Pre-push guard: the release commit must touch exactly the files we
@@ -378,7 +383,7 @@ func (s *executionStep) executeLocalRelease(
 		return "", "", failResult
 	}
 	if err := s.ops.Tag(ctx, workdir, tagName, "release "+tagName); err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref)
 		return "", "", result
 	}
 	return sha, tagName, nil
@@ -405,14 +410,14 @@ func (s *executionStep) guardCommittedFiles(
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
 			errors.Wrap(ctx, err, "inspect committed files"),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return result
 	}
 	if !sameStringSet(files, expectedFiles) {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnexpectedDiff,
 			errors.Errorf(ctx,
 				"release commit must change only %v, got %v", expectedFiles, files),
-			taskID, tag, authedURL, ref, "")
+			taskID, tag, authedURL, ref)
 		return result
 	}
 	return nil
@@ -423,17 +428,13 @@ func (s *executionStep) guardCommittedFiles(
 // retry. The workdir cleanup defer in Run still runs after this returns.
 //
 // Before returning, fail invokes the post-check helper so the failure
-// verdict can be upgraded to "released" (remote shows the planned tag
-// at the agent's expected SHA) or "superseded" (remote shows it at a
-// different SHA) — the helper consults git ls-remote on the same
-// authed URL the success path used. The taskID, tag, authedURL, ref,
-// and expectedSHA are threaded from the caller (they are all in scope
-// where the failure originates). expectedSHA is empty on the failure
-// path because the local commit/tag step never produced a SHA to
-// compare against — the post-check still fires the superseded branch
-// if a later release already won the slot.
-//
-//nolint:unparam // expectedSHA is intentionally always "" on the failure path today (push never reached the tag step); the parameter is kept on the signature so every s.fail call site participates in the post-check without splitting into a parallel helper.
+// verdict can be upgraded to "superseded" — the helper consults git
+// ls-remote on the same authed URL the success path used. The post-
+// check on the failure path is superseded-only: the local commit/tag
+// step never produced a SHA that could match the remote tag, so the
+// "released" verdict (which requires sha == expectedSHA) is by
+// construction unreachable here. A non-empty remote SHA means a later
+// release already won the slot — that's the superseded case.
 func (s *executionStep) fail(
 	ctx context.Context,
 	md *agentlib.Markdown,
@@ -443,7 +444,6 @@ func (s *executionStep) fail(
 	tag string,
 	authedURL string,
 	ref string,
-	expectedSHA string,
 ) (*agentlib.Result, error) {
 	msg := ""
 	if cause != nil {
@@ -463,17 +463,14 @@ func (s *executionStep) fail(
 	}
 	md.ReplaceSection(section)
 
-	glog.V(2).
-		Infof("execution failed: category=%s err=%v expected_sha=%q", category, cause, expectedSHA)
-	// Post-check tail: consult the remote for tag state. A non-empty
-	// observed SHA upgrades the verdict to "released" (when it matches
-	// expectedSHA) or "superseded" (when it differs). An empty result or
-	// a subcommand error is a no-op — the existing ## Result(failed)
-	// stands. expectedSHA is always "" on the failure path because the
-	// local commit/tag step never produced a SHA to compare against;
-	// postCheck still fires the superseded branch if a later release
-	// already won the slot.
-	s.postCheck(ctx, md, taskID, tag, authedURL, ref, expectedSHA)
+	glog.V(2).Infof("execution failed: category=%s err=%v", category, cause)
+	// Post-check tail: consult the remote for tag state. The failure
+	// path never has an expected SHA to compare against — pass "" so
+	// the post-check is strictly superseded-only (any non-empty remote
+	// SHA means a later release won the slot). An empty result or a
+	// subcommand error is a no-op — the existing ## Result(failed)
+	// stands unchanged.
+	s.postCheck(ctx, md, taskID, tag, authedURL, ref, "")
 	// If the post-check upgraded the verdict (status flipped to
 	// "completed"), surface that to the controller. Returning Failed
 	// after the frontmatter says completed produces a retry-storm: the
@@ -486,7 +483,7 @@ func (s *executionStep) fail(
 	if status, _ := md.Frontmatter.String("status"); status == "completed" {
 		return &agentlib.Result{
 			Status:    agentlib.AgentStatusDone,
-			NextPhase: "ai_review",
+			NextPhase: string(domain.TaskPhaseAIReview),
 		}, nil
 	}
 	return &agentlib.Result{
@@ -582,8 +579,12 @@ func (s *executionStep) postCheck(
 
 	// 2. Ask the remote. The authed URL is the caller's responsibility;
 	// the helper trusts it (mirrors the Clone / Commit call sites in
-	// executeLocalRelease).
-	sha, err := s.ops.LsRemote(ctx, authedURL, ref, tag)
+	// executeLocalRelease). A 30s timeout bounds the network round-trip
+	// so a stalled GitHub / DNS hang / TCP backoff cannot block the
+	// agent indefinitely.
+	lsCtx, cancel := context.WithTimeout(ctx, lsRemoteTimeout)
+	defer cancel()
+	sha, err := s.ops.LsRemote(lsCtx, authedURL, ref, tag)
 	if err != nil {
 		glog.V(2).Infof(
 			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s err=%s",

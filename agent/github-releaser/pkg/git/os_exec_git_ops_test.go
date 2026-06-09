@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -318,7 +319,7 @@ var _ = Describe("LsRemote", func() {
 		if stderr != "" {
 			script += "printf '%s' \"" + stderr + "\" 1>&2\n"
 		}
-		script += "exit " + intToStr(exitCode) + "\n"
+		script += "exit " + strconv.Itoa(exitCode) + "\n"
 		path := filepath.Join(fakeGitDir, "git")
 		// #nosec G306 -- the faked git binary must be executable for PATH lookup; lives in a per-test tempdir
 		Expect(os.WriteFile(path, []byte(script), 0o755)).To(Succeed())
@@ -414,24 +415,3 @@ var _ = Describe("LsRemote", func() {
 		},
 	)
 })
-
-// intToStr converts a small non-negative int to its decimal string. Avoids
-// pulling strconv into the test file for one call site.
-func intToStr(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	digits := []byte{}
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	if neg {
-		digits = append([]byte{'-'}, digits...)
-	}
-	return string(digits)
-}

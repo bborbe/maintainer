@@ -375,7 +375,11 @@ func (s *aiReviewStep) checkReviewOverride(
 		return nil
 	}
 	authedURL := injectToken(normalizeCloneURLToHTTPS(cloneURL), s.ghToken)
-	sha, err := s.ops.LsRemote(ctx, authedURL, ref, result.LocalTag)
+	// Bound the network round-trip — a stalled GitHub must not block
+	// the review step indefinitely.
+	lsCtx, cancel := context.WithTimeout(ctx, lsRemoteTimeout)
+	defer cancel()
+	sha, err := s.ops.LsRemote(lsCtx, authedURL, ref, result.LocalTag)
 	if err != nil {
 		glog.V(2).Infof(
 			"ai_review review-override: tag=%s err=%s",

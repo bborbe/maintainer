@@ -1643,10 +1643,17 @@ task_identifier: gh-release-bborbe-example-master-terminal
 				md, err := agentlib.ParseMarkdown(context.Background(), terminalMD)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Snapshot the pre-run ## Resolution content for byte comparison.
-				preResolution, preFound := md.FindSection("## Resolution")
-				Expect(preFound).To(BeTrue())
-				preBytes := preResolution.Body
+				// Snapshot pre-run typed contents — comparing the typed
+				// struct (not raw bytes) survives benign agentlib
+				// re-encoding (trailing newlines, key ordering) while
+				// still proving the semantic state is unchanged.
+				preResolution, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(preResolution).NotTo(BeNil())
 
 				_, err = step.Run(context.Background(), md)
 				Expect(err).NotTo(HaveOccurred())
@@ -1655,10 +1662,17 @@ task_identifier: gh-release-bborbe-example-master-terminal
 				// at the helper's first statement.
 				Expect(fakeOps.LsRemoteCallCount()).To(Equal(0))
 
-				// ## Resolution content unchanged.
-				postResolution, postFound := md.FindSection("## Resolution")
-				Expect(postFound).To(BeTrue())
-				Expect(postResolution.Body).To(Equal(preBytes))
+				// ## Resolution typed content unchanged.
+				postResolution, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(postResolution).NotTo(BeNil())
+				Expect(postResolution.Verdict).To(Equal(preResolution.Verdict))
+				Expect(postResolution.PlannedVersion).To(Equal(preResolution.PlannedVersion))
+				Expect(postResolution.ObservedRemoteSHA).To(Equal(preResolution.ObservedRemoteSHA))
 			},
 		)
 
@@ -1731,11 +1745,13 @@ task_identifier: gh-release-bborbe-example-master-aborted
 		It(
 			"idempotent re-fire: second Run against an already-released task does NOT re-consult the remote",
 			func() {
-				// This exercises the re-fire case where the FIRST run
-				// rewrote frontmatter to status=completed. The SECOND
-				// run's post-check sees status=completed and exits
-				// before LsRemote; the LsRemote mock counter only
-				// increments once (the first run).
+				// Re-fire semantics: the FIRST run rewrote frontmatter
+				// to status=completed and appended ## Resolution. The
+				// SECOND run's post-check must see status=completed
+				// and short-circuit BEFORE LsRemote — the call counter
+				// stays at 1 across both runs and the ## Resolution
+				// block typed-extracts to the SAME ResolutionOutput
+				// (verdict / planned_version / observed_remote_sha).
 				fakeOps, md1 := sharedHappySetup()
 				fakeOps.LsRemoteReturns("abc1234", nil)
 
@@ -1746,23 +1762,28 @@ task_identifier: gh-release-bborbe-example-master-aborted
 				// First-run assertions: ## Resolution present, frontmatter rewritten.
 				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
 				Expect(md1.Frontmatter["status"]).To(Equal("completed"))
+				firstResolution, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md1,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(firstResolution).NotTo(BeNil())
+
+				// Second-run: simulate the persisted post-first-run
+				// on-disk state by marshaling md1 and re-parsing. md2
+				// carries the ## Resolution block AND the
+				// status=completed frontmatter from the first run.
 				firstBytes, err := md1.Marshal(context.Background())
 				Expect(err).NotTo(HaveOccurred())
-				// Sanity: the first run wrote ## Resolution.
-				Expect(firstBytes).To(ContainSubstring("## Resolution"))
-
-				// Second-run: simulate that the persisted state already
-				// has status: completed (the on-disk state after the
-				// first run) by manually setting it on a fresh parse.
-				md2, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				md2, err := agentlib.ParseMarkdown(context.Background(), string(firstBytes))
 				Expect(err).NotTo(HaveOccurred())
-				md2.Frontmatter["status"] = "completed"
-				md2.Frontmatter["phase"] = "done"
+				Expect(md2.Frontmatter["status"]).To(Equal("completed"))
 
 				// Re-run with the second MD — the success path's
 				// Clone / Commit / Tag will run again (production
-				// contract), but the post-check will short-circuit
-				// at the idempotency guard and NOT call LsRemote.
+				// contract), but the post-check short-circuits at
+				// the idempotency guard and NOT call LsRemote.
 				_, err = step.Run(context.Background(), md2)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -1770,14 +1791,22 @@ task_identifier: gh-release-bborbe-example-master-aborted
 				// — the second run's post-check exited at the
 				// idempotency guard.
 				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
-				// The second run's post-check did NOT append a
-				// ## Resolution block — md2's pre-existing
-				// frontmatter state (status=completed) gated the
-				// helper. Assert no ## Resolution section exists.
-				_, found := md2.FindSection("## Resolution")
+				// The ## Resolution block typed-extracts to the same
+				// verdict / planned_version / observed_remote_sha
+				// as the first run — the helper did not double-write
+				// or rewrite it.
+				secondResolution, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md2,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(secondResolution).NotTo(BeNil())
+				Expect(secondResolution.Verdict).To(Equal(firstResolution.Verdict))
+				Expect(secondResolution.PlannedVersion).To(Equal(firstResolution.PlannedVersion))
 				Expect(
-					found,
-				).To(BeFalse(), "second run's post-check must not re-write ## Resolution")
+					secondResolution.ObservedRemoteSHA,
+				).To(Equal(firstResolution.ObservedRemoteSHA))
 			},
 		)
 	})
