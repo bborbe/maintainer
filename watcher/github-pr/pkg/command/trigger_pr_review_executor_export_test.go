@@ -11,6 +11,7 @@ import (
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	libkv "github.com/bborbe/kv"
+	libtime "github.com/bborbe/time"
 
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
@@ -38,10 +39,12 @@ var _ = func(
 	maxTitleLen int,
 	taskSuffix string,
 	metrics pkg.Metrics,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) (*base.EventID, base.Event, error) {
 	return runTriggerPRReview(
 		ctx, tx, obj,
 		ghClient, createSender, taskCreationFilter, trustDecision,
 		stage, maxSlugLen, maxTitleLen, taskSuffix, metrics,
+		currentDateTime,
 	)
 }

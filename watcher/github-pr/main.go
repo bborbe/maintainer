@@ -202,7 +202,8 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 
 	botAllowlist := pkg.ParseBotAllowlist(a.BotAllowlist)
-	startTime := libtime.NewCurrentDateTime().Now()
+	currentDateTime := libtime.NewCurrentDateTime()
+	startTime := currentDateTime.Now()
 
 	maxAge, err := parseMaxPRAge(ctx, a.MaxPRAge)
 	if err != nil {
@@ -316,6 +317,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.TaskSuffix,
 		metrics, // shared with the watcher
 		branch,
+		currentDateTime, // spec 067: time-injected clock for Force=true nonce
 	)
 
 	glog.V(2).

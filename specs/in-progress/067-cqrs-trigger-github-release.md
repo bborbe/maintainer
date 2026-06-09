@@ -1,5 +1,5 @@
 ---
-status: generating
+status: prompted
 tags:
     - dark-factory
     - spec

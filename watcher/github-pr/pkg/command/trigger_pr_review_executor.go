@@ -6,12 +6,14 @@ package command
 
 import (
 	"context"
+	"strconv"
 
 	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"
 	libkv "github.com/bborbe/kv"
+	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/lib/prurl"
@@ -46,6 +48,7 @@ func NewTriggerPRReviewCommandExecutor(
 	maxTitleLen int,
 	taskSuffix string,
 	metrics pkg.Metrics,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) cdb.CommandObjectExecutorTx {
 	return cdb.CommandObjectExecutorTxFunc(
 		TriggerPRReviewCommandOperation,
@@ -55,6 +58,7 @@ func NewTriggerPRReviewCommandExecutor(
 				ctx, tx, commandObject,
 				ghClient, createSender, taskCreationFilter, trustDecision,
 				stage, maxSlugLen, maxTitleLen, taskSuffix, metrics,
+				currentDateTime,
 			)
 		},
 	)
@@ -84,6 +88,7 @@ func runTriggerPRReview(
 	maxTitleLen int,
 	taskSuffix string,
 	metrics pkg.Metrics,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) (*base.EventID, base.Event, error) {
 	cmd, err := unmarshalAndValidate(ctx, commandObject)
 	if err != nil {
@@ -117,6 +122,7 @@ func runTriggerPRReview(
 	return publishCreateCommand(
 		ctx, prInfo, cmd, details, trustResult, createSender,
 		stage, maxSlugLen, maxTitleLen, taskSuffix, metrics,
+		currentDateTime,
 	)
 }
 
@@ -220,6 +226,12 @@ func applyTrust(
 // publishCreateCommand builds the downstream CreateTaskCommand and
 // publishes it via createSender. Returns (nil, wrappedErr) on transient
 // Kafka send failure and (nil, nil) on success.
+//
+// When cmd.Force is true, the published TaskIdentifier is derived from
+// DeriveTaskIDForce with a time-derived nonce so the agent controller's
+// vault-file dedup does not skip the publish. The nonce is intentionally
+// not logged — it leaks no security-sensitive data and adds noise without
+// operator benefit.
 func publishCreateCommand(
 	ctx context.Context,
 	prInfo *prurl.PRInfo,
@@ -232,6 +244,7 @@ func publishCreateCommand(
 	maxTitleLen int,
 	taskSuffix string,
 	metrics pkg.Metrics,
+	currentDateTime libtime.CurrentDateTimeGetter,
 ) (*base.EventID, base.Event, error) {
 	pr := pkg.PullRequest{
 		Number:      prInfo.Number,
@@ -242,9 +255,19 @@ func publishCreateCommand(
 		HTMLURL:     cmd.URL,
 		IsDraft:     details.IsDraft,
 	}
-	taskIDStr := pkg.DeriveTaskID(
-		prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA,
-	).String()
+	var taskIDStr string
+	if cmd.Force {
+		nonce := strconv.FormatInt(
+			currentDateTime.Now().Time().UnixNano(), 10,
+		)
+		taskIDStr = pkg.DeriveTaskIDForce(
+			prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA, nonce,
+		).String()
+	} else {
+		taskIDStr = pkg.DeriveTaskID(
+			prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA,
+		).String()
+	}
 
 	createCmd := pkg.BuildCreateCommand(
 		pr, details, taskIDStr, stage, maxSlugLen, maxTitleLen, taskSuffix,

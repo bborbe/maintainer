@@ -11,6 +11,7 @@ import (
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"
+	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -86,6 +87,7 @@ var _ = Describe("github_pr_published metric (spec 066 AC 12)", func() {
 			trustDecision,
 			"dev", 80, 200, "",
 			metrics,
+			libtime.NewCurrentDateTime(),
 		)
 	})
 

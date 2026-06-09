@@ -2,6 +2,7 @@
 status: pending
 spec: [067-cqrs-trigger-github-release]
 created: "2026-06-09T16:20:25Z"
+branch: dark-factory/cqrs-trigger-github-release
 ---
 
 <summary>
