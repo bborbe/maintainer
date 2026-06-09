@@ -1361,4 +1361,351 @@ task_identifier: gh-release-bborbe-example-master-plugin
 			},
 		)
 	})
+
+	// Spec 064 prompt 2 — the post-check tail. After ## Result(outcome=released)
+	// is written on the success path, the execution step shells out `git
+	// ls-remote refs/tags/<tag>` against the same authed URL the success
+	// path's Clone used, and uses the answer to decide the terminal
+	// verdict. The post-check is internal — verdict change rides on
+	// md.Frontmatter and the new ## Resolution block. See
+	// pkg/post_check_test.go for the unit-level coverage; this Context
+	// covers the integration into Run.
+	Context("post-check (spec 064)", func() {
+		// sharedHappySetup wires the success-path mocks and returns the
+		// canonical plan fixture (v1.2.8 / abc1234). The post-check
+		// tail always sees tag=v1.2.8 and expectedSHA=abc1234 in the
+		// success path; LsRemote stub is the per-test driver.
+		sharedHappySetup := func() (*gitmocks.GitOps, *agentlib.Markdown) {
+			fakeOps := &gitmocks.GitOps{}
+			fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+				writeChangelog(workdir)
+				return nil
+			}
+			fakeOps.CommitReturns("abc1234", nil)
+			fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+			fakeOps.TagReturns(nil)
+			md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+			Expect(err).NotTo(HaveOccurred())
+			return fakeOps, md
+		}
+
+		It(
+			"LsRemote returns expected SHA → verdict=released, status=completed, phase=done, ## Resolution appended",
+			func() {
+				fakeOps, md := sharedHappySetup()
+				// LsRemote returns the SHA Commit just produced — released branch.
+				fakeOps.LsRemoteReturns("abc1234", nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				// LsRemote was invoked exactly once.
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+				// Frontmatter: status=completed / phase=done.
+				Expect(md.Frontmatter["status"]).To(Equal("completed"))
+				Expect(md.Frontmatter["phase"]).To(Equal("done"))
+
+				// ## Resolution block present and shaped correctly.
+				got, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.Verdict).To(Equal(pkg.ResolutionVerdictReleased))
+				Expect(got.PlannedVersion).To(Equal("v1.2.8"))
+				Expect(got.ObservedRemoteSHA).To(Equal("abc1234"))
+
+				// Existing ## Result(outcome=released) STILL on disk — the
+				// post-check appends ## Resolution, it does NOT replace ## Result.
+				resultOutput, err := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resultOutput.Outcome).To(Equal("released"))
+				Expect(resultOutput.CommitSHA).To(Equal("abc1234"))
+			},
+		)
+
+		It(
+			"LsRemote returns a different SHA → verdict=superseded, status=completed, phase=done, ## Resolution cites observed SHA",
+			func() {
+				fakeOps, md := sharedHappySetup()
+				// LsRemote returns a different SHA — superseded branch.
+				fakeOps.LsRemoteReturns("deadbee", nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				Expect(md.Frontmatter["status"]).To(Equal("completed"))
+				Expect(md.Frontmatter["phase"]).To(Equal("done"))
+
+				got, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(got.Verdict).To(Equal(pkg.ResolutionVerdictSuperseded))
+				Expect(got.PlannedVersion).To(Equal("v1.2.8"))
+				Expect(got.ObservedRemoteSHA).To(Equal("deadbee"))
+			},
+		)
+
+		It(
+			"LsRemote returns (\"\", nil) → post-check no-op, existing ## Result(released) stands, no ## Resolution",
+			func() {
+				fakeOps, md := sharedHappySetup()
+				// LsRemote returns empty — the post-check must NOT write
+				// anything. The existing success-path verdict stands.
+				fakeOps.LsRemoteReturns("", nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				// LsRemote was called once (we always consult the remote).
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+				// Frontmatter NOT rewritten by the post-check — the
+				// success path's status is what stands.
+				Expect(md.Frontmatter["status"]).NotTo(Equal("completed"))
+
+				// ## Resolution absent.
+				_, err = agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(
+					err,
+				).To(HaveOccurred(), "## Resolution must not exist on empty-result branch")
+			},
+		)
+
+		It(
+			"LsRemote returns error → post-check no-op, existing verdict stands, error logged via redactToken",
+			func() {
+				fakeOps, md := sharedHappySetup()
+				// LsRemote error path.
+				fakeOps.LsRemoteReturns(
+					"",
+					errors.Errorf(
+						context.Background(),
+						"git ls-remote: fatal: unable to access 'https://x-access-token:ghp_LEAKEDTOKEN@github.com/owner/repo'",
+					),
+				)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+
+				// Frontmatter NOT rewritten.
+				Expect(md.Frontmatter["status"]).NotTo(Equal("completed"))
+
+				// ## Resolution absent.
+				_, err = agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(
+					err,
+				).To(HaveOccurred(), "## Resolution must not exist on LsRemote-error branch")
+			},
+		)
+
+		It(
+			"failure path participates: Clone fails → s.fail fires post-check with LsRemote returning a SHA → superseded",
+			func() {
+				// Drive Run to a failure (Clone errors out), LsRemote
+				// returns a non-empty SHA so the superseded branch
+				// fires on the failure path.
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneReturns(errors.Errorf(context.Background(), "auth failed"))
+				fakeOps.LsRemoteReturns("deadbee", nil)
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+
+				// Post-check fired (Clone failure path still calls LsRemote).
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+
+				// ## Result(failed) on disk.
+				gotResult, err := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(gotResult.Outcome).To(Equal("failed"))
+
+				// Frontmatter rewritten to completed/done — a later release won the slot.
+				Expect(md.Frontmatter["status"]).To(Equal("completed"))
+				Expect(md.Frontmatter["phase"]).To(Equal("done"))
+
+				// ## Resolution block present, verdict=superseded.
+				gotResolution, err := agentlib.ExtractSection[pkg.ResolutionOutput](
+					context.Background(),
+					md,
+					"## Resolution",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(gotResolution.Verdict).To(Equal(pkg.ResolutionVerdictSuperseded))
+				Expect(gotResolution.ObservedRemoteSHA).To(Equal("deadbee"))
+			},
+		)
+
+		It(
+			"idempotency on already-terminal: frontmatter status=completed → LsRemote NEVER called, ## Resolution unchanged",
+			func() {
+				// Frontmatter says completed from the start — the
+				// idempotency guard short-circuits BEFORE LsRemote.
+				// The ## Resolution block in the fixture is the
+				// pre-existing one; the post-check must NOT touch it.
+				terminalMD := `---
+status: completed
+phase: done
+assignee: github-releaser-agent
+task_type: github-release
+repo: bborbe/example
+clone_url: https://github.com/bborbe/example.git
+ref: master
+current_version: v1.2.7
+task_identifier: gh-release-bborbe-example-master-terminal
+---
+
+# release task
+
+## Plan
+
+` + "```json" + `
+{
+  "outcome": "ready",
+  "bump": "patch",
+  "reasoning": "fix-only batch",
+  "current_version": "v1.2.7",
+  "next_version": "1.2.8",
+  "next_version_header": "## v1.2.8",
+  "header_prefix_style": "v",
+  "bullets": ["fix: thing"]
+}
+` + "```" + `
+
+## Result
+
+` + "```json" + `
+{"outcome":"released","path":"direct-push","commit_sha":"abc1234","tag":"v1.2.8","workdir":"/tmp/whatever","local_tag":"v1.2.8"}
+` + "```" + `
+
+## Resolution
+
+` + "```json" + `
+{"verdict":"released","planned_version":"v1.2.8","observed_remote_sha":"abc1234"}
+` + "```" + `
+
+`
+
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					return nil
+				}
+				fakeOps.CommitReturns("abc1234", nil)
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+				// LsRemote intentionally NOT stubbed; if the guard fails
+				// to short-circuit, the counterfeiter zero-value return
+				// ("", nil) is what would happen. The test asserts
+				// LsRemoteCallCount() == 0 to prove the guard fired.
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				md, err := agentlib.ParseMarkdown(context.Background(), terminalMD)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Snapshot the pre-run ## Resolution content for byte comparison.
+				preResolution, preFound := md.FindSection("## Resolution")
+				Expect(preFound).To(BeTrue())
+				preBytes := preResolution.Body
+
+				_, err = step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+
+				// LsRemote was NEVER called — the guard short-circuited
+				// at the helper's first statement.
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(0))
+
+				// ## Resolution content unchanged.
+				postResolution, postFound := md.FindSection("## Resolution")
+				Expect(postFound).To(BeTrue())
+				Expect(postResolution.Body).To(Equal(preBytes))
+			},
+		)
+
+		It(
+			"idempotent re-fire: second Run against an already-released task does NOT re-consult the remote",
+			func() {
+				// This exercises the re-fire case where the FIRST run
+				// rewrote frontmatter to status=completed. The SECOND
+				// run's post-check sees status=completed and exits
+				// before LsRemote; the LsRemote mock counter only
+				// increments once (the first run).
+				fakeOps, md1 := sharedHappySetup()
+				fakeOps.LsRemoteReturns("abc1234", nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "test-token")
+				_, err := step.Run(context.Background(), md1)
+				Expect(err).NotTo(HaveOccurred())
+
+				// First-run assertions: ## Resolution present, frontmatter rewritten.
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+				Expect(md1.Frontmatter["status"]).To(Equal("completed"))
+				firstBytes, err := md1.Marshal(context.Background())
+				Expect(err).NotTo(HaveOccurred())
+				// Sanity: the first run wrote ## Resolution.
+				Expect(firstBytes).To(ContainSubstring("## Resolution"))
+
+				// Second-run: simulate that the persisted state already
+				// has status: completed (the on-disk state after the
+				// first run) by manually setting it on a fresh parse.
+				md2, err := agentlib.ParseMarkdown(context.Background(), taskMD)
+				Expect(err).NotTo(HaveOccurred())
+				md2.Frontmatter["status"] = "completed"
+				md2.Frontmatter["phase"] = "done"
+
+				// Re-run with the second MD — the success path's
+				// Clone / Commit / Tag will run again (production
+				// contract), but the post-check will short-circuit
+				// at the idempotency guard and NOT call LsRemote.
+				_, err = step.Run(context.Background(), md2)
+				Expect(err).NotTo(HaveOccurred())
+
+				// LsRemote was called exactly once across BOTH runs
+				// — the second run's post-check exited at the
+				// idempotency guard.
+				Expect(fakeOps.LsRemoteCallCount()).To(Equal(1))
+				// The second run's post-check did NOT append a
+				// ## Resolution block — md2's pre-existing
+				// frontmatter state (status=completed) gated the
+				// helper. Assert no ## Resolution section exists.
+				_, found := md2.FindSection("## Resolution")
+				Expect(
+					found,
+				).To(BeFalse(), "second run's post-check must not re-write ## Resolution")
+			},
+		)
+	})
 })

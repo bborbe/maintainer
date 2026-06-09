@@ -70,6 +70,14 @@ func (s *executionStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool
 //     plan.RewriteNeeded, then rename the header to plan.NextVersionHeader)
 //  5. Commit + annotated-tag
 //  6. Write ## Result(outcome=released) and return Done/NextPhase=ai_review
+//  7. Post-check tail — consult `git ls-remote refs/tags/<tag>` against
+//     the same authed URL the Clone used. Remote shows tag at expected
+//     SHA → upgrade verdict to "released" + ## Resolution + status:
+//     completed / phase: done. Remote shows tag at a different SHA →
+//     upgrade to "superseded". Remote empty / ls-remote error → no-op.
+//     The post-check is internal to the agent (no Kafka envelope, no
+//     agent-lib API change) and is idempotent on re-fires against a
+//     task already in status: completed / aborted.
 //
 // Note: the network push happens in the ai_review step (spec 058 prompt 3),
 // not here. The local clone + tag are preserved past Run's return so
@@ -82,12 +90,32 @@ func (s *executionStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool
 func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
 	plan, err := s.validatePlan(ctx, md)
 	if err != nil {
-		return s.fail(ctx, md, git.ErrorCategoryUnknown, err)
+		return s.fail(
+			ctx,
+			md,
+			git.ErrorCategoryUnknown,
+			err,
+			"",
+			"",
+			"",
+			"",
+			"",
+		)
 	}
 
 	cloneURL, ref, taskID, err := s.extractFrontmatter(ctx, md)
 	if err != nil {
-		return s.fail(ctx, md, git.ErrorCategoryUnknown, err)
+		return s.fail(
+			ctx,
+			md,
+			git.ErrorCategoryUnknown,
+			err,
+			"",
+			strings.TrimPrefix(plan.NextVersionHeader, "## "),
+			s.injectToken(normalizeCloneURLToHTTPS(cloneURL)),
+			ref,
+			"",
+		)
 	}
 
 	workdir := s.setupWorkdir(taskID)
@@ -103,7 +131,18 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 		}
 	}()
 
-	sha, tagName, failResult := s.executeLocalRelease(ctx, md, workdir, plan, cloneURL, ref)
+	tag := strings.TrimPrefix(plan.NextVersionHeader, "## ")
+	authedURL := s.injectToken(normalizeCloneURLToHTTPS(cloneURL))
+	sha, tagName, failResult := s.executeLocalRelease(
+		ctx,
+		md,
+		workdir,
+		plan,
+		ref,
+		taskID,
+		tag,
+		authedURL,
+	)
 	if failResult != nil {
 		return failResult, nil // fail() already called inside executeLocalRelease
 	}
@@ -121,6 +160,14 @@ func (s *executionStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentl
 		return nil, errors.Wrapf(ctx, err, "marshal ## Result section")
 	}
 	md.ReplaceSection(section)
+
+	// Post-check tail — consult the remote for the tag's actual SHA. A
+	// non-empty observed SHA that matches `sha` upgrades the verdict to
+	// "released" and rewrites the frontmatter to status: completed /
+	// phase: done. A non-matching observed SHA fires the "superseded"
+	// branch. An empty result or ls-remote error is a no-op — the
+	// existing ## Result(outcome=released) stands unchanged.
+	s.postCheck(ctx, md, taskID, tagName, authedURL, ref, sha)
 
 	// Mark success: defer above will skip RemoveAll so the workdir (with
 	// the local commit + tag) survives until ai_review finishes.
@@ -185,7 +232,12 @@ func (s *executionStep) setupWorkdir(taskID string) string {
 
 // executeLocalRelease runs the clone → (optional body rewrite) → header
 // rename → commit → tag sequence. The network push happens in the ai_review
-// step (spec 058 prompt 3), not here.
+// step (spec 058 prompt 3), not here. The post-check (this prompt's helper,
+// see postCheck on the type) is the only place the remote is consulted for
+// tag state — every s.fail call site below threads taskID, tag, authedURL,
+// ref, and an empty expectedSHA so the post-check can fire on the failure
+// path. The authedURL is the same one Run built at entry; the tag is the
+// bare semver derived from plan.NextVersionHeader.
 //
 // Returns (sha, tagName, nil) on success, or ( "", "", failResult) on failure
 // where failResult is the result of calling s.fail() with the appropriate error.
@@ -196,12 +248,13 @@ func (s *executionStep) executeLocalRelease(
 	md *agentlib.Markdown,
 	workdir string,
 	plan *PlanOutput,
-	cloneURL, ref string,
+	ref string,
+	taskID string,
+	tag string,
+	authedURL string,
 ) (sha, tagName string, _ *agentlib.Result) {
-	normalizedURL := normalizeCloneURLToHTTPS(cloneURL)
-	authedURL := s.injectToken(normalizedURL)
 	if err := s.ops.Clone(ctx, authedURL, ref, workdir); err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 
@@ -209,7 +262,8 @@ func (s *executionStep) executeLocalRelease(
 	detectedManifests, err := plugin.DetectManifests(ctx, workdir)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-			errors.Wrapf(ctx, err, "detect plugin manifests in %s", workdir))
+			errors.Wrapf(ctx, err, "detect plugin manifests in %s", workdir),
+			taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 
@@ -222,7 +276,8 @@ func (s *executionStep) executeLocalRelease(
 		if !os.IsNotExist(err) {
 			category = git.ErrorCategoryUnknown
 		}
-		result, _ := s.fail(ctx, md, category, errors.Wrapf(ctx, err, "read %s", changelogPath))
+		result, _ := s.fail(ctx, md, category, errors.Wrapf(ctx, err, "read %s", changelogPath),
+			taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 
@@ -238,7 +293,8 @@ func (s *executionStep) executeLocalRelease(
 		)
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
-				errors.Wrap(ctx, err, "replace ## Unreleased body"))
+				errors.Wrap(ctx, err, "replace ## Unreleased body"),
+				taskID, tag, authedURL, ref, "")
 			return "", "", result
 		}
 	}
@@ -250,12 +306,14 @@ func (s *executionStep) executeLocalRelease(
 	)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnreleasedNotFound,
-			errors.Wrap(ctx, err, "rewrite ## Unreleased"))
+			errors.Wrap(ctx, err, "rewrite ## Unreleased"),
+			taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 	if err := os.WriteFile(changelogPath, rewritten, 0o644); err != nil { // #nosec G306,G703 -- standard perms; workdir is os.TempDir-rooted
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-			errors.Wrapf(ctx, err, "write %s", changelogPath))
+			errors.Wrapf(ctx, err, "write %s", changelogPath),
+			taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 
@@ -268,7 +326,8 @@ func (s *executionStep) executeLocalRelease(
 		) // #nosec G304 -- workdir is os.TempDir-rooted
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-				errors.Wrapf(ctx, err, "read %s", manifestAbsPath))
+				errors.Wrapf(ctx, err, "read %s", manifestAbsPath),
+				taskID, tag, authedURL, ref, "")
 			return "", "", result
 		}
 
@@ -279,18 +338,21 @@ func (s *executionStep) executeLocalRelease(
 			rewrittenManifest, err = plugin.BumpMarketplaceJSON(ctx, manifestContent, unprefixedVersion)
 		} else {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-				errors.Errorf(ctx, "unsupported manifest type: %s", manifestPath))
+				errors.Errorf(ctx, "unsupported manifest type: %s", manifestPath),
+				taskID, tag, authedURL, ref, "")
 			return "", "", result
 		}
 		if err != nil {
 			result, _ := s.fail(ctx, md, git.ErrorCategoryPluginManifestInvalid,
-				errors.Wrapf(ctx, err, "bump %s", manifestPath))
+				errors.Wrapf(ctx, err, "bump %s", manifestPath),
+				taskID, tag, authedURL, ref, "")
 			return "", "", result
 		}
 
 		if err := os.WriteFile(manifestAbsPath, rewrittenManifest, 0o644); err != nil { // #nosec G306,G703 -- standard perms; workdir is os.TempDir-rooted
 			result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-				errors.Wrapf(ctx, err, "write %s", manifestAbsPath))
+				errors.Wrapf(ctx, err, "write %s", manifestAbsPath),
+				taskID, tag, authedURL, ref, "")
 			return "", "", result
 		}
 	}
@@ -300,7 +362,7 @@ func (s *executionStep) executeLocalRelease(
 	commitPaths := append([]string{changelogFileName}, detectedManifests...)
 	sha, err = s.ops.Commit(ctx, workdir, "release "+tagName, commitPaths...)
 	if err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 	// Pre-push guard: the release commit must touch exactly the files we
@@ -310,11 +372,13 @@ func (s *executionStep) executeLocalRelease(
 	// this step (moved to ai_review in spec 058), but the guard still
 	// runs here so a non-conformant commit never gets a tag.
 	expectedFiles := append([]string{changelogFileName}, detectedManifests...)
-	if failResult := s.guardCommittedFiles(ctx, md, workdir, expectedFiles); failResult != nil {
+	if failResult := s.guardCommittedFiles(
+		ctx, md, workdir, expectedFiles, taskID, tag, authedURL, ref,
+	); failResult != nil {
 		return "", "", failResult
 	}
 	if err := s.ops.Tag(ctx, workdir, tagName, "release "+tagName); err != nil {
-		result, _ := s.fail(ctx, md, git.ClassifyError(err), err)
+		result, _ := s.fail(ctx, md, git.ClassifyError(err), err, taskID, tag, authedURL, ref, "")
 		return "", "", result
 	}
 	return sha, tagName, nil
@@ -324,23 +388,31 @@ func (s *executionStep) executeLocalRelease(
 // the expected files. On any deviation it writes a ## Result with
 // error_category=unexpected_diff and returns a failed Result — the caller
 // must abort before tag/push. Returns nil when the commit changed only
-// the expected files.
+// the expected files. Both internal s.fail call sites (line 384 + 389)
+// participate in the post-check via the threaded taskID / tag / authedURL
+// / ref parameters.
 func (s *executionStep) guardCommittedFiles(
 	ctx context.Context,
 	md *agentlib.Markdown,
 	workdir string,
 	expectedFiles []string,
+	taskID string,
+	tag string,
+	authedURL string,
+	ref string,
 ) *agentlib.Result {
 	files, err := s.ops.CommittedFiles(ctx, workdir)
 	if err != nil {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnknown,
-			errors.Wrap(ctx, err, "inspect committed files"))
+			errors.Wrap(ctx, err, "inspect committed files"),
+			taskID, tag, authedURL, ref, "")
 		return result
 	}
 	if !sameStringSet(files, expectedFiles) {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnexpectedDiff,
 			errors.Errorf(ctx,
-				"release commit must change only %v, got %v", expectedFiles, files))
+				"release commit must change only %v, got %v", expectedFiles, files),
+			taskID, tag, authedURL, ref, "")
 		return result
 	}
 	return nil
@@ -393,11 +465,29 @@ func (s *executionStep) injectToken(cloneURL string) string {
 // fail writes a ## Result(outcome=failed) section with the supplied
 // error_category + error string, and returns Status=Failed for controller
 // retry. The workdir cleanup defer in Run still runs after this returns.
+//
+// Before returning, fail invokes the post-check helper so the failure
+// verdict can be upgraded to "released" (remote shows the planned tag
+// at the agent's expected SHA) or "superseded" (remote shows it at a
+// different SHA) — the helper consults git ls-remote on the same
+// authed URL the success path used. The taskID, tag, authedURL, ref,
+// and expectedSHA are threaded from the caller (they are all in scope
+// where the failure originates). expectedSHA is empty on the failure
+// path because the local commit/tag step never produced a SHA to
+// compare against — the post-check still fires the superseded branch
+// if a later release already won the slot.
+//
+//nolint:unparam // expectedSHA is intentionally always "" on the failure path today (push never reached the tag step); the parameter is kept on the signature so every s.fail call site participates in the post-check without splitting into a parallel helper.
 func (s *executionStep) fail(
 	ctx context.Context,
 	md *agentlib.Markdown,
 	category git.ErrorCategory,
 	cause error,
+	taskID string,
+	tag string,
+	authedURL string,
+	ref string,
+	expectedSHA string,
 ) (*agentlib.Result, error) {
 	msg := ""
 	if cause != nil {
@@ -417,11 +507,158 @@ func (s *executionStep) fail(
 	}
 	md.ReplaceSection(section)
 
-	glog.V(2).Infof("execution failed: category=%s err=%v", category, cause)
+	glog.V(2).
+		Infof("execution failed: category=%s err=%v expected_sha=%q", category, cause, expectedSHA)
+	// Post-check tail: consult the remote for tag state. A non-empty
+	// observed SHA upgrades the verdict to "released" (when it matches
+	// expectedSHA) or "superseded" (when it differs). An empty result or
+	// a subcommand error is a no-op — the existing ## Result(failed)
+	// stands. expectedSHA is always "" on the failure path because the
+	// local commit/tag step never produced a SHA to compare against;
+	// postCheck still fires the superseded branch if a later release
+	// already won the slot.
+	s.postCheck(ctx, md, taskID, tag, authedURL, ref, expectedSHA)
 	return &agentlib.Result{
 		Status:  agentlib.AgentStatusFailed,
 		Message: msg,
 	}, nil
+}
+
+// postCheck runs the spec-064 post-check tail on the execution step.
+// After the execution step has written ## Result (success or failure),
+// this method:
+//
+//  1. Reads md.Frontmatter["status"] — if it's already "completed" or
+//     "aborted", return immediately. Idempotency guard: a re-fire on a
+//     task whose verdict was already decided must not double-write a
+//     ## Resolution block or rewrite the frontmatter again.
+//  2. Asks the remote via ops.LsRemote(authedURL, ref, tag) what SHA,
+//     if any, sits at refs/tags/<tag> for the planned version. The
+//     authed URL is the same one the success path's Clone used — token
+//     injection happens at the call site, not here.
+//  3. Compares the observed SHA against the agent's expected SHA when
+//     available. On the failure path the expected SHA is empty — any
+//     non-empty observed SHA still fires the superseded branch (a
+//     later release won the slot).
+//  4. Upgrades the verdict: writes a ## Resolution block (replacing any
+//     existing copy), rewrites md.Frontmatter["status"]="completed" and
+//     ["phase"]="done", and emits one structured log line via
+//     glog.V(2).
+//
+// On empty remote result or LsRemote error: the existing ## Result is
+// NOT touched. The post-check is a no-op (other than the log line). On
+// error the err is wrapped through redactToken before logging so a
+// leak of the GitHub auth token in the wrapped stderr cannot reach
+// the log stream.
+//
+// The structured log line format (glog.V(2), one line per call):
+//
+//	post-check: task_id=<taskID> planned_version=<tag> observed_remote_sha=<sha-or-empty> verdict=<verdict>
+//
+// where <verdict> ∈ {released, superseded, no-op-remote-empty,
+// no-op-remote-error, no-op-already-terminal}. Operators can grep the
+// log stream for `post-check:` to find the deciding fact for any
+// task.
+//
+// The post-check NEVER mutates the body sections on the empty-result
+// or error paths — only the frontmatter status/phase are touched on
+// the released/superseded branches (and only there). The
+// released → failed downgrade is impossible: the helper never writes
+// status="failed" or "in_progress" — the only transitions are
+// (in_progress → completed) and (in_progress → same-status).
+//
+//nolint:gocognit,funlen // multi-branch verdict upgrade with idempotency guard
+func (s *executionStep) postCheck(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	taskID string,
+	tag string,
+	authedURL string,
+	ref string,
+	expectedSHA string,
+) {
+	// 1. Idempotency guard — the FIRST statement. When the task has
+	// already been moved to a terminal frontmatter state, do nothing.
+	// String() returns ("", false) for absent or non-string values;
+	// both are treated as not-yet-terminal.
+	if status, _ := md.Frontmatter.String("status"); status == "completed" || status == "aborted" {
+		glog.V(2).Infof(
+			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s",
+			taskID,
+			tag,
+			"",
+			"no-op-already-terminal",
+		)
+		return
+	}
+
+	// 2. Ask the remote. The authed URL is the caller's responsibility;
+	// the helper trusts it (mirrors the Clone / Commit call sites in
+	// executeLocalRelease).
+	sha, err := s.ops.LsRemote(ctx, authedURL, ref, tag)
+	if err != nil {
+		glog.V(2).Infof(
+			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s err=%s",
+			taskID,
+			tag,
+			"",
+			"no-op-remote-error",
+			git.RedactToken(err.Error()),
+		)
+		return
+	}
+	if sha == "" {
+		glog.V(2).Infof(
+			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s",
+			taskID,
+			tag,
+			"",
+			"no-op-remote-empty",
+		)
+		return
+	}
+
+	// 3. Compare observed vs expected.
+	verdict := ResolutionVerdictSuperseded
+	if expectedSHA != "" && sha == expectedSHA {
+		verdict = ResolutionVerdictReleased
+	}
+
+	// 4. Append a ## Resolution block, rewrite the frontmatter, log.
+	section, marshalErr := agentlib.MarshalSectionTyped(
+		ctx,
+		"## Resolution",
+		ResolutionOutput{
+			Verdict:           verdict,
+			PlannedVersion:    tag,
+			ObservedRemoteSHA: sha,
+		},
+	)
+	if marshalErr != nil {
+		// Marshalling our own typed struct should not fail; if it does,
+		// log and bail — the post-check is best-effort and must not
+		// downgrades a verdict on its own failure.
+		glog.V(2).Infof(
+			"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s err=%s",
+			taskID,
+			tag,
+			sha,
+			"no-op-marshal-failed",
+			git.RedactToken(marshalErr.Error()),
+		)
+		return
+	}
+	md.ReplaceSection(section)
+	md.Frontmatter["status"] = "completed"
+	md.Frontmatter["phase"] = "done"
+
+	glog.V(2).Infof(
+		"post-check: task_id=%s planned_version=%s observed_remote_sha=%s verdict=%s",
+		taskID,
+		tag,
+		sha,
+		verdict,
+	)
 }
 
 // deriveUnprefixedVersion strips "## " prefix and "v" prefix from

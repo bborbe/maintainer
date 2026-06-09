@@ -1,8 +1,13 @@
 ---
-status: approved
+status: completed
 spec: [064-github-releaser-post-check-verdict-from-github-truth]
+summary: 'Wired spec-064 post-check tail into the github-releaser execution step: added ResolutionOutput contract, postCheck helper (idempotent, LsRemote-driven, released/superseded verdict upgrade), widened s.fail signature across all 16 call sites, and 7 new Ginkgo tests cover all branches'
+container: maintainer-release-postcheck-exec-246-spec-064-2-post-check-helper-wiring
+dark-factory-version: v0.175.0
 created: "2026-06-08T16:30:00Z"
 queued: "2026-06-08T18:48:42Z"
+started: "2026-06-09T06:32:43Z"
+completed: "2026-06-09T06:54:11Z"
 branch: dark-factory/github-releaser-post-check-verdict-from-github-truth
 ---
 

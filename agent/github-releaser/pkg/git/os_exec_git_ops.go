@@ -243,6 +243,15 @@ func redactToken(s string) string {
 	return tokenURLRegexp.ReplaceAllString(s, "x-access-token:[REDACTED]@")
 }
 
+// RedactToken exposes the unexported redactToken helper for callers
+// outside this package (e.g. the spec-064 post-check tail in
+// pkg/steps_execution.go needs to log a wrapped err.Error() through
+// the same redaction). Behavior is identical to redactToken — the
+// split is purely a visibility boundary, not a re-implementation.
+func RedactToken(s string) string {
+	return redactToken(s)
+}
+
 // tokenURLRegexp is compiled once at package init (intentionally package-level,
 // not inside redactToken) so the hot path does not recompile per call.
 var tokenURLRegexp = regexp.MustCompile(`x-access-token:[^@\s]+@`)
