@@ -6,6 +6,7 @@ package pkg
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,7 +173,11 @@ func (s *aiReviewStep) ShouldRun(_ context.Context, _ *agentlib.Markdown) (bool,
 //  7. When Approved: call ops.Push. On Push error: still write
 //     ## Review (with a "push failed" note), set Approved=false,
 //     return Failed/human_review.
-//  8. Workdir cleanup: deferred via workdirShouldCleanup sentinel —
+//  8. On `!approved`: consult `LsRemote`. If the remote shows the tag
+//     at the agent's expected SHA (or at any SHA, for the superseded
+//     case), write `## Review Warning` + close as `completed`.
+//     Otherwise, the existing `human_review` path stands.
+//  9. Workdir cleanup: deferred via workdirShouldCleanup sentinel —
 //     the workdir is removed on BOTH terminal transitions (Done and
 //     human_review) AFTER ## Review has been written.
 func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentlib.Result, error) {
@@ -248,6 +253,24 @@ func (s *aiReviewStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 
 	// (5) Push gating — only on Approved branch.
 	if !output.Approved {
+		// Spec 064 DB #7: a review rejection that coincides with a
+		// confirmed remote tag at the agent's expected SHA does not
+		// flip the task to `failed`. The review verdict is preserved
+		// as a recorded warning in ## Review Warning, and the task
+		// closes as `completed` (the post-check from prompt 2 also
+		// upgrades the verdict — this branch is its ai_review-side
+		// mirror for the case where the execution-step post-check
+		// did NOT fire because the remote was empty at the time of
+		// execution, but is now non-empty by the time ai_review runs).
+		if warning := s.checkReviewOverride(ctx, md, &output, result); warning != nil {
+			return s.finishReviewOverride(
+				ctx,
+				md,
+				output,
+				warning,
+				&workdirShouldCleanup,
+			)
+		}
 		return s.finishHumanReview(ctx, md, output, &workdirShouldCleanup)
 	}
 	return s.finishApproved(ctx, md, result, output, &workdirShouldCleanup)
@@ -321,6 +344,109 @@ func (s *aiReviewStep) finishHumanReview(
 		Status:    agentlib.AgentStatusFailed,
 		NextPhase: string(domain.TaskPhaseHumanReview),
 		Message:   output.Notes,
+	}, nil
+}
+
+// checkReviewOverride is the spec-064 ai_review-side sub-decision on
+// the `!approved` path. It consults the remote via git.LsRemote to
+// confirm whether the planned version's tag is already at the agent's
+// expected SHA (a release was already published) or at a different
+// SHA (a later release won the slot).
+//
+// On a non-empty observed SHA it returns a populated
+// *ReviewWarningOutput; the caller (Run) will route to
+// finishReviewOverride which writes the ## Review Warning block and
+// closes the task as `completed`. On an empty result or LsRemote
+// error it returns nil — the existing human_review path stands
+// unchanged. The authed URL is built via the shared package-level
+// helpers (mirror the execution step's auth model). On any error the
+// err message is passed through RedactToken before logging so a
+// leak of the GitHub auth token in the wrapped stderr cannot reach
+// the log stream.
+func (s *aiReviewStep) checkReviewOverride(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	output *ReviewOutput,
+	result *ResultOutput,
+) *ReviewWarningOutput {
+	cloneURL, _ := md.Frontmatter.String("clone_url")
+	ref, _ := md.Frontmatter.String("ref")
+	if cloneURL == "" || ref == "" || result.LocalTag == "" {
+		return nil
+	}
+	authedURL := injectToken(normalizeCloneURLToHTTPS(cloneURL), s.ghToken)
+	// Bound the network round-trip — a stalled GitHub must not block
+	// the review step indefinitely.
+	lsCtx, cancel := context.WithTimeout(ctx, lsRemoteTimeout)
+	defer cancel()
+	sha, err := s.ops.LsRemote(lsCtx, authedURL, ref, result.LocalTag)
+	if err != nil {
+		glog.V(2).Infof(
+			"ai_review review-override: tag=%s err=%s",
+			result.LocalTag,
+			git.RedactToken(err.Error()),
+		)
+		return nil
+	}
+	if sha == "" {
+		glog.V(2).Infof(
+			"ai_review review-override: tag=%s sha=empty (no override)",
+			result.LocalTag,
+		)
+		return nil
+	}
+	failedChecks := append([]string{}, output.FailedChecks...)
+	note := fmt.Sprintf(
+		"review rejected (%s) but remote confirms release at %s",
+		strings.Join(failedChecks, ","),
+		sha,
+	)
+	return &ReviewWarningOutput{
+		FailedChecks:      failedChecks,
+		PlannedVersion:    result.LocalTag,
+		ObservedRemoteSHA: sha,
+		Note:              note,
+	}
+}
+
+// finishReviewOverride writes BOTH the existing ## Review section
+// (the rejected verdict, preserved durably) AND the new ## Review
+// Warning block. It rewrites the frontmatter to status: completed /
+// phase: done and returns Done / NextPhase=done — same shape as the
+// existing happy-path finishApproved. The workdir cleanup sentinel
+// is set so the deferred cleanup runs AFTER the section writes.
+func (s *aiReviewStep) finishReviewOverride(
+	ctx context.Context,
+	md *agentlib.Markdown,
+	output ReviewOutput,
+	warning *ReviewWarningOutput,
+	workdirShouldCleanup *bool,
+) (*agentlib.Result, error) {
+	reviewSection, err := agentlib.MarshalSectionTyped(ctx, "## Review", output)
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "ai_review: marshal ## Review section")
+	}
+	md.ReplaceSection(reviewSection)
+	warningSection, err := agentlib.MarshalSectionTyped(
+		ctx,
+		"## Review Warning",
+		warning,
+	)
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "ai_review: marshal ## Review Warning section")
+	}
+	md.ReplaceSection(warningSection)
+	md.Frontmatter["status"] = "completed"
+	md.Frontmatter["phase"] = "done"
+	*workdirShouldCleanup = true
+	glog.V(2).Infof(
+		"ai_review review-override: tag=%s observed_remote_sha=%s",
+		warning.PlannedVersion,
+		warning.ObservedRemoteSHA,
+	)
+	return &agentlib.Result{
+		Status:    agentlib.AgentStatusDone,
+		NextPhase: "done",
 	}, nil
 }
 

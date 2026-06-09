@@ -5,3 +5,5 @@
 package git
 
 var RedactTokenForTest = redactToken
+
+var ParseLsRemoteOutputForTest = parseLsRemoteOutput

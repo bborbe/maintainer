@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -239,4 +240,178 @@ var _ = Describe("redactToken", func() {
 		Expect(out).NotTo(ContainSubstring("ghp_AAA"))
 		Expect(out).To(ContainSubstring("x-access-token:[REDACTED]@"))
 	})
+})
+
+// LsRemote coverage — pure parser + subprocess integration. The pure parser
+// table-test exercises the annotated/lightweight/empty fixtures directly so
+// the boundary contract is testable without forking a subprocess. The
+// subprocess tests use a faked `git` binary on PATH to exercise the argv-only
+// + token-redaction contract end-to-end.
+var _ = Describe("ParseLsRemoteOutput", func() {
+	It("returns the dereferenced commit SHA for an annotated tag fixture", func() {
+		// Two-line fixture: tag-object SHA first, commit SHA second.
+		// Per git ls-remote semantics, the ^{} line is the commit SHA.
+		in := []byte(
+			"abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n" +
+				"def456abc123def456abc123def456abc123def45\trefs/tags/v1.2.8^{}\n",
+		)
+		Expect(git.ParseLsRemoteOutputForTest(in, "v1.2.8")).
+			To(Equal("def456abc123def456abc123def456abc123def45"))
+	})
+
+	It("returns the tag-object SHA for a lightweight tag fixture (no ^{} line)", func() {
+		in := []byte("abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n")
+		Expect(git.ParseLsRemoteOutputForTest(in, "v1.2.8")).
+			To(Equal("abc123def456abc123def456abc123def456abcd"))
+	})
+
+	It("returns empty string when the tag is missing on the remote", func() {
+		Expect(git.ParseLsRemoteOutputForTest([]byte(""), "v1.2.8")).To(BeEmpty())
+		Expect(git.ParseLsRemoteOutputForTest([]byte("\n"), "v1.2.8")).To(BeEmpty())
+	})
+
+	It("ignores unrelated refs and still finds the requested tag", func() {
+		in := []byte(
+			"1111111111111111111111111111111111111111\trefs/tags/other\n" +
+				"abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n" +
+				"def456abc123def456abc123def456abc123def45\trefs/tags/v1.2.8^{}\n",
+		)
+		Expect(git.ParseLsRemoteOutputForTest(in, "v1.2.8")).
+			To(Equal("def456abc123def456abc123def456abc123def45"))
+	})
+})
+
+// LsRemote integration — faked `git` on PATH so the boundary contract
+// (argv-only shell-out, token-redacting error path, missing-tag returns
+// ("", nil) and NOT an error) is testable without a live GitHub remote.
+var _ = Describe("LsRemote", func() {
+	var (
+		ctx        context.Context
+		ops        git.GitOps
+		fakeGitDir string
+	)
+
+	BeforeEach(func() {
+		if _, err := exec.LookPath("git"); err != nil {
+			Skip("git binary not available")
+		}
+		ctx = context.Background()
+		ops = git.NewOSExecGitOps()
+		var err error
+		fakeGitDir, err = os.MkdirTemp("", "github-releaser-lsremote-fake-*")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		os.RemoveAll(fakeGitDir)
+	})
+
+	// writeFakeGit writes a bash script to fakeGitDir/git that:
+	//   1. records $@ to <fakeGitDir>/args-<unique>
+	//   2. prints the given stdout to stdout
+	//   3. prints the given stderr to stderr (if non-empty), exits 1
+	// The unique name is derived from the script-name so two tests don't
+	// collide on the args file.
+	writeFakeGit := func(scriptName, stdout, stderr string, exitCode int) {
+		script := "#!/bin/sh\n" +
+			"echo \"$@\" > \"" + fakeGitDir + "/args-" + scriptName + "\"\n" +
+			"printf '%s' \"" + stdout + "\"\n"
+		if stderr != "" {
+			script += "printf '%s' \"" + stderr + "\" 1>&2\n"
+		}
+		script += "exit " + strconv.Itoa(exitCode) + "\n"
+		path := filepath.Join(fakeGitDir, "git")
+		// #nosec G306 -- the faked git binary must be executable for PATH lookup; lives in a per-test tempdir
+		Expect(os.WriteFile(path, []byte(script), 0o755)).To(Succeed())
+	}
+
+	prependFakeGitToPath := func() {
+		newPath := fakeGitDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		Expect(os.Setenv("PATH", newPath)).To(Succeed())
+	}
+
+	readRecordedArgs := func(scriptName string) string {
+		raw, err := os.ReadFile(filepath.Join(fakeGitDir, "args-"+scriptName))
+		Expect(err).NotTo(HaveOccurred())
+		return strings.TrimSpace(string(raw))
+	}
+
+	It("returns the dereferenced commit SHA for an annotated tag (^{} line wins)", func() {
+		stdout := "abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n" +
+			"def456abc123def456abc123def456abc123def45\trefs/tags/v1.2.8^{}\n"
+		writeFakeGit("annotated", stdout, "", 0)
+		prependFakeGitToPath()
+
+		// #nosec G101 -- fake token string for argv fixture
+		sha, err := ops.LsRemote(
+			ctx, "https://x-access-token:ghp_FAKE@github.com/owner/repo", "master", "v1.2.8",
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sha).To(Equal("def456abc123def456abc123def456abc123def45"))
+	})
+
+	It("returns the tag-object SHA for a lightweight tag (no ^{} line)", func() {
+		stdout := "abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n"
+		writeFakeGit("lightweight", stdout, "", 0)
+		prependFakeGitToPath()
+
+		sha, err := ops.LsRemote(ctx, "https://github.com/owner/repo", "main", "v1.2.8")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sha).To(Equal("abc123def456abc123def456abc123def456abcd"))
+	})
+
+	It("returns (\"\", nil) when the tag is absent on the remote (not an error)", func() {
+		writeFakeGit("empty", "", "", 0)
+		prependFakeGitToPath()
+
+		sha, err := ops.LsRemote(ctx, "https://github.com/owner/repo", "main", "v1.2.8")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sha).To(BeEmpty())
+	})
+
+	It("redacts the x-access-token from the wrapped error when the subprocess fails", func() {
+		// Fixture: the fake git's stderr intentionally contains a literal
+		// x-access-token:ghp_LEAKEDTOKEN@… so we can assert the wrapper
+		// redacts it before the error reaches the caller. Not a real token.
+		// #nosec G101 -- intentional fake credential fixture for redaction assertion
+		stderr := "fatal: unable to access 'https://x-access-token:ghp_LEAKEDTOKEN@github.com/owner/repo/': repository not found"
+		writeFakeGit("auth-fail", "", stderr, 1)
+		prependFakeGitToPath()
+
+		_, err := ops.LsRemote(
+			ctx, "https://x-access-token:ghp_LEAKEDTOKEN@github.com/owner/repo", "main", "v1.2.8",
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).NotTo(ContainSubstring("ghp_LEAKEDTOKEN"))
+		Expect(err.Error()).To(ContainSubstring("x-access-token:[REDACTED]@"))
+	})
+
+	It(
+		"passes the cloneURL and the refs/tags/<tag> as separate argv elements (no shell interpolation)",
+		func() {
+			writeFakeGit(
+				"argv",
+				"abc123def456abc123def456abc123def456abcd\trefs/tags/v1.2.8\n",
+				"",
+				0,
+			)
+			prependFakeGitToPath()
+
+			// #nosec G101 -- fake token string used only to assert argv plumbing
+			cloneURL := "https://x-access-token:ghp_FAKE@github.com/owner/repo"
+			_, err := ops.LsRemote(ctx, cloneURL, "main", "v1.2.8")
+			Expect(err).NotTo(HaveOccurred())
+
+			recorded := readRecordedArgs("argv")
+			// argv order: `git ls-remote <cloneURL> refs/tags/<tag>`. The recorded
+			// `$@` is a single space-separated line, so we split on whitespace
+			// and assert that BOTH the cloneURL and the refs/tags/<tag> appear as
+			// discrete tokens — NOT concatenated into one shell-expanded string.
+			fields := strings.Fields(recorded)
+			Expect(fields).To(ContainElement(cloneURL))
+			Expect(fields).To(ContainElement("refs/tags/v1.2.8"))
+			// And there are no extraneous concatenated forms.
+			Expect(recorded).NotTo(ContainSubstring(cloneURL + "refs/tags/"))
+		},
+	)
 })
