@@ -5,52 +5,16 @@
 package factory
 
 import (
-	"net/http"
-
-	task "github.com/bborbe/agent/lib/command/task"
-	libhttp "github.com/bborbe/http"
-
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/command"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
-// CreateSinglePRTriggerHandler wires a handler that fires a single-PR review by URL.
+// CreateSinglePRTriggerHandler wires the thin CQRS handler that publishes a
+// TriggerPRReviewCommand to Kafka for each valid /trigger request.
+// All GitHub/filter/trust work lives in the in-pod command consumer
+// (see pkg/command.NewTriggerPRReviewCommandExecutor).
 func CreateSinglePRTriggerHandler(
-	httpClient *http.Client,
-	createSender task.CreateCommandSender,
-	taskCreationFilter filter.TaskCreationFilter,
-	trustDecision trust.Trust,
-	stage string,
-	maxSlugLen int,
-	maxTitleLen int,
-	taskSuffix string,
-	metrics pkg.Metrics,
+	sender command.TriggerPRReviewCommandSender,
 ) handler.SinglePRTriggerHandler {
-	if httpClient == nil {
-		panic("httpClient is required")
-	}
-	if createSender == nil {
-		panic("createSender is required")
-	}
-	if taskCreationFilter == nil {
-		panic("taskCreationFilter is required")
-	}
-	if trustDecision == nil {
-		panic("trustDecision is required")
-	}
-	ghClient := pkg.NewGitHubClient(httpClient)
-	h := handler.NewSinglePRTriggerHandler(
-		ghClient,
-		createSender,
-		taskCreationFilter,
-		trustDecision,
-		stage,
-		maxSlugLen,
-		maxTitleLen,
-		taskSuffix,
-		metrics,
-	)
-	return libhttp.WithErrorFunc(h.ServeHTTP)
+	return handler.NewSinglePRTriggerHandler(sender)
 }

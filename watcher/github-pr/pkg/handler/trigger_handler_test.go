@@ -9,180 +9,53 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"time"
+	"reflect"
 
-	task "github.com/bborbe/agent/lib/command/task"
-	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
-	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/watcher/github-pr/mocks"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/handler"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
 )
 
 var _ = Describe("TriggerHandler", func() {
 	var (
-		ctx                context.Context
-		ghClient           *mocks.GitHubClient
-		createSender       *taskmocks.TaskCreateCommandSender
-		taskCreationFilter *mocks.TaskCreationFilter
-		trustDecision      *mocks.Trust
-		h                  http.Handler
+		ctx    context.Context
+		sender *mocks.TriggerPRReviewCommandSender
+		h      http.Handler
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		ghClient = new(mocks.GitHubClient)
-		createSender = new(taskmocks.TaskCreateCommandSender)
-		taskCreationFilter = new(mocks.TaskCreationFilter)
-		trustDecision = new(mocks.Trust)
-
-		taskCreationFilter.SkipReturns(false)
-		trustDecision.IsTrustedReturns(trust.NewResult(true, "trusted"), nil)
-
-		h = libhttp.NewErrorHandler(handler.NewSinglePRTriggerHandler(
-			ghClient,
-			createSender,
-			taskCreationFilter,
-			trustDecision,
-			"dev",
-			80, 200, "",
-			pkg.NewMetrics(),
-		))
+		sender = new(mocks.TriggerPRReviewCommandSender)
+		h = libhttp.NewErrorHandler(handler.NewSinglePRTriggerHandler(sender))
 	})
 
 	DescribeTable(
-		"error cases",
-		func(rawURL string, expectedStatus int) {
+		"error cases (400, no Kafka publish)",
+		func(rawURL string) {
+			sender.SendCommandReturns(nil) // should not be called
 			req := httptest.NewRequest("POST", "/trigger?"+rawURL, nil)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(expectedStatus))
+			Expect(resp.Code).To(Equal(http.StatusBadRequest))
+			Expect(sender.SendCommandCallCount()).To(Equal(0),
+				"SendCommand must not be called for invalid URL")
 		},
-		Entry("missing url returns 400", "foo=bar", http.StatusBadRequest),
-		Entry("empty url returns 400", "url=", http.StatusBadRequest),
-		Entry("invalid url returns 400", "url=not-a-url", http.StatusBadRequest),
+		Entry("missing url returns 400", "foo=bar"),
+		Entry("empty url returns 400", "url="),
+		Entry("invalid url returns 400", "url=not-a-url"),
 		Entry(
 			"non-github platform returns 400",
 			"url=https://bitbucket.org/owner/repo/pull-requests/1",
-			http.StatusBadRequest,
 		),
 	)
 
-	Context("GitHub fetch failure", func() {
-		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{}, errors.Errorf(ctx, "network error"))
-		})
-
-		It("returns 502", func() {
-			req := httptest.NewRequest(
-				"POST",
-				"/trigger?url=https://github.com/bborbe/repo/pull/1",
-				nil,
-			)
-			resp := httptest.NewRecorder()
-			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(http.StatusBadGateway))
-		})
-	})
-
-	Context("filter rejection", func() {
-		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:     "abc123",
-				CloneURL:    "https://github.com/bborbe/repo.git",
-				BaseRef:     "main",
-				AuthorLogin: "dependabot[bot]",
-				Title:       "Bump foo from 1.0 to 2.0",
-				IsDraft:     false,
-			}, nil)
-		})
-
-		Context("draft filter rejects", func() {
-			BeforeEach(func() {
-				taskCreationFilter.SkipStub = func(pr filter.PR) bool {
-					return pr.AuthorLogin == "dependabot[bot]"
-				}
-			})
-
-			It("returns 422", func() {
-				req := httptest.NewRequest(
-					"POST",
-					"/trigger?url=https://github.com/bborbe/repo/pull/1",
-					nil,
-				)
-				resp := httptest.NewRecorder()
-				h.ServeHTTP(resp, req)
-				Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
-			})
-		})
-
-		Context("WIP title filter rejects", func() {
-			BeforeEach(func() {
-				ghClient.GetPRDetailsReturns(pkg.PRDetails{
-					HeadSHA:     "abc123",
-					CloneURL:    "https://github.com/bborbe/repo.git",
-					BaseRef:     "main",
-					AuthorLogin: "regular-user",
-					Title:       "WIP: work in progress",
-					IsDraft:     false,
-				}, nil)
-				taskCreationFilter.SkipStub = func(pr filter.PR) bool {
-					return pr.Title == "WIP: work in progress"
-				}
-			})
-
-			It("returns 422", func() {
-				req := httptest.NewRequest(
-					"POST",
-					"/trigger?url=https://github.com/bborbe/repo/pull/1",
-					nil,
-				)
-				resp := httptest.NewRecorder()
-				h.ServeHTTP(resp, req)
-				Expect(resp.Code).To(Equal(http.StatusUnprocessableEntity))
-			})
-		})
-	})
-
-	Context("Kafka publish failure", func() {
-		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:  "abc123",
-				CloneURL: "https://github.com/bborbe/repo.git",
-				BaseRef:  "main",
-			}, nil)
-			createSender.SendCommandReturns(errors.Errorf(ctx, "kafka error"))
-		})
-
-		It("returns 502", func() {
-			req := httptest.NewRequest(
-				"POST",
-				"/trigger?url=https://github.com/bborbe/repo/pull/1",
-				nil,
-			)
-			resp := httptest.NewRecorder()
-			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(http.StatusBadGateway))
-		})
-	})
-
-	Context("happy path", func() {
-		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:  "abc123",
-				CloneURL: "https://github.com/bborbe/repo.git",
-				BaseRef:  "main",
-			}, nil)
-		})
-
-		It("returns 200 with task_id", func() {
+	Context("happy path: valid GitHub PR URL", func() {
+		It("returns 202 with {status,url} body", func() {
 			req := httptest.NewRequest(
 				"POST",
 				"/trigger?url=https://github.com/bborbe/repo/pull/42",
@@ -190,17 +63,15 @@ var _ = Describe("TriggerHandler", func() {
 			)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(http.StatusOK))
+
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
 			var body map[string]interface{}
-			//nolint:errcheck // test code; response body is controlled
-			_ = json.Unmarshal(resp.Body.Bytes(), &body)
-			Expect(body["task_id"]).ToNot(BeEmpty())
-			Expect(body["repo"]).To(Equal("bborbe/repo"))
-			Expect(body["pr_number"]).To(Equal(float64(42)))
-			Expect(body["head_sha"]).To(Equal("abc123"))
+			Expect(json.Unmarshal(resp.Body.Bytes(), &body)).To(Succeed())
+			Expect(body["status"]).To(Equal("accepted"))
+			Expect(body["url"]).To(Equal("https://github.com/bborbe/repo/pull/42"))
 		})
 
-		It("calls createSender with correct task", func() {
+		It("publishes exactly one TriggerPRReviewCommand with the raw URL and Force=false", func() {
 			req := httptest.NewRequest(
 				"POST",
 				"/trigger?url=https://github.com/bborbe/repo/pull/42",
@@ -208,30 +79,20 @@ var _ = Describe("TriggerHandler", func() {
 			)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
-			Expect(createSender.SendCommandCallCount()).To(Equal(1))
+
+			Expect(sender.SendCommandCallCount()).To(Equal(1))
+			_, sentCmd := sender.SendCommandArgsForCall(0)
+			Expect(sentCmd.URL).To(Equal("https://github.com/bborbe/repo/pull/42"))
+			Expect(sentCmd.Force).To(BeFalse())
 		})
 	})
 
-	Context("trust-branching: untrusted author", func() {
-		var sentCmd task.CreateCommand
-
+	Context("Kafka send failure", func() {
 		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:     "abc123",
-				CloneURL:    "https://github.com/bborbe/repo.git",
-				BaseRef:     "main",
-				AuthorLogin: "unknown-user",
-				Title:       "Fix bug",
-				IsDraft:     false,
-			}, nil)
-			trustDecision.IsTrustedReturns(trust.NewResult(false, "author not in allowlist"), nil)
-			createSender.SendCommandStub = func(ctx context.Context, cmd task.CreateCommand) error {
-				sentCmd = cmd
-				return nil
-			}
+			sender.SendCommandReturns(errors.Errorf(ctx, "kafka error"))
 		})
 
-		It("routes to human_review frontmatter (phase=human_review, status=todo)", func() {
+		It("returns 502", func() {
 			req := httptest.NewRequest(
 				"POST",
 				"/trigger?url=https://github.com/bborbe/repo/pull/42",
@@ -239,32 +100,42 @@ var _ = Describe("TriggerHandler", func() {
 			)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(http.StatusOK))
-			Expect(sentCmd.Frontmatter["phase"]).To(Equal("human_review"))
-			Expect(sentCmd.Frontmatter["status"]).To(Equal("todo"))
+			Expect(resp.Code).To(Equal(http.StatusBadGateway))
 		})
 	})
 
-	Context("trust-branching: trusted author", func() {
-		var sentCmd task.CreateCommand
-
-		BeforeEach(func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:     "abc123",
-				CloneURL:    "https://github.com/bborbe/repo.git",
-				BaseRef:     "main",
-				AuthorLogin: "bborbe",
-				Title:       "Feature: add support",
-				IsDraft:     false,
-			}, nil)
-			trustDecision.IsTrustedReturns(trust.NewResult(true, "trusted"), nil)
-			createSender.SendCommandStub = func(ctx context.Context, cmd task.CreateCommand) error {
-				sentCmd = cmd
-				return nil
+	Context("GitHub client off the request path (panicking GitHub client, spec 066 AC 5)", func() {
+		// The handler must not depend on pkg.GitHubClient on the request
+		// path. We assert this two ways:
+		//   (a) structural — reflect.TypeOf the handler struct contains
+		//       NO field whose type implements pkg.GitHubClient. This
+		//       proves the dependency was actually removed (not just
+		//       unused in tests).
+		//   (b) behavioral — request completes with 202 even when no
+		//       GitHubClient is wired anywhere in BeforeEach.
+		It("handler struct has no GitHubClient-typed field", func() {
+			// Build the handler directly (not via factory) so we can
+			// reflect on the concrete struct.
+			concrete := handler.NewSinglePRTriggerHandler(sender)
+			// concrete is the SinglePRTriggerHandler alias of libhttp.WithError;
+			// unwrap to the underlying value via the package's exported test seam.
+			// The exported `singlePRTriggerHandler` struct is package-private;
+			// we use reflect on the returned interface's dynamic type.
+			t := reflect.TypeOf(concrete)
+			// The returned value is the interface; get its dynamic type via Elem
+			// (it's a pointer to a struct).
+			if t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+			for i := 0; i < t.NumField(); i++ {
+				field := t.Field(i)
+				ghType := reflect.TypeOf((*pkg.GitHubClient)(nil)).Elem()
+				Expect(field.Type.Implements(ghType)).To(BeFalse(),
+					"handler field %q (type %v) must not implement pkg.GitHubClient",
+					field.Name, field.Type)
 			}
 		})
-
-		It("routes to in_progress frontmatter (phase=planning, status=in_progress)", func() {
+		It("request completes with 202 (no GitHubClient wired anywhere)", func() {
 			req := httptest.NewRequest(
 				"POST",
 				"/trigger?url=https://github.com/bborbe/repo/pull/42",
@@ -272,45 +143,7 @@ var _ = Describe("TriggerHandler", func() {
 			)
 			resp := httptest.NewRecorder()
 			h.ServeHTTP(resp, req)
-			Expect(resp.Code).To(Equal(http.StatusOK))
-			Expect(sentCmd.Frontmatter["phase"]).To(Equal("planning"))
-			Expect(sentCmd.Frontmatter["status"]).To(Equal("in_progress"))
-		})
-	})
-
-	Context("CreateCommand.Validate boundary (AC spec line 107)", func() {
-		// task.CreateCommand.Validate rejects titles containing /, :, ?, etc.
-		// computePRTitle slugifies — this test guards against a slugifier regression
-		// silently breaking every triggered review on real-world PR titles.
-		It("constructed CreateCommand passes Validate for adversarial PR titles with /:?", func() {
-			ghClient.GetPRDetailsReturns(pkg.PRDetails{
-				HeadSHA:     "abc123",
-				CloneURL:    "https://github.com/bborbe/repo.git",
-				BaseRef:     "main",
-				AuthorLogin: "bborbe",
-				Title:       "feat: handle /api?id=1 in :backend",
-				IsDraft:     false,
-				UpdatedAt:   libtime.DateTime(time.Date(2026, 5, 23, 0, 0, 0, 0, time.UTC)),
-			}, nil)
-
-			var sentCmd task.CreateCommand
-			createSender.SendCommandStub = func(_ context.Context, cmd task.CreateCommand) error {
-				sentCmd = cmd
-				return nil
-			}
-
-			req := httptest.NewRequest(
-				"POST",
-				"/trigger?url=https://github.com/bborbe/repo/pull/77",
-				nil,
-			)
-			resp := httptest.NewRecorder()
-			h.ServeHTTP(resp, req)
-
-			Expect(resp.Code).To(Equal(http.StatusOK))
-			Expect(createSender.SendCommandCallCount()).To(Equal(1))
-			Expect(sentCmd.Validate(ctx)).To(Succeed(),
-				"Validate must succeed; if it fails, computePRTitle slugifier regressed or PRDetails fields leaked unsanitized into the command title/frontmatter")
+			Expect(resp.Code).To(Equal(http.StatusAccepted))
 		})
 	})
 })

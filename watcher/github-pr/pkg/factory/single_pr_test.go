@@ -5,91 +5,44 @@
 package factory_test
 
 import (
+	"context"
 	"net/http"
-	"time"
+	"net/http/httptest"
 
-	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
+	libhttp "github.com/bborbe/http"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/bborbe/maintainer/watcher/github-pr/mocks"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
 	"github.com/bborbe/maintainer/watcher/github-pr/pkg/factory"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
 )
 
 var _ = Describe("CreateSinglePRTriggerHandler", func() {
-	validHTTPClient := &http.Client{Timeout: 30 * time.Second}
-	validSender := new(taskmocks.TaskCreateCommandSender)
-	validFilter := filter.TaskCreationFilters{}
-	validTrust := new(mocks.Trust)
+	var sender *mocks.TriggerPRReviewCommandSender
 
-	It("returns non-nil handler when all params are non-nil", func() {
-		handler := factory.CreateSinglePRTriggerHandler(
-			validHTTPClient,
-			validSender,
-			validFilter,
-			validTrust,
-			"dev",
-			80, 60, "pr-reviewer",
-			pkg.NewMetrics(),
-		)
+	BeforeEach(func() {
+		sender = new(mocks.TriggerPRReviewCommandSender)
+	})
+
+	It("returns a non-nil handler", func() {
+		handler := factory.CreateSinglePRTriggerHandler(sender)
 		Expect(handler).NotTo(BeNil())
 	})
 
-	It("panics when httpClient is nil", func() {
-		Expect(func() {
-			factory.CreateSinglePRTriggerHandler(
-				nil,
-				validSender,
-				validFilter,
-				validTrust,
-				"dev",
-				80, 60, "pr-reviewer",
-				pkg.NewMetrics(),
-			)
-		}).To(PanicWith("httpClient is required"))
-	})
-
-	It("panics when createSender is nil", func() {
-		Expect(func() {
-			factory.CreateSinglePRTriggerHandler(
-				validHTTPClient,
-				nil,
-				validFilter,
-				validTrust,
-				"dev",
-				80, 60, "pr-reviewer",
-				pkg.NewMetrics(),
-			)
-		}).To(PanicWith("createSender is required"))
-	})
-
-	It("panics when taskCreationFilter is nil", func() {
-		Expect(func() {
-			factory.CreateSinglePRTriggerHandler(
-				validHTTPClient,
-				validSender,
-				nil,
-				validTrust,
-				"dev",
-				80, 60, "pr-reviewer",
-				pkg.NewMetrics(),
-			)
-		}).To(PanicWith("taskCreationFilter is required"))
-	})
-
-	It("panics when trustDecision is nil", func() {
-		Expect(func() {
-			factory.CreateSinglePRTriggerHandler(
-				validHTTPClient,
-				validSender,
-				validFilter,
-				nil,
-				"dev",
-				80, 60, "pr-reviewer",
-				pkg.NewMetrics(),
-			)
-		}).To(PanicWith("trustDecision is required"))
+	It("handler responds to a request", func() {
+		handler := factory.CreateSinglePRTriggerHandler(sender)
+		wrapped := libhttp.NewErrorHandler(handler)
+		sender.SendCommandReturns(nil)
+		req := httptest.NewRequest(
+			"POST",
+			"/trigger?url=https://github.com/bborbe/repo/pull/42",
+			nil,
+		)
+		//nolint:contextcheck // test setup uses Background; safe in tests
+		req = req.WithContext(context.Background())
+		resp := httptest.NewRecorder()
+		wrapped.ServeHTTP(resp, req)
+		Expect(resp.Code).To(Equal(http.StatusAccepted))
+		Expect(sender.SendCommandCallCount()).To(Equal(1))
 	})
 })

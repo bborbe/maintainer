@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(watcher/github-pr): split /trigger into CQRS pair — HTTP handler validates the PR URL and publishes a `TriggerPRReviewCommand` to Kafka (returns 202), an in-pod command consumer (third `run.Func` alongside the poll loop and HTTP server) runs the GitHub fetch + filter + trust + downstream `CreateTaskCommand` publish. Pod crashes mid-trigger survive via Kafka redelivery (downstream task_id is derived and idempotent). HTTP wire shape changes from `200 + {status,task_id,repo,pr_number,head_sha}` to `202 + {status,url}`; filter-skip and trust-reject become silent in the HTTP response (visible in `github_pr_published{result="skipped"|"kafka_error"|"trust_error"}` metrics). The `/admin/trigger` mount path and the `GithubPRReviewV1SchemaID` are unchanged.
+- test(watcher/github-pr): add `TriggerPRReviewCommand` operation constant, sender, executor, byte-identical payload parity, crash-recovery, panicking-GitHub-client, clean-shutdown, and end-to-end command flow tests (spec 066)
+
 ## v0.36.0
 
 - feat(lib): add `CDBSchemaIDs` registry with `GithubPRReviewV1SchemaID` (`maintainer/githubprreview/v1`) and `GithubReleaserV1SchemaID` (`maintainer/githubreleaser/v1`) — first maintainer-owned CQRS schemas. Aggregate slice is consumed by `trading/strimzi/topic-controller/pkg/topics.go` (separate PR) to provision the matching Kafka topics. Adds `github.com/bborbe/cqrs v0.5.3` dep. No behavior change yet — schema definitions only; commands + senders + handlers follow in sibling PRs.

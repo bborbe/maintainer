@@ -9,58 +9,35 @@ import (
 	"encoding/json"
 	"net/http"
 
-	task "github.com/bborbe/agent/lib/command/task"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/lib/prurl"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/filter"
-	"github.com/bborbe/maintainer/watcher/github-pr/pkg/trust"
+	"github.com/bborbe/maintainer/watcher/github-pr/pkg/command"
 )
 
-// SinglePRTriggerHandler handles POST /trigger?url=<pr_url>
 //counterfeiter:generate -o ../../mocks/single_pr_trigger_handler.go --fake-name SinglePRTriggerHandler . SinglePRTriggerHandler
 
+// SinglePRTriggerHandler handles POST /trigger?url=<pr_url>.
+// The handler is intentionally thin: parse the URL, validate it
+// synchronously, publish a TriggerPRReviewCommand to Kafka, and
+// return HTTP 202. All GitHub API access, filter evaluation, and
+// trust decision logic is owned by the in-pod command consumer.
 type SinglePRTriggerHandler = libhttp.WithError
 
-// NewSinglePRTriggerHandler returns a handler that fires a single PR review by URL.
-// The filter and trustDecision are passed in (reused from the poll path) — not created here.
+// NewSinglePRTriggerHandler returns a handler that publishes a
+// TriggerPRReviewCommand to Kafka for each valid /trigger request.
 func NewSinglePRTriggerHandler(
-	ghClient pkg.GitHubClient,
-	createSender task.CreateCommandSender,
-	taskCreationFilter filter.TaskCreationFilter,
-	trustDecision trust.Trust,
-	stage string,
-	maxSlugLen int,
-	maxTitleLen int,
-	taskSuffix string,
-	metrics pkg.Metrics,
+	sender command.TriggerPRReviewCommandSender,
 ) SinglePRTriggerHandler {
 	return &singlePRTriggerHandler{
-		ghClient:           ghClient,
-		createSender:       createSender,
-		taskCreationFilter: taskCreationFilter,
-		trustDecision:      trustDecision,
-		stage:              stage,
-		maxSlugLen:         maxSlugLen,
-		maxTitleLen:        maxTitleLen,
-		taskSuffix:         taskSuffix,
-		metrics:            metrics,
+		sender: sender,
 	}
 }
 
 type singlePRTriggerHandler struct {
-	ghClient           pkg.GitHubClient
-	createSender       task.CreateCommandSender
-	taskCreationFilter filter.TaskCreationFilter
-	trustDecision      trust.Trust
-	stage              string
-	maxSlugLen         int
-	maxTitleLen        int
-	taskSuffix         string
-	metrics            pkg.Metrics
+	sender command.TriggerPRReviewCommandSender
 }
 
 func (h *singlePRTriggerHandler) ServeHTTP(
@@ -69,145 +46,56 @@ func (h *singlePRTriggerHandler) ServeHTTP(
 	req *http.Request,
 ) error {
 	rawURL := req.URL.Query().Get("url")
-	prInfo, err := h.parseAndValidateURL(ctx, rawURL)
-	if err != nil {
+	if err := validateTriggerURL(ctx, rawURL); err != nil {
 		return err
 	}
 
-	details, err := h.ghClient.GetPRDetails(ctx, prInfo.Owner, prInfo.Repo, prInfo.Number)
-	if err != nil {
+	if err := h.sender.SendCommand(ctx, command.TriggerPRReviewCommand{
+		URL:   rawURL,
+		Force: false,
+	}); err != nil {
 		return libhttp.WrapWithStatusCode(
-			errors.Wrap(ctx, err, "get PR details"),
+			errors.Wrap(ctx, err, "send TriggerPRReviewCommand"),
 			http.StatusBadGateway,
 		)
 	}
 
-	filterPR := h.buildFilterPR(prInfo, details)
-	if h.taskCreationFilter.Skip(filterPR) {
-		h.metrics.IncPRPublished("skipped")
-		return libhttp.WrapWithStatusCode(
-			errors.Errorf(ctx, "PR skipped by filter"),
-			http.StatusUnprocessableEntity,
-		)
-	}
-
-	trustResult, err := h.trustDecision.IsTrusted(ctx, trust.PR{AuthorLogin: details.AuthorLogin})
-	if err != nil {
-		h.metrics.IncPRPublished("trust_error")
-		return libhttp.WrapWithStatusCode(
-			errors.Wrap(ctx, err, "check trust"),
-			http.StatusBadGateway,
-		)
-	}
-
-	pr := h.buildPullRequest(prInfo, details, rawURL)
-	taskIDStr := pkg.DeriveTaskID(prInfo.Owner, prInfo.Repo, prInfo.Number, details.HeadSHA).
-		String()
-
-	cmd := pkg.BuildCreateCommand(
-		pr,
-		details,
-		taskIDStr,
-		h.stage,
-		h.maxSlugLen,
-		h.maxTitleLen,
-		h.taskSuffix,
-		trustResult,
-	)
-
-	if err := h.createSender.SendCommand(ctx, cmd); err != nil {
-		h.metrics.IncPRPublished("kafka_error")
-		return libhttp.WrapWithStatusCode(
-			errors.Wrap(ctx, err, "send create task command"),
-			http.StatusBadGateway,
-		)
-	}
-
-	h.metrics.IncPRPublished("create")
-	glog.V(2).Infof(
-		"trigger: published task_id=%s pr=%s/%s#%d sha=%s",
-		taskIDStr,
-		prInfo.Owner,
-		prInfo.Repo,
-		prInfo.Number,
-		details.HeadSHA,
-	)
-
-	if err := h.writeSuccess(resp, taskIDStr, prInfo, details.HeadSHA); err != nil {
-		glog.V(4).Infof("failed to encode success response: %v", err)
-	}
-	return nil
+	glog.V(2).Infof("trigger accepted url=%s", rawURL)
+	return writeAccepted(resp, rawURL)
 }
 
-func (h *singlePRTriggerHandler) parseAndValidateURL(
-	ctx context.Context,
-	rawURL string,
-) (*prurl.PRInfo, error) {
+// validateTriggerURL rejects empty URLs, unparseable URLs, and
+// non-GitHub platforms with HTTP 400. Mirrors the old parseAndValidateURL
+// behavior so the 400 wire shape is unchanged for operators.
+func validateTriggerURL(ctx context.Context, rawURL string) error {
 	if rawURL == "" {
-		return nil, libhttp.WrapWithStatusCode(
+		return libhttp.WrapWithStatusCode(
 			errors.Errorf(ctx, "url query parameter is required"),
 			http.StatusBadRequest,
 		)
 	}
-
 	prInfo, err := prurl.ParsePRURL(ctx, rawURL)
 	if err != nil {
-		return nil, libhttp.WrapWithStatusCode(
+		return libhttp.WrapWithStatusCode(
 			errors.Wrap(ctx, err, "parse PR URL"),
 			http.StatusBadRequest,
 		)
 	}
 	if prInfo.Platform != prurl.PlatformGitHub {
-		return nil, libhttp.WrapWithStatusCode(
+		return libhttp.WrapWithStatusCode(
 			errors.Errorf(ctx, "only github platform is supported, got %s", prInfo.Platform),
 			http.StatusBadRequest,
 		)
 	}
-	return prInfo, nil
+	return nil
 }
 
-func (h *singlePRTriggerHandler) writeSuccess(
-	resp http.ResponseWriter,
-	taskIDStr string,
-	prInfo *prurl.PRInfo,
-	headSHA string,
-) error {
+// writeAccepted emits the 202 response with body {"status":"accepted","url":<raw>}.
+func writeAccepted(resp http.ResponseWriter, rawURL string) error {
 	resp.Header().Set("Content-Type", "application/json")
-	resp.WriteHeader(http.StatusOK)
+	resp.WriteHeader(http.StatusAccepted)
 	return json.NewEncoder(resp).Encode(map[string]interface{}{
-		"status":    "ok",
-		"task_id":   taskIDStr,
-		"repo":      prInfo.Owner + "/" + prInfo.Repo,
-		"pr_number": prInfo.Number,
-		"head_sha":  headSHA,
+		"status": "accepted",
+		"url":    rawURL,
 	})
-}
-
-func (h *singlePRTriggerHandler) buildFilterPR(
-	prInfo *prurl.PRInfo,
-	details pkg.PRDetails,
-) filter.PR {
-	return filter.PR{
-		AuthorLogin: details.AuthorLogin,
-		IsDraft:     details.IsDraft,
-		Title:       details.Title,
-		UpdatedAt:   details.UpdatedAt,
-		RepoKey:     "github.com/" + prInfo.Owner + "/" + prInfo.Repo,
-	}
-}
-
-func (h *singlePRTriggerHandler) buildPullRequest(
-	prInfo *prurl.PRInfo,
-	details pkg.PRDetails,
-	rawURL string,
-) pkg.PullRequest {
-	return pkg.PullRequest{
-		Number:      prInfo.Number,
-		Owner:       prInfo.Owner,
-		Repo:        prInfo.Repo,
-		Title:       details.Title,
-		AuthorLogin: details.AuthorLogin,
-		HTMLURL:     rawURL,
-		IsDraft:     details.IsDraft,
-	}
 }
