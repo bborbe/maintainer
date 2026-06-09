@@ -11,6 +11,7 @@ import (
 
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
+	libparse "github.com/bborbe/parse"
 	"github.com/golang/glog"
 
 	"github.com/bborbe/maintainer/watcher/github-release/pkg/command"
@@ -19,11 +20,13 @@ import (
 //counterfeiter:generate -o ../../mocks/trigger_release_check_handler.go --fake-name TriggerReleaseCheckHandler . TriggerReleaseCheckHandler
 
 // TriggerReleaseCheckHandler handles POST /trigger.
-// The handler is intentionally minimal: build a zero-value
-// TriggerReleaseCheckCommand, publish it to Kafka via the injected
-// sender, and return HTTP 202. No request body or query string is
-// consumed (both Scope and Force are reserved-unread). All scan
-// cycle work is owned by the in-pod command consumer.
+// The handler is intentionally minimal: parse the optional ?force=<bool>
+// query parameter via libparse.ParseBoolDefault (spec 071), build a
+// TriggerReleaseCheckCommand carrying the parsed Force value, publish
+// it to Kafka via the injected sender, and return HTTP 202. The Scope
+// field stays reserved-unread (spec Non-goal: per-repo filter UX is a
+// separate spec). All scan-cycle work is owned by the in-pod command
+// consumer.
 type TriggerReleaseCheckHandler = libhttp.WithError
 
 // NewTriggerReleaseCheckHandler returns a handler that publishes a
@@ -44,10 +47,14 @@ type triggerReleaseCheckHandler struct {
 func (h *triggerReleaseCheckHandler) ServeHTTP(
 	ctx context.Context,
 	resp http.ResponseWriter,
-	_ *http.Request,
+	req *http.Request,
 ) error {
-	// Both fields are reserved-unread; build a zero-value command.
-	if err := h.sender.SendCommand(ctx, command.TriggerReleaseCheckCommand{}); err != nil {
+	force := libparse.ParseBoolDefault(
+		ctx,
+		req.URL.Query().Get("force"),
+		false,
+	)
+	if err := h.sender.SendCommand(ctx, command.TriggerReleaseCheckCommand{Force: force}); err != nil {
 		// 502 BadGateway over 500/503: upstream Kafka is the proximate cause,
 		// not this service. 500 implies an unexpected handler bug; 503 implies
 		// this service is unhealthy. Kafka publish failure is neither — it's
@@ -59,7 +66,10 @@ func (h *triggerReleaseCheckHandler) ServeHTTP(
 		)
 	}
 
-	glog.V(2).Infof("trigger accepted op=%s", command.TriggerReleaseCheckCommandOperation)
+	glog.V(2).Infof(
+		"trigger accepted op=%s force=%t",
+		command.TriggerReleaseCheckCommandOperation, force,
+	)
 	return writeAccepted(resp)
 }
 

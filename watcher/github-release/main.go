@@ -140,7 +140,10 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 
 	poll := func(ctx context.Context) error {
 		glog.V(2).Infof("poll cycle start stage=%s", a.Stage)
-		return w.Poll(ctx)
+		// skipSHAUnchanged=false: the interval-driven loop is the canonical
+		// dedup-engaged path. force=true comes exclusively from the HTTP
+		// /trigger handler's command publish (spec 071).
+		return w.Poll(ctx, false)
 	}
 
 	// Order: poll → HTTP → command consumer (spec 067 AC 9: three run.Funcs).
