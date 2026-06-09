@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.38.0
 
 - feat(watcher/github-release): Add `TriggerReleaseCheckCommand` payload (`Scope` + `Force` reserved-unread fields), `TriggerReleaseCheckCommandSender` with counterfeiter mock, and in-memory `pkg.MemDB` offset store for the /trigger CQRS split (spec 067)
 - feat: Add TriggerReleaseCheckCommandExecutor invoking shared pkg.Watcher.Poll on consumed commands
