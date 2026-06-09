@@ -54,11 +54,11 @@ func (s *triggerBuildCheckCommandSender) SendCommand(
 	cmd TriggerBuildCheckCommand,
 ) error {
 	if err := cmd.Validate(ctx); err != nil {
-		return errors.Wrapf(ctx, err, "validate TriggerBuildCheckCommand")
+		return errors.Wrap(ctx, err, "validate TriggerBuildCheckCommand")
 	}
 	event, err := base.ParseEvent(ctx, cmd)
 	if err != nil {
-		return errors.Wrapf(ctx, err, "parse TriggerBuildCheckCommand event")
+		return errors.Wrap(ctx, err, "parse TriggerBuildCheckCommand event")
 	}
 	commandObject := cdb.CommandObject{
 		Command: s.commandCreator.NewCommand(
@@ -70,7 +70,7 @@ func (s *triggerBuildCheckCommandSender) SendCommand(
 		SchemaID: lib.GithubBuildV1SchemaID,
 	}
 	if err := s.commandObjectSender.SendCommandObject(ctx, commandObject); err != nil {
-		return errors.Wrapf(ctx, err, "send TriggerBuildCheckCommand to Kafka")
+		return errors.Wrap(ctx, err, "send TriggerBuildCheckCommand to Kafka")
 	}
 	glog.V(2).
 		Infof("trigger sender: published op=%s scope=%q force=%t", TriggerBuildCheckCommandOperation, cmd.Scope, cmd.Force)
