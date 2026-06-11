@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/pr-reviewer): switch `ANTHROPIC_MODEL` MiniMax-M3 → MiniMax-M2.7-highspeed and set `REVIEW_MODE: selector` — agent-tuned model + in-session classify/adjudicate (coding plugin ≥ v0.20.0); benchmarked on the bborbe/maintainer#2 golden fixture at 8/8 judgment recall in 2m37s vs M3's 5/8 at 5m18s; unknown `selector` token degrades gracefully to standard mode on older baked-in plugins
+- feat(agent/github-releaser): switch `ANTHROPIC_MODEL` MiniMax-M3 → MiniMax-M2.7-highspeed — same agent-tuned-line rationale (M3 inflated turns via re-verification loops and instruction drift)
+
 ## v0.40.0
 
 - feat(watcher/github-pr): add `DeriveTaskIDForce` helper producing a salted UUID5 from `(owner, repo, number, sha, nonce)` so an operator-initiated force re-review can publish a `CreateTaskCommand` whose `TaskIdentifier` bypasses the agent controller's vault-file dedup skip (spec 072)

@@ -28,8 +28,17 @@ spec:
     # ANTHROPIC_MODEL into the AnthropicModel field and forwards it to the claude
     # subprocess as both the --model flag and the ANTHROPIC_MODEL env var.
     # ANTHROPIC_AUTH_TOKEN is sourced from the agent secret (teamvault MOPmQL).
+    # M2.7-highspeed replaces M3 (2026-06-11): agent-tuned line follows the
+    # pr-review skill procedure faithfully where the reasoning-heavy M3 inflated
+    # turns (re-verification, dispatch drift) and missed judgment-tier rules.
+    # Benchmarked on bborbe/maintainer#2 golden fixture: 8/8 recall, 2m37s
+    # (selector mode) vs M3's 5/8 at 5m18s.
     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
-    ANTHROPIC_MODEL: MiniMax-M3
+    ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+    # Selector mode (coding plugin >= v0.20.0): in-session classify + adjudicate,
+    # zero per-owner sub-agent spawns. On an older baked-in plugin the unknown
+    # token degrades gracefully to standard mode (Step 1 parse falls through).
+    REVIEW_MODE: selector
     # GitHub App auth — pod mints an installation access token at startup. The
     # PEM content is injected as env var $PEM_KEY via the Secret's envFrom mount
     # (controller wires Secret keys as env vars, not files — see
