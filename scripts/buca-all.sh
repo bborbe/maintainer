@@ -46,8 +46,8 @@ case "$BRANCH" in
         ;;
 esac
 
-OUTPUT_FILE="/tmp/code-reviewer-${ENV}-buca.log"
-SCREEN_SESSION="code-reviewer-${ENV}-buca"
+OUTPUT_FILE="/tmp/maintainer-${ENV}-buca.log"
+SCREEN_SESSION="maintainer-${ENV}-buca"
 
 echo "BRANCH: $BRANCH"
 echo "ENV: $ENV"
