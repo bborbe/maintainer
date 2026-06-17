@@ -4,10 +4,23 @@ Autonomous repo-maintenance agents backed by Claude Code. Watchers detect signal
 
 Ships today:
 - **`agent/pr-reviewer`** — Pattern B Job agent that reviews GitHub + Bitbucket Server pull requests
+- **`agent/github-releaser`** — Pattern B Job agent that classifies semver bumps from `## Unreleased` CHANGELOG entries, rewrites to `## vX.Y.Z`, commits + tags + pushes
 - **`watcher/github-pr`** — polls open PRs and emits create-task commands for each new PR
 - **`watcher/github-build`** — polls GitHub Actions for failed CI runs on default branches and emits create-task commands on green→red transitions
+- **`watcher/github-release`** — polls master for non-empty `## Unreleased` CHANGELOG sections on opted-in repos and emits create-task commands
 
 Planned siblings: build-fixer agent (consume github-build tasks → propose fix PRs), dep-updater, sentry-triager, repo-reviewer.
+
+## Where this fits in the bigger picture
+
+This repo provides **GitHub-source task producers + platform agents** on top of the [bborbe/agent](https://github.com/bborbe/agent) task / agent system:
+
+- Producers: `watcher/github-pr` · `watcher/github-build` · `watcher/github-release` — each polls a GitHub signal and emits `task.CreateCommand` events using the schema published from [`agent/lib`](https://github.com/bborbe/agent/tree/master/lib).
+- Agents: `agent/pr-reviewer` · `agent/github-releaser` — register themselves as `Config` CRs of `agent.benjamin-borbe.de/v1` so `agent`'s `task/executor` spawns one Kubernetes Job per task / phase.
+
+Operator surface for the resulting tasks: [vault-cli](https://github.com/bborbe/vault-cli) and [task-orchestrator](https://github.com/bborbe/task-orchestrator).
+
+Full system map: [recurring-task-creator/docs/system-map.md](https://github.com/bborbe/recurring-task-creator/blob/master/docs/system-map.md).
 
 ## pr-reviewer (current)
 
