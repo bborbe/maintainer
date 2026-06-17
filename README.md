@@ -1,5 +1,8 @@
 # Maintainer
 
+[![CI](https://github.com/bborbe/maintainer/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/maintainer/actions/workflows/ci.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/bborbe/maintainer)
+
 Autonomous repo-maintenance agents backed by Claude Code. Watchers detect signals (PRs, failed builds, alerts), Pattern B Job agents act on them.
 
 Ships today:
