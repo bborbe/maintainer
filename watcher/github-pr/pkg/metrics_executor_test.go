@@ -7,7 +7,7 @@ package pkg_test
 import (
 	"context"
 
-	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
+	taskmocks "github.com/bborbe/agent/lib/mocks"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"

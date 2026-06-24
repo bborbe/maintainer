@@ -48,7 +48,7 @@ func CreateKafkaSender(
 	branch base.Branch,
 ) task.CreateCommandSender {
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
-	return task.NewCreateCommandSender(sender)
+	return task.NewCreateCommandSender(sender, "")
 }
 
 // CreateWatcher wires all dependencies and returns a ready-to-use Watcher.

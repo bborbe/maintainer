@@ -11,7 +11,7 @@ import (
 	"go/parser"
 	"go/token"
 
-	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
+	taskmocks "github.com/bborbe/agent/lib/mocks"
 	"github.com/bborbe/cqrs/base"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	kvmocks "github.com/bborbe/kv/mocks"

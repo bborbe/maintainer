@@ -13,7 +13,7 @@ import (
 	"time"
 
 	task "github.com/bborbe/agent/lib/command/task"
-	taskmocks "github.com/bborbe/agent/lib/command/task/mocks"
+	taskmocks "github.com/bborbe/agent/lib/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
