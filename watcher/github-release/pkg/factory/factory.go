@@ -31,7 +31,7 @@ func CreateKafkaSender(
 	branch base.Branch,
 ) task.CreateCommandSender {
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
-	return task.NewCreateCommandSender(sender)
+	return task.NewCreateCommandSender(sender, "")
 }
 
 // CreateStaticFilters builds the cycle-invariant filter chain (scope +
