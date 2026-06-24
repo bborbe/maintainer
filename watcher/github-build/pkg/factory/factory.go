@@ -38,7 +38,7 @@ func CreateKafkaCreateSender(
 	branch base.Branch,
 ) task.CreateCommandSender {
 	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
-	return task.NewCreateCommandSender(sender)
+	return task.NewCreateCommandSender(sender, "")
 }
 
 // CreateSyncProducer constructs a Kafka sync producer for the
