@@ -14,8 +14,8 @@ import (
 	"runtime"
 	"strings"
 
-	agentlib "github.com/bborbe/agent/lib"
-	claudelib "github.com/bborbe/agent/lib/claude"
+	agentlib "github.com/bborbe/agent"
+	claudelib "github.com/bborbe/agent/claude"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 

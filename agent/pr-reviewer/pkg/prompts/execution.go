@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	claudelib "github.com/bborbe/agent/lib/claude"
+	claudelib "github.com/bborbe/agent/claude"
 	"github.com/bborbe/errors"
 )
 

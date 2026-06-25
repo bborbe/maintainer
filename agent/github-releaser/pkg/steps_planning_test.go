@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	agentlib "github.com/bborbe/agent/lib"
-	claudelib "github.com/bborbe/agent/lib/claude"
-	delivery "github.com/bborbe/agent/lib/delivery"
+	agentlib "github.com/bborbe/agent"
+	claudelib "github.com/bborbe/agent/claude"
+	delivery "github.com/bborbe/agent/delivery"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

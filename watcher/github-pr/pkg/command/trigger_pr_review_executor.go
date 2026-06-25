@@ -8,7 +8,7 @@ import (
 	"context"
 	"strconv"
 
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"

@@ -4,4 +4,4 @@
 
 package pkg
 
-//counterfeiter:generate -o ../mocks/claude-runner.go --fake-name ClaudeRunnerMock github.com/bborbe/agent/lib/claude.ClaudeRunner
+//counterfeiter:generate -o ../mocks/claude-runner.go --fake-name ClaudeRunnerMock github.com/bborbe/agent/claude.ClaudeRunner

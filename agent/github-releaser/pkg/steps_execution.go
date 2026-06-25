@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/bborbe/agent/lib"
+	agentlib "github.com/bborbe/agent"
 	"github.com/bborbe/errors"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 	"github.com/golang/glog"

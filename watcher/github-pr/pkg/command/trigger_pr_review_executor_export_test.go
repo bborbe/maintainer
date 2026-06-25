@@ -7,7 +7,7 @@ package command
 import (
 	"context"
 
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	libkv "github.com/bborbe/kv"

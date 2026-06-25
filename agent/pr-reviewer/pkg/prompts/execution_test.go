@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	claudelib "github.com/bborbe/agent/lib/claude"
+	claudelib "github.com/bborbe/agent/claude"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 

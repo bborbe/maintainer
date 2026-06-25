@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	taskmocks "github.com/bborbe/agent/lib/mocks"
+	taskmocks "github.com/bborbe/agent/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

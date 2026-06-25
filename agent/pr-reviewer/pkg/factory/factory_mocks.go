@@ -6,4 +6,4 @@ package factory
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6@v6.12.2 -generate
 
-//counterfeiter:generate -o ../../mocks/result-deliverer.go --fake-name ResultDeliverer github.com/bborbe/agent/lib.ResultDeliverer
+//counterfeiter:generate -o ../../mocks/result-deliverer.go --fake-name ResultDeliverer github.com/bborbe/agent.ResultDeliverer

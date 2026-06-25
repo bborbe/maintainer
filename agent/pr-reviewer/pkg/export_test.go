@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	agentlib "github.com/bborbe/agent/lib"
+	agentlib "github.com/bborbe/agent"
 )
 
 // ShouldVerifyPostForTest exposes reviewStep.shouldVerifyPost for unit testing

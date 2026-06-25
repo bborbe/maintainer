@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	task "github.com/bborbe/agent/lib/command/task"
-	taskmocks "github.com/bborbe/agent/lib/mocks"
+	task "github.com/bborbe/agent/command/task"
+	taskmocks "github.com/bborbe/agent/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

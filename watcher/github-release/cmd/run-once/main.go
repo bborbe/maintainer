@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libkafka "github.com/bborbe/kafka"

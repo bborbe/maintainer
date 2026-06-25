@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"strings"
 
-	agentlib "github.com/bborbe/agent/lib"
-	claudelib "github.com/bborbe/agent/lib/claude"
+	agentlib "github.com/bborbe/agent"
+	claudelib "github.com/bborbe/agent/claude"
 	"github.com/bborbe/errors"
 	"github.com/golang/glog"
 

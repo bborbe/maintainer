@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/bborbe/agent/lib"
-	task "github.com/bborbe/agent/lib/command/task"
+	agentlib "github.com/bborbe/agent"
+	task "github.com/bborbe/agent/command/task"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

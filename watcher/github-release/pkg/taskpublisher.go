@@ -7,7 +7,7 @@ package pkg
 import (
 	"context"
 
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	"github.com/golang/glog"
 )
 
