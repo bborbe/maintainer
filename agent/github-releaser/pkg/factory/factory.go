@@ -10,10 +10,10 @@
 package factory
 
 import (
-	agentlib "github.com/bborbe/agent/lib"
-	claudelib "github.com/bborbe/agent/lib/claude"
-	delivery "github.com/bborbe/agent/lib/delivery"
-	"github.com/bborbe/agent/lib/healthcheck"
+	agentlib "github.com/bborbe/agent"
+	claudelib "github.com/bborbe/agent/claude"
+	delivery "github.com/bborbe/agent/delivery"
+	"github.com/bborbe/agent/healthcheck"
 	"github.com/bborbe/cqrs/base"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"

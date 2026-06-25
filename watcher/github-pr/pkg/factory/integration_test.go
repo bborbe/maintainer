@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	taskmocks "github.com/bborbe/agent/lib/mocks"
+	taskmocks "github.com/bborbe/agent/mocks"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	libkafkamocks "github.com/bborbe/kafka/mocks"

@@ -9,7 +9,7 @@ import (
 	"errors"
 	"strings"
 
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 

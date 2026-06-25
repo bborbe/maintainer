@@ -8,8 +8,8 @@ import (
 	"context"
 	"fmt"
 
-	agentlib "github.com/bborbe/agent/lib"
-	task "github.com/bborbe/agent/lib/command/task"
+	agentlib "github.com/bborbe/agent"
+	task "github.com/bborbe/agent/command/task"
 	"github.com/bborbe/errors"
 	libtime "github.com/bborbe/time"
 	"github.com/golang/glog"

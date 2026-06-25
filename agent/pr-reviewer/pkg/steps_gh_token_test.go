@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	agentlib "github.com/bborbe/agent/lib"
+	agentlib "github.com/bborbe/agent"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 

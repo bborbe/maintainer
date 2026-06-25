@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"slices"
 
-	agentlib "github.com/bborbe/agent/lib"
+	agentlib "github.com/bborbe/agent"
 	"github.com/bborbe/errors"
 	domain "github.com/bborbe/vault-cli/pkg/domain"
 	. "github.com/onsi/ginkgo/v2"

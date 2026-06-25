@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	agentlib "github.com/bborbe/agent/lib"
+	agentlib "github.com/bborbe/agent"
 	"github.com/bborbe/errors"
 )
 

@@ -10,8 +10,8 @@ import (
 	"net/http/httptest"
 	"time"
 
-	task "github.com/bborbe/agent/lib/command/task"
-	taskmocks "github.com/bborbe/agent/lib/mocks"
+	task "github.com/bborbe/agent/command/task"
+	taskmocks "github.com/bborbe/agent/mocks"
 	"github.com/bborbe/cqrs/base"
 	cdb "github.com/bborbe/cqrs/cdb"
 	"github.com/bborbe/errors"

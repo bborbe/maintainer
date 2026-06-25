@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/agent/lib"
+	lib "github.com/bborbe/agent"
 )
 
 type ResultDeliverer struct {

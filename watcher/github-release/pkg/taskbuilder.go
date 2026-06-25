@@ -7,8 +7,8 @@ package pkg
 import (
 	"fmt"
 
-	agentlib "github.com/bborbe/agent/lib"
-	task "github.com/bborbe/agent/lib/command/task"
+	agentlib "github.com/bborbe/agent"
+	task "github.com/bborbe/agent/command/task"
 )
 
 // BuildCreateCommand assembles the CreateTaskCommand for a Release.

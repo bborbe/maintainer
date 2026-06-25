@@ -17,7 +17,7 @@ import (
 
 	"github.com/IBM/sarama"
 	saramamocks "github.com/IBM/sarama/mocks"
-	task "github.com/bborbe/agent/lib/command/task"
+	task "github.com/bborbe/agent/command/task"
 	libkafka "github.com/bborbe/kafka"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

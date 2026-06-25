@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/agent/lib/claude"
+	"github.com/bborbe/agent/claude"
 )
 
 type ClaudeRunnerMock struct {

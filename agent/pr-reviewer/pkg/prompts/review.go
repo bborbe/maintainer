@@ -7,7 +7,7 @@ package prompts
 import (
 	_ "embed"
 
-	claudelib "github.com/bborbe/agent/lib/claude"
+	claudelib "github.com/bborbe/agent/claude"
 )
 
 //go:embed review_workflow.md

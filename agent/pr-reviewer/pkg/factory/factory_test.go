@@ -8,9 +8,9 @@ import (
 	"context"
 	"reflect"
 
-	agentlib "github.com/bborbe/agent/lib"
-	claudelib "github.com/bborbe/agent/lib/claude"
-	"github.com/bborbe/agent/lib/delivery"
+	agentlib "github.com/bborbe/agent"
+	claudelib "github.com/bborbe/agent/claude"
+	"github.com/bborbe/agent/delivery"
 	libkafkamocks "github.com/bborbe/kafka/mocks"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
@@ -167,7 +167,7 @@ var _ = Describe("Factory", func() {
 			})
 		})
 
-		// updated for lib v0.62.29: needs_input no longer writes phase: human_review in passthrough content generator (see github.com/bborbe/agent/lib CHANGELOG v0.62.27 / v0.62.29)
+		// updated for lib v0.62.29: needs_input no longer writes phase: human_review in passthrough content generator (see github.com/bborbe/agent CHANGELOG v0.62.27 / v0.62.29)
 		Context("when result status is needs_input with Output containing frontmatter", func() {
 			It("writes ## Failure with the message and preserves existing phase", func() {
 				result := agentlib.AgentResultInfo{
