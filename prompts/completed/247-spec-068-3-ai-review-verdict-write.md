@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["068"]
+spec: [068-cqrs-trigger-github-build]
 summary: 'Added review-warning override on the ai_review !approved path: a rejected review that coincides with a confirmed remote tag now writes a ## Review Warning block and closes the task as completed (preserving the rejected ## Review verdict durably), while the existing human_review path stands when the remote is empty or LsRemote errors. Extracted url_helpers to package level, added 6 Ginkgo specs, updated CHANGELOG, and make precommit exits 0.'
 container: maintainer-release-postcheck-exec-247-spec-064-3-ai-review-verdict-write
 dark-factory-version: v0.175.0

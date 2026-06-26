@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["071"]
+spec: [071-pr-reviewer-verdict-decides-review-event]
 summary: Extracted spec-060 major-bump guard from runClassification into private applyMajorBumpGuard helper (plus a secondary resolveRewriteAndPublish helper for the rewrite-and-publish tail), dropping the function from 92 to 64 non-comment lines; preserved all glog/escalation/PlanOutput emissions bit-identically; both github-releaser and lib precommit exit 0
 container: maintainer-major-bump-guard-exec-239-spec-060-fix-funlen-and-finish-docs
 dark-factory-version: v0.175.0

@@ -23,4 +23,14 @@ Field rules:
 - `focus_areas`: required, ordered by priority (most important first)
 - `concerns`: required, may be empty list if nothing stands out
 
+JSON safety: All string values in the JSON output MUST be valid JSON strings.
+Double quotes that appear inside a string value (e.g. in code snippets) MUST
+be escaped as `\"`. Examples:
+
+- Go snippet `name != ""`  → write as `"note": "name != \"\""`
+- Go snippet `if s == ""`  → write as `"note": "if s == \"\""`
+
+Single quotes (`'`) and backticks (`` ` ``) do NOT need escaping.
+If in doubt, rephrase the note to avoid literal double quotes.
+
 Output the JSON inside a fenced code block (```json ... ```). No prose before or after the fence. The fence renders the JSON readably in Obsidian and other markdown viewers; downstream consumers strip the fence before parsing.

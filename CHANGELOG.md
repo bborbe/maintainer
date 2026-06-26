@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- fix(pr-reviewer): validate `## Plan` JSON before persisting — malformed JSON (e.g. Claude embedding unescaped quotes from code snippets like `name != ""`) now returns `AgentStatusFailed` and is retried, instead of writing a broken Plan that routes every retrigger to `human_review` as a dead-end.
+
 ## v0.41.0
 
 - feat(agent/pr-reviewer): switch `ANTHROPIC_MODEL` MiniMax-M3 → MiniMax-M2.7-highspeed and set `REVIEW_MODE: selector` — agent-tuned model + in-session classify/adjudicate (coding plugin ≥ v0.20.0); benchmarked on the bborbe/maintainer#2 golden fixture at 8/8 judgment recall in 2m37s vs M3's 5/8 at 5m18s; unknown `selector` token degrades gracefully to standard mode on older baked-in plugins
