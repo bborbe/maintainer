@@ -1,8 +1,9 @@
 ---
-status: prompted
+status: verifying
 approved: "2026-06-26T12:12:56Z"
 generating: "2026-06-26T12:25:48Z"
 prompted: "2026-06-26T12:31:29Z"
+verifying: "2026-06-26T12:41:07Z"
 branch: dark-factory/pr-reviewer-plan-json-resilience
 ---
 
