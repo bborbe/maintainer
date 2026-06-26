@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["072"]
+spec: [072-force-trigger-on-github-pr-watcher]
 summary: 'Parsed force query param via libparse.ParseBoolDefault in /trigger handler, populated TriggerPRReviewCommand.Force, added 4 Ginkgo tests covering true/false/absent/garbage, and appended feat bullet to CHANGELOG ## Unreleased'
 container: maintainer-trigger-force-exec-254-spec-067-handler-force-param-and-changelog
 dark-factory-version: v0.175.0

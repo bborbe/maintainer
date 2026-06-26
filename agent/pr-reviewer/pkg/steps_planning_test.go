@@ -378,25 +378,59 @@ https://github.com/bborbe/maintainer/pull/14
 
 	Describe("Run — error cases", func() {
 		Context("when ## Plan JSON is malformed", func() {
+			var md *agentlib.Markdown
+
 			BeforeEach(func() {
 				runner.RunReturns(&claudelib.ClaudeResult{
 					Result: "not valid json at all",
 				}, nil)
-			})
-
-			It("routes to human_review", func() {
-				md, err := agentlib.ParseMarkdown(
+				var err error
+				md, err = agentlib.ParseMarkdown(
 					ctx,
 					"# PR Review\n\nhttps://github.com/bborbe/maintainer/pull/14\n",
 				)
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns AgentStatusFailed without writing ## Plan", func() {
 				result, err := step.Run(ctx, md)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
-				Expect(result.NextPhase).To(Equal("human_review"))
-				Expect(result.Message).To(ContainSubstring("parse ## Plan JSON"))
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(result.Message).To(ContainSubstring("planning: malformed JSON"))
+				_, exists := md.FindSection("## Plan")
+				Expect(exists).To(BeFalse())
 			})
 		})
+
+		Context(
+			"when Claude returns a ## Plan body containing unescaped double quotes (live bug vault-cli#27)",
+			func() {
+				BeforeEach(func() {
+					// The exact class of failure observed on 2026-06-26: a Go zero-string-check
+					// `name != ""` embedded literally inside a JSON string value. The outer
+					// quote parser closes the string at the first `"`, leaving `!= ` as
+					// unexpected tokens.
+					liveSample := "```json\n" +
+						"{\"pr_url\":\"https://github.com/bborbe/vault-cli/pull/27\",\"pr_title\":\"fix\",\"base_branch\":\"main\",\"head_branch\":\"fix/args\",\"files_changed\":[\"cmd/main.go\"],\"scope\":\"bugfix\",\"focus_areas\":[\"correctness\"],\"concerns\":[{\"area\":\"correctness\",\"file\":\"cmd/main.go\",\"note\":\"Arg order matters: name != \"\" must appear after --print\"}]}" +
+						"\n```"
+					runner.RunReturns(&claudelib.ClaudeResult{Result: liveSample}, nil)
+				})
+
+				It("returns AgentStatusFailed and does not write ## Plan", func() {
+					md, err := agentlib.ParseMarkdown(
+						ctx,
+						"---\nref: abc123\ntask_identifier: 00000000-0000-0000-0000-000000000001\n---\n# PR Review\n\nhttps://github.com/bborbe/vault-cli/pull/27\n",
+					)
+					Expect(err).NotTo(HaveOccurred())
+					result, err := step.Run(ctx, md)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+					Expect(result.Message).To(ContainSubstring("planning: malformed JSON"))
+					_, exists := md.FindSection("## Plan")
+					Expect(exists).To(BeFalse())
+				})
+			},
+		)
 
 		Context("when Claude runner returns an error", func() {
 			BeforeEach(func() {

@@ -1,8 +1,8 @@
 ---
-status: approved
+status: draft
 spec: [069-force-trigger-on-github-build-watcher]
-created: "2026-06-09T20:30:00Z"
-queued: "2026-06-09T20:18:04Z"
+created: "2026-06-26T12:20:00Z"
+branch: dark-factory/force-trigger-on-github-build-watcher
 ---
 
 <summary>
@@ -10,7 +10,7 @@ queued: "2026-06-09T20:18:04Z"
 - The salted variant is what later prompts will use when an operator forces a re-publish via `?force=true` on the github-build watcher
 - For the same repo and episode SHA, the canonical and salted identifiers MUST differ, and two different nonces MUST produce two different salted identifiers
 - The canonical helper, its UUID namespace, and its input encoding are deliberately left untouched so today's non-force path stays byte-identical
-- Table tests in a new Ginkgo suite cover three properties: distinct-from-canonical, stable-for-same-nonce, distinct-across-nonces
+- Table tests in the existing Ginkgo suite cover three properties: distinct-from-canonical, stable-for-same-nonce, distinct-across-nonces
 - No callers wired yet — this prompt is intentionally a small additive diff
 </summary>
 
@@ -23,21 +23,18 @@ Read CLAUDE.md for project conventions.
 
 Read these coding plugin docs:
 - `/home/node/.claude/plugins/marketplaces/coding/docs/go-testing-guide.md` — Ginkgo v2 + Gomega conventions used in this repo
-- `/home/node/.claude/plugins/marketplaces/coding/docs/dod.md` — Definition of Done (make precommit, no commit)
+- `/home/node/.claude/plugins/marketplaces/coding/docs/definition-of-done.md` — Definition of Done (make precommit, no commit, coverage)
 
 Read the existing helper and its callers (verify before writing):
 - `watcher/github-build/pkg/taskid.go` — current `DeriveTaskID`, `buildWatcherNamespace`. Do NOT modify either.
-- `watcher/github-build/pkg/watcher.go` (around `applyStateMachine`, line ~226) — `DeriveTaskID(owner, repo, episodeSHA)` is the only caller of the canonical helper today
-
-Read the sibling helper for shape reference (READ-ONLY, do not import or copy verbatim — this is a separate worktree):
-- `/Users/bborbe/Documents/workspaces/maintainer-trigger-force/watcher/github-pr/pkg/taskid.go` — `DeriveTaskIDForce(owner, repo string, number int, sha, nonce string) uuid.UUID`. github-build's signature drops `number` and uses `episodeSHA` for the SHA segment.
+- `watcher/github-build/pkg/watcher.go` (around `applyStateMachine`) — `DeriveTaskID(owner, repo, episodeSHA)` is the only caller of the canonical helper today
 
 Key facts (verified by reading the files):
 - `buildWatcherNamespace = uuid.MustParse("8e3f5a2c-7b14-4d9e-a017-3c6e8b9f2a1d")` — frozen, do NOT touch
 - Canonical key is built by string concatenation: `owner + "/" + repo + "#build-" + episodeSHA` — do NOT switch to `fmt.Sprintf` for the canonical helper
 - `uuid.NewSHA1(namespace, []byte(key))` is the SHA1-based v5 UUID constructor — same call for the salted variant
 - The package already imports `"github.com/google/uuid"`; no new import needed for the helper itself
-- The package has no existing test file for taskid; you will create `watcher/github-build/pkg/taskid_test.go` and a suite bootstrap file is already present at `watcher/github-build/pkg/suite_test.go` (verify with `ls watcher/github-build/pkg/suite_test.go`)
+- The package already has `watcher/github-build/pkg/suite_test.go` (the Ginkgo runner) and `watcher/github-build/pkg/taskid_test.go` (external `pkg_test`, contains existing `DeriveTaskID` specs). Verify with `ls watcher/github-build/pkg/suite_test.go watcher/github-build/pkg/taskid_test.go`.
 </context>
 
 <requirements>
@@ -47,23 +44,16 @@ Key facts (verified by reading the files):
 1. **Edit `watcher/github-build/pkg/taskid.go`** — append the new helper at the end of the file (keep `DeriveTaskID` and `buildWatcherNamespace` exactly as-is). Use this exact body:
 
    ```go
-   // DeriveTaskIDForce returns a salted task identifier for a build-failure
-   // episode plus an extra nonce. Used when an operator explicitly requests
-   // a forced re-publish (HTTP /trigger?force=true) so the watcher emits a
-   // CreateTaskCommand with a TaskIdentifier that the controller has not
-   // already seen — bypassing the agent's deterministic-ID dedup-skip.
+   // DeriveTaskIDForce returns a salted task identifier for an operator-forced
+   // re-publish of a build-failure episode (spec 069). The salt is a caller-supplied
+   // nonce — typically a microsecond timestamp from libtime.CurrentDateTimeGetter — so
+   // successive forced re-publishes for the same (owner, repo, episodeSHA) produce
+   // distinct identifiers and the agent controller's deterministic-ID dedup-skip does
+   // NOT fire. Pure function; nonce uniqueness is the caller's responsibility.
    //
-   // For the same (owner, repo, episodeSHA) the result is always different
-   // from DeriveTaskID(...): the key includes a "!<nonce>" suffix, e.g.
-   // "bborbe/maintainer#build-abc123!1700000000000000".
-   //
-   // The "!" separator is intentionally invalid in GitHub owner/repo names
-   // and in hex SHAs, so no canonical input can ever collide with a salted
-   // key by construction.
-   //
-   // The nonce resolution is the caller's responsibility. Callers should
-   // derive it from an injected libtime.CurrentDateTimeGetter; the helper
-   // itself is a pure function over its inputs.
+   // Key format: "<owner>/<repo>#build-<episodeSHA>!<nonce>". The "!" separator is
+   // invalid in GitHub owners/repos and in hex SHAs, so the salted keyspace cannot
+   // collide with the canonical DeriveTaskID keyspace for any (owner, repo, sha) tuple.
    func DeriveTaskIDForce(owner, repo, episodeSHA, nonce string) uuid.UUID {
        key := owner + "/" + repo + "#build-" + episodeSHA + "!" + nonce
        return uuid.NewSHA1(buildWatcherNamespace, []byte(key))
@@ -75,7 +65,7 @@ Key facts (verified by reading the files):
    - The key MUST be built by string concatenation matching the format above (NOT `fmt.Sprintf`) so the per-call cost stays equivalent to `DeriveTaskID` and the byte sequence is verifiable by eye.
    - Reuse `buildWatcherNamespace`. Do NOT introduce a second namespace.
 
-2. **Append to the EXISTING `watcher/github-build/pkg/taskid_test.go`.** The file already exists with 4 `Describe("DeriveTaskID", ...)` specs (canonical helper tests). DO NOT recreate the file, DO NOT redeclare `package pkg_test`, DO NOT duplicate imports — the imports `ginkgo/v2`, `gomega`, and `github.com/bborbe/maintainer/watcher/github-build/pkg` are already present. Append a new top-level `var _ = Describe("DeriveTaskIDForce", func() { ... })` block at file scope, AFTER the existing `DeriveTaskID` block. The new block alone:
+2. **Append to the EXISTING `watcher/github-build/pkg/taskid_test.go`.** The file already exists with `Describe("DeriveTaskID", ...)` specs (canonical helper tests). DO NOT recreate the file, DO NOT redeclare `package pkg_test`, DO NOT duplicate imports — the imports `ginkgo/v2`, `gomega`, and `github.com/bborbe/maintainer/watcher/github-build/pkg` are already present. Append a new top-level `var _ = Describe("DeriveTaskIDForce", func() { ... })` block at file scope, AFTER the existing `DeriveTaskID` block. The new block alone:
 
    ```go
    var _ = Describe("DeriveTaskIDForce", func() {
@@ -106,9 +96,9 @@ Key facts (verified by reading the files):
    ```
 
    Notes:
-   - The Ginkgo `Describe` titles (`"DeriveTaskIDForce"`) plus the three `It` strings are what the AC greps target via `go test -run DeriveTaskIDForce`.
+   - These three `It` blocks satisfy the spec's three `DeriveTaskIDForce_*` acceptance criteria (DiffersFromCanonical, StableForSameNonce, DiffersAcrossNonces). `go test ./pkg -run DeriveTaskIDForce -v` must print PASS for each.
    - Use external `pkg_test` package so the test exercises only the exported surface.
-   - Do NOT add an extra `func TestXxx` bootstrap here — the existing `watcher/github-build/pkg/suite_test.go` already registers the Ginkgo runner (verify with `ls watcher/github-build/pkg/suite_test.go`; if missing for some reason, add a minimal `TestPkg(t *testing.T)` runner in this same file).
+   - Do NOT add an extra `func TestXxx` bootstrap here — the existing `watcher/github-build/pkg/suite_test.go` already registers the Ginkgo runner.
 
 3. **Run precommit** from the service directory:
 
@@ -116,7 +106,7 @@ Key facts (verified by reading the files):
    cd watcher/github-build && make precommit
    ```
 
-   Must exit 0. If it fails on the new test file's import path, check that the module path is `github.com/bborbe/maintainer` (top-level `go.mod`) and adjust nothing else.
+   Must exit 0.
 
 4. **Sanity-grep the new helper exists**:
 
@@ -129,13 +119,13 @@ Key facts (verified by reading the files):
 </requirements>
 
 <constraints>
-- Only edit `watcher/github-build/pkg/taskid.go` and create `watcher/github-build/pkg/taskid_test.go`. No other files.
+- Only edit `watcher/github-build/pkg/taskid.go` and `watcher/github-build/pkg/taskid_test.go`. No other files.
 - Do NOT commit — dark-factory handles git.
 - Do NOT modify `DeriveTaskID`, `buildWatcherNamespace`, or the canonical key encoding. Non-force path must remain bit-identical.
 - Do NOT add a second namespace UUID. Reuse `buildWatcherNamespace`.
 - Do NOT use `fmt.Sprintf` for the salted key — match the canonical concatenation style.
 - Do NOT wire the new helper to any caller in this prompt. Wiring happens in prompt 2.
-- Use `github.com/bborbe/errors` for any error wrapping in tests (not expected here — pure-function tests have no error returns).
+- Use `github.com/bborbe/errors` for any error wrapping (not expected here — pure-function tests have no error returns).
 - Ginkgo v2 + Gomega per `go-testing-guide.md`. External `pkg_test` package.
 - `make precommit` runs from `watcher/github-build/`, never from repo root.
 </constraints>

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["070"]
+spec: [070-manifest-complexity-refactor]
 summary: Added `!`-prefix syntax table to three consumer READMEs and a `feat(lib/repoallowlist)` entry under `## Unreleased` in CHANGELOG.md; no consumer service code touched
 container: maintainer-allowlist-exclude-exec-241-docs-ripple-and-no-consumer-diff-proof
 dark-factory-version: v0.175.0

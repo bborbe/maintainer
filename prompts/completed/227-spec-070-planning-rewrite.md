@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["070"]
+spec: [070-manifest-complexity-refactor]
 summary: 'Planning step now captures original ## Unreleased verbatim and emits a rewrite verdict (rewrite_needed + optional cleaned body) via a second focused Claude call using the embedded Changelog Quality Guide; all 11 requirements met, make precommit exit=0 with pkg/changelog 96.2% and pkg/prompts 90.4% coverage.'
 container: maintainer-changelog-rewrite-exec-227-spec-058-planning-rewrite
 dark-factory-version: v0.174.1-dirty

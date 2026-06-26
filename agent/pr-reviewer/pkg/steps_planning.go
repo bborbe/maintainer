@@ -105,7 +105,18 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 		}, nil
 	}
 
-	// Write ## Plan to vault first (vault-first, same invariant as ## Review).
+	// Validate the JSON before persisting. If Claude emitted unescaped double
+	// quotes (e.g. code snippets like name != ""), do NOT write the bad body —
+	// return AgentStatusFailed so the controller's retry spawns a fresh call.
+	if _, parseErr := parsePlanningConcerns(ctx, runResult.Result); parseErr != nil {
+		glog.V(2).Infof("planning: malformed JSON from claude, not persisting err=%v", parseErr)
+		return &agentlib.Result{
+			Status:  agentlib.AgentStatusFailed,
+			Message: fmt.Sprintf("planning: malformed JSON: %v", parseErr),
+		}, nil
+	}
+
+	// Write ## Plan to vault (vault-first invariant, same as ## Review).
 	md.ReplaceSection(agentlib.Section{
 		Heading: "## Plan",
 		Body:    runResult.Result,

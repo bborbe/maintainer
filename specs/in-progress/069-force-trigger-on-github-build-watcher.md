@@ -1,9 +1,11 @@
 ---
-status: approved
+status: prompted
 tags:
     - dark-factory
     - spec
 approved: "2026-06-09T20:07:26Z"
+generating: "2026-06-26T12:13:15Z"
+prompted: "2026-06-26T12:25:07Z"
 branch: dark-factory/force-trigger-on-github-build-watcher
 ---
 

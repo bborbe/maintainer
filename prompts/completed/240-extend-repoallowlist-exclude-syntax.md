@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["070"]
+spec: [070-manifest-complexity-refactor]
 summary: Extended lib/repoallowlist to recognize !-prefix as exclude marker; IsAllowed and Validate now apply set-theoretic matching; all 50 Ginkgo specs pass (35 existing + 15 new); coverage 93.9%; gofmt/vet/golangci-lint clean
 container: maintainer-allowlist-exclude-exec-240-extend-repoallowlist-exclude-syntax
 dark-factory-version: v0.175.0

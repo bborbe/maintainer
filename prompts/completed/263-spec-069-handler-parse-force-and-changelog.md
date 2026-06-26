@@ -1,6 +1,6 @@
 ---
 status: approved
-spec: ["069"]
+spec: [069-force-trigger-on-github-build-watcher]
 created: "2026-06-09T20:30:00Z"
 queued: "2026-06-09T20:18:04Z"
 ---

@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["070"]
+spec: [070-manifest-complexity-refactor]
 summary: Extended ai-review with semantic faithfulness LLM check, unexpected-file-change diff check, push gating, and workdir cleanup ownership; added 11 new Ginkgo specs; all tests + lint + gofmt + vet pass
 container: maintainer-changelog-rewrite-exec-229-spec-058-ai-review-faithfulness-and-push-gate
 dark-factory-version: v0.174.1-dirty

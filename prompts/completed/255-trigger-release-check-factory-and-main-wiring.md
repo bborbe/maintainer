@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["072"]
+spec: [072-force-trigger-on-github-pr-watcher]
 summary: Wired github-release /trigger through Kafka command consumer — third run.Func, factory.CreateCommandConsumer, shared Watcher, MemDB offset store, with 8 new factory tests (clean shutdown, end-to-end, crash recovery, no-control-flow guard).
 container: maintainer-cqrs-trigger-release-exec-255-trigger-release-check-factory-and-main-wiring
 dark-factory-version: v0.175.0

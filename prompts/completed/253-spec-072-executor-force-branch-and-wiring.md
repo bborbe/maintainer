@@ -1,6 +1,6 @@
 ---
 status: completed
-spec: ["072"]
+spec: [072-force-trigger-on-github-pr-watcher]
 summary: Plumbed libtime.CurrentDateTimeGetter through executor + factory + main.go; executor now branches on cmd.Force to call DeriveTaskIDForce (salted) vs DeriveTaskID (canonical); added 5 Ginkgo tests covering force-true/non-force/byte-identity/two-triggers-distinct/metric-label-invariance; make precommit exits 0 with 93.2% coverage on pkg/command
 container: maintainer-trigger-force-exec-253-spec-067-executor-force-branch-and-wiring
 dark-factory-version: v0.175.0
