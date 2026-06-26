@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.41.1
 
 - fix(pr-reviewer): validate `## Plan` JSON before persisting — malformed JSON (e.g. Claude embedding unescaped quotes from code snippets like `name != ""`) now returns `AgentStatusFailed` and is retried, instead of writing a broken Plan that routes every retrigger to `human_review` as a dead-end.
 
