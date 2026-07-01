@@ -105,3 +105,17 @@ Post-deploy dev observation (out of band, not a gate):
 ## Do-Nothing Option
 
 Without this spec, Layer 0 remains in place: malformed JSON returns `AgentStatusFailed` on first bad response, PRs get stuck in `REVIEW_REQUIRED`, operators SHA-bump to recover. Given that the failures are intermittent (observed on 2 PRs in a single session with MiniMax), doing nothing at Layer 1 means Layers 2+3 (controller requeue + PR comment) MUST land before we can call the planning path robust. Adding the in-agent retry now removes >90% of the observed manual interventions with ~15 lines of code and 5 focused unit tests, and shrinks the surface Layers 2/3 have to handle to genuinely-stuck plans.
+
+## Verification Result
+
+**Verified:** 2026-07-01T10:23:05Z (HEAD d0258b4)
+**Binary:** installed dark-factory (dev)
+**Scenario:** No E2E scenario — spec ships unit-test coverage via fake ClaudeRunner (per spec §Scenario coverage); each AC replayed against feature/plan-retry HEAD 1e75e8b (= merge base of master 2e73446).
+**Evidence:**
+- `grep -n maxPlanningAttempts agent/pr-reviewer/pkg/steps_planning.go` → line 33: `const maxPlanningAttempts = 3`
+- `grep -n 'planning: attempt.*malformed JSON, retrying' agent/pr-reviewer/pkg/steps_planning.go` → line 121: `"planning: attempt %d/%d malformed JSON, retrying err=%v"`
+- Ginkgo focus run (5 AC contexts, 6 It blocks) → `Ran 6 of 290 Specs ... SUCCESS! 6 Passed | 0 Failed`; "all 3 attempts fail" asserts `Result.Message ContainSubstring("malformed JSON after 3 attempts")`
+- `cd agent/pr-reviewer && make precommit` → exit 0, "ready to commit"
+- CHANGELOG.md:13 `## Unreleased` bullet: `feat(pr-reviewer): retry the Claude planning call up to 3 times on malformed JSON ...`; `## v0.41.1` heading preserved at line 17
+- PR bborbe/maintainer#62 merged 2026-07-01T10:19:10Z (2e73446); bot APPROVED on HEAD 1e75e8b; CI 7/7 green; coverage 87.3% on agent/pr-reviewer/pkg
+**Verdict:** PASS
