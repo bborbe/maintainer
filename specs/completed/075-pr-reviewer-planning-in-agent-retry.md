@@ -1,5 +1,5 @@
 ---
-status: verifying
+status: completed
 tags:
     - dark-factory
     - spec
@@ -7,6 +7,7 @@ approved: "2026-07-01T09:19:46Z"
 generating: "2026-07-01T09:19:46Z"
 prompted: "2026-07-01T09:24:55Z"
 verifying: "2026-07-01T09:29:41Z"
+completed: "2026-07-01T10:23:37Z"
 branch: dark-factory/spec-075
 ---
 
