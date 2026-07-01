@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(pr-reviewer): retry the Claude planning call up to 3 times on malformed JSON before returning `AgentStatusFailed`, so intermittent MiniMax bad output (e.g. a leading `B` from "Based on...") self-corrects without an operator SHA-bump.
+
 ## v0.41.1
 
 - fix(pr-reviewer): validate `## Plan` JSON before persisting — malformed JSON (e.g. Claude embedding unescaped quotes from code snippets like `name != ""`) now returns `AgentStatusFailed` and is retried, instead of writing a broken Plan that routes every retrigger to `human_review` as a dead-end.

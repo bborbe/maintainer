@@ -376,6 +376,160 @@ https://github.com/bborbe/maintainer/pull/14
 		})
 	})
 
+	Describe("Run — in-agent retry on malformed JSON", func() {
+		// happy markdown with valid PR URL — reused across all sub-cases
+		buildBaseMarkdown := func() *agentlib.Markdown {
+			md, err := agentlib.ParseMarkdown(ctx, `---
+ref: abc123
+task_identifier: 00000000-0000-0000-0000-000000000001
+---
+# PR Review
+
+https://github.com/bborbe/maintainer/pull/14
+`)
+			Expect(err).NotTo(HaveOccurred())
+			return md
+		}
+
+		goodPlanBody := func() string {
+			planBody, _ := json.Marshal(map[string]interface{}{
+				"pr_url":        "https://github.com/bborbe/maintainer/pull/14",
+				"pr_title":      "test PR",
+				"base_branch":   "main",
+				"head_branch":   "feat/test",
+				"files_changed": []string{"README.md"},
+				"scope":         "docs",
+				"focus_areas":   []string{"docs"},
+				"concerns":      []interface{}{},
+			})
+			return "```json\n" + string(planBody) + "\n```"
+		}
+
+		Context("attempt 1 succeeds", func() {
+			BeforeEach(func() {
+				runner.RunReturns(&claudelib.ClaudeResult{Result: goodPlanBody()}, nil)
+				prPoster.PostLGTMReturns(pkg.PostResult{
+					Outcome:     "success",
+					ReviewID:    12345,
+					PostedEvent: "COMMENT",
+				})
+			})
+
+			It("calls runner exactly once and returns done", func() {
+				md := buildBaseMarkdown()
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(runner.RunCallCount()).To(Equal(1))
+			})
+
+			It("writes ## Plan section with the valid response", func() {
+				md := buildBaseMarkdown()
+				_, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				planSection, exists := md.FindSection("## Plan")
+				Expect(exists).To(BeTrue())
+				Expect(planSection.Body).To(ContainSubstring("concerns"))
+			})
+		})
+
+		Context("attempt 2 succeeds", func() {
+			BeforeEach(func() {
+				// First call: malformed (no JSON)
+				runner.RunReturnsOnCall(0, &claudelib.ClaudeResult{
+					Result: "Based on the diff, here is the plan...",
+				}, nil)
+				// Second call: valid JSON
+				runner.RunReturnsOnCall(1, &claudelib.ClaudeResult{Result: goodPlanBody()}, nil)
+				prPoster.PostLGTMReturns(pkg.PostResult{
+					Outcome:     "success",
+					ReviewID:    12345,
+					PostedEvent: "COMMENT",
+				})
+			})
+
+			It("retries and persists the second (valid) response", func() {
+				md := buildBaseMarkdown()
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).NotTo(Equal(agentlib.AgentStatusFailed))
+				Expect(runner.RunCallCount()).To(Equal(2))
+				planSection, exists := md.FindSection("## Plan")
+				Expect(exists).To(BeTrue())
+				Expect(planSection.Body).To(ContainSubstring("concerns"))
+			})
+		})
+
+		Context("all 3 attempts fail", func() {
+			BeforeEach(func() {
+				runner.RunReturns(&claudelib.ClaudeResult{
+					Result: "Based on the diff, here is the plan...",
+				}, nil)
+			})
+
+			It("returns AgentStatusFailed after exhausting all attempts", func() {
+				md := buildBaseMarkdown()
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(result.Message).To(ContainSubstring("malformed JSON after 3 attempts"))
+				Expect(runner.RunCallCount()).To(Equal(3))
+				_, exists := md.FindSection("## Plan")
+				Expect(exists).To(BeFalse())
+			})
+		})
+
+		Context("runner transport error not retried", func() {
+			BeforeEach(func() {
+				runner.RunReturns(nil, context.DeadlineExceeded)
+			})
+
+			It("fails immediately without retrying", func() {
+				md := buildBaseMarkdown()
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(runner.RunCallCount()).To(Equal(1))
+			})
+		})
+
+		Context("idempotent re-entry — runner not called", func() {
+			buildMarkdownWithExistingPlan := func(concerns []map[string]string) *agentlib.Markdown {
+				planJSON, _ := json.Marshal(map[string]interface{}{
+					"pr_url":        "https://github.com/bborbe/maintainer/pull/14",
+					"pr_title":      "test PR",
+					"base_branch":   "main",
+					"head_branch":   "feat/test",
+					"files_changed": []string{"pkg/x.go"},
+					"scope":         "feature",
+					"focus_areas":   []string{"tests"},
+					"concerns":      concerns,
+				})
+				content := "---\nref: abc123\ntask_identifier: 00000000-0000-0000-0000-000000000001\n---\n" +
+					"# PR Review\n\nhttps://github.com/bborbe/maintainer/pull/14\n\n" +
+					"## Plan\n\n```json\n" + string(
+					planJSON,
+				) + "\n```\n"
+				md, err := agentlib.ParseMarkdown(ctx, content)
+				Expect(err).NotTo(HaveOccurred())
+				return md
+			}
+
+			It("skips the runner entirely when ## Plan already exists", func() {
+				md := buildMarkdownWithExistingPlan(nil)
+				prPoster.PostLGTMReturns(pkg.PostResult{
+					Outcome:     "success",
+					ReviewID:    12345,
+					PostedEvent: "COMMENT",
+				})
+				result, err := step.Run(ctx, md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(runner.RunCallCount()).To(Equal(0))
+			})
+		})
+	})
+
 	Describe("Run — error cases", func() {
 		Context("when ## Plan JSON is malformed", func() {
 			var md *agentlib.Markdown
