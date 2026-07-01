@@ -954,8 +954,16 @@ ref: master
 			),
 			Entry(
 				"exact match → true",
-				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"},
-				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"},
+				[]string{
+					"CHANGELOG.md",
+					".claude-plugin/plugin.json",
+					".claude-plugin/marketplace.json",
+				},
+				[]string{
+					"CHANGELOG.md",
+					".claude-plugin/plugin.json",
+					".claude-plugin/marketplace.json",
+				},
 				true,
 			),
 		)
@@ -1382,7 +1390,11 @@ task_identifier: gh-release-bborbe-example-master-plugin
 					writeChangelog(workdir)
 					// Write both manifests so DetectManifests finds them → allowed set.
 					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
-					writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
+					writeManifest(
+						workdir,
+						".claude-plugin/marketplace.json",
+						"marketplace.json.pre",
+					)
 					return nil
 				}
 				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
@@ -1421,7 +1433,11 @@ task_identifier: gh-release-bborbe-example-master-plugin
 				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
 					writeChangelog(workdir)
 					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
-					writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
+					writeManifest(
+						workdir,
+						".claude-plugin/marketplace.json",
+						"marketplace.json.pre",
+					)
 					return nil
 				}
 				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
