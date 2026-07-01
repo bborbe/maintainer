@@ -491,11 +491,12 @@ func (s *aiReviewStep) writeShortCircuit(
 // returned. The release trust model requires fail-closed on
 // transient errors — a git blip must not leave the check passing.
 //
-// sameStringSet is the same helper used by steps_execution.go
-// (guardCommittedFiles). It is package-private, so we reference it
-// directly. The "promote to a small file" alternative from the spec
-// is not pursued: both call sites live in the same package, so the
-// duplicate-style cost is zero.
+// isSubsetIncludingChangelog is the same shared helper used by
+// steps_execution.go (guardCommittedFiles): committed must be a subset
+// of allowed AND contain changelogFileName. This allows a detected
+// manifest that was already at the target version (byte-identical →
+// absent from the commit) to not fail the release, while any file
+// outside the allowed set still fails closed.
 func (s *aiReviewStep) checkUnexpectedFileChange(
 	ctx context.Context,
 	checks *ReviewChecks,
@@ -531,7 +532,7 @@ func (s *aiReviewStep) checkUnexpectedFileChange(
 	} else {
 		expected = append(expected, detected...)
 	}
-	if !sameStringSet(files, expected) {
+	if !isSubsetIncludingChangelog(files, expected) {
 		checks.UnexpectedFileChange = true
 		*failedChecks = append(*failedChecks, CheckUnexpectedFileChange)
 		glog.V(2).Infof(

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 
 	agentlib "github.com/bborbe/agent"
 	"github.com/bborbe/errors"
@@ -923,30 +922,41 @@ ref: master
 		)
 	})
 
-	Describe("sameStringSet", func() {
+	Describe("isSubsetIncludingChangelog", func() {
 		DescribeTable(
-			"order-independent set equality",
-			func(a, b []string, want bool) {
-				originalA := slices.Clone(a)
-				originalB := slices.Clone(b)
-				Expect(pkg.SameStringSetForTest(a, b)).To(Equal(want))
-				// Assert inputs are NOT mutated.
-				Expect(a).To(Equal(originalA))
-				Expect(b).To(Equal(originalB))
+			"asymmetric subset including CHANGELOG.md",
+			func(committed, allowed []string, want bool) {
+				Expect(pkg.IsSubsetIncludingChangelogForTest(committed, allowed)).To(Equal(want))
 			},
-			Entry("equal same order", []string{"a", "b"}, []string{"a", "b"}, true),
-			Entry("equal different order", []string{"a", "b"}, []string{"b", "a"}, true),
-			Entry("different length", []string{"a", "b"}, []string{"a", "b", "c"}, false),
-			Entry("element mismatch", []string{"a", "b"}, []string{"a", "c"}, false),
-			Entry("nil vs nil", nil, nil, true),
-			Entry("empty vs empty", []string{}, []string{}, true),
-			Entry("one empty", []string{"a"}, []string{}, false),
-			Entry("identical duplicates → true", []string{"a", "a"}, []string{"a", "a"}, true),
 			Entry(
-				"duplicate vs distinct, same length → false",
-				[]string{"a", "a"},
-				[]string{"a", "b"},
+				"committed ⊆ allowed + CHANGELOG.md present → true",
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+				true,
+			),
+			Entry(
+				"committed ⊆ allowed (subset) + CHANGELOG.md present → true",
+				[]string{"CHANGELOG.md"},
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+				true,
+			),
+			Entry(
+				"committed contains file NOT in allowed → false",
+				[]string{"CHANGELOG.md", "README.md"},
+				[]string{"CHANGELOG.md"},
 				false,
+			),
+			Entry(
+				"committed missing CHANGELOG.md → false",
+				[]string{".claude-plugin/plugin.json"},
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+				false,
+			),
+			Entry(
+				"exact match → true",
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"},
+				[]string{"CHANGELOG.md", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"},
+				true,
 			),
 		)
 	})
@@ -1358,6 +1368,162 @@ task_identifier: gh-release-bborbe-example-master-plugin
 				Expect(got.Error).To(ContainSubstring(".claude-plugin/marketplace.json"))
 				Expect(got.Tag).To(BeEmpty())
 				Expect(got.CommitSHA).To(BeEmpty())
+			},
+		)
+
+		// 8a — no-op manifest case: both manifests written to workdir (in allowed
+		// set), but CommittedFiles returns only CHANGELOG.md. The manifest was
+		// already at the target version so it never entered the commit.
+		It(
+			"no-op manifest (already at target version) → guard accepts; Tag called; outcome=released",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					// Write both manifests so DetectManifests finds them → allowed set.
+					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
+					writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
+					return "abc1234", nil
+				}
+				// No manifests in the committed set — they were already at target version.
+				fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(fakeOps.TagCallCount()).To(Equal(1))
+
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("released"))
+				Expect(string(got.ErrorCategory)).To(Equal(""))
+			},
+		)
+
+		// 8b — mixed case: both manifests written to workdir, but only plugin.json
+		// changed (marketplace.json already at target). CommittedFiles includes
+		// CHANGELOG + plugin.json.
+		It(
+			"mixed (one manifest unchanged) → guard accepts; Tag called; outcome=released",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
+					writeManifest(workdir, ".claude-plugin/marketplace.json", "marketplace.json.pre")
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, paths ...string) (string, error) {
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{"CHANGELOG.md", ".claude-plugin/plugin.json"},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+				Expect(fakeOps.TagCallCount()).To(Equal(1))
+
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("released"))
+				Expect(string(got.ErrorCategory)).To(Equal(""))
+			},
+		)
+
+		// 8c — out-of-set reject: CommittedFiles includes a file not in the
+		// allowed set (README.md). Guard must fail closed.
+		It(
+			"committed file outside allowed set → Result(failed, error_category=unexpected_diff); Tag NOT called",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
+					return "abc1234", nil
+				}
+				fakeOps.CommittedFilesReturns(
+					[]string{"CHANGELOG.md", "README.md"},
+					nil,
+				)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(fakeOps.TagCallCount()).To(Equal(0))
+
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("failed"))
+				Expect(string(got.ErrorCategory)).To(Equal("unexpected_diff"))
+			},
+		)
+
+		// 8d — missing changelog reject: CommittedFiles contains only the manifest
+		// (CHANGELOG.md never entered the commit). Guard must fail closed.
+		It(
+			"committed without CHANGELOG.md → Result(failed, error_category=unexpected_diff); Tag NOT called",
+			func() {
+				fakeOps := &gitmocks.GitOps{}
+				fakeOps.CloneStub = func(_ context.Context, _, _, workdir string) error {
+					writeChangelog(workdir)
+					writeManifest(workdir, ".claude-plugin/plugin.json", "plugin.json.pre")
+					return nil
+				}
+				fakeOps.CommitStub = func(_ context.Context, _, _ string, _ ...string) (string, error) {
+					return "abc1234", nil
+				}
+				// CHANGELOG.md absent from committed set.
+				fakeOps.CommittedFilesReturns([]string{".claude-plugin/plugin.json"}, nil)
+				fakeOps.TagReturns(nil)
+
+				step := pkg.NewExecutionStep(fakeOps, "")
+				md, err := agentlib.ParseMarkdown(context.Background(), taskMDPlugin)
+				Expect(err).NotTo(HaveOccurred())
+
+				result, err := step.Run(context.Background(), md)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Status).To(Equal(agentlib.AgentStatusFailed))
+				Expect(fakeOps.TagCallCount()).To(Equal(0))
+
+				got, _ := agentlib.ExtractSection[pkg.ResultOutput](
+					context.Background(),
+					md,
+					"## Result",
+				)
+				Expect(got.Outcome).To(Equal("failed"))
+				Expect(string(got.ErrorCategory)).To(Equal("unexpected_diff"))
 			},
 		)
 	})
