@@ -27,6 +27,11 @@ type planningOutput struct {
 	Concerns []struct{} `json:"concerns"`
 }
 
+// maxPlanningAttempts is the hardcoded cap on Claude planning calls per
+// invocation. Malformed-JSON responses are retried up to this many times;
+// AgentStatusFailed is returned only after all attempts fail. Not configurable.
+const maxPlanningAttempts = 3
+
 // planningStep runs Claude to produce the ## Plan section, then branches:
 // - concerns empty → POST LGTM via PrPoster → write ## Verdict → done
 // - concerns non-empty → advance to the execution phase
@@ -96,33 +101,60 @@ func (s *planningStep) Run(ctx context.Context, md *agentlib.Markdown) (*agentli
 	glog.V(2).Infof("planning: starting pr_url=%q ref=%s", prURL, ref)
 
 	prompt := claudelib.BuildPrompt(s.instructions.String(), nil, taskContent)
-	runResult, runErr := s.runner.Run(ctx, prompt)
-	if runErr != nil {
-		glog.V(2).Infof("planning: claude failed nextPhase=human_review err=%v", runErr)
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: fmt.Sprintf("planning claude run failed: %v", runErr),
-		}, nil
+
+	var lastParseErr error
+	for attempt := 1; attempt <= maxPlanningAttempts; attempt++ {
+		runResult, runErr := s.runner.Run(ctx, prompt)
+		if runErr != nil {
+			// Transport error (nil result + err) is NOT retried — controller territory.
+			glog.V(2).Infof("planning: claude failed nextPhase=human_review err=%v", runErr)
+			return &agentlib.Result{
+				Status:  agentlib.AgentStatusFailed,
+				Message: fmt.Sprintf("planning claude run failed: %v", runErr),
+			}, nil
+		}
+
+		if _, parseErr := parsePlanningConcerns(ctx, runResult.Result); parseErr != nil {
+			lastParseErr = parseErr
+			if attempt < maxPlanningAttempts {
+				glog.V(2).Infof(
+					"planning: attempt %d/%d malformed JSON, retrying err=%v",
+					attempt, maxPlanningAttempts, parseErr,
+				)
+				continue
+			}
+			// Exhausted all attempts.
+			glog.V(2).Infof(
+				"planning: malformed JSON after %d attempts, not persisting err=%v",
+				maxPlanningAttempts, parseErr,
+			)
+			return &agentlib.Result{
+				Status: agentlib.AgentStatusFailed,
+				Message: fmt.Sprintf(
+					"planning: malformed JSON after %d attempts: %v",
+					maxPlanningAttempts,
+					lastParseErr,
+				),
+			}, nil
+		}
+
+		// Parseable — persist this response and route.
+		md.ReplaceSection(agentlib.Section{
+			Heading: "## Plan",
+			Body:    runResult.Result,
+		})
+		return s.routeFromPlan(ctx, md, runResult.Result)
 	}
 
-	// Validate the JSON before persisting. If Claude emitted unescaped double
-	// quotes (e.g. code snippets like name != ""), do NOT write the bad body —
-	// return AgentStatusFailed so the controller's retry spawns a fresh call.
-	if _, parseErr := parsePlanningConcerns(ctx, runResult.Result); parseErr != nil {
-		glog.V(2).Infof("planning: malformed JSON from claude, not persisting err=%v", parseErr)
-		return &agentlib.Result{
-			Status:  agentlib.AgentStatusFailed,
-			Message: fmt.Sprintf("planning: malformed JSON: %v", parseErr),
-		}, nil
-	}
-
-	// Write ## Plan to vault (vault-first invariant, same as ## Review).
-	md.ReplaceSection(agentlib.Section{
-		Heading: "## Plan",
-		Body:    runResult.Result,
-	})
-
-	return s.routeFromPlan(ctx, md, runResult.Result)
+	// Unreachable — the loop returns on every path. Kept for compiler completeness.
+	return &agentlib.Result{
+		Status: agentlib.AgentStatusFailed,
+		Message: fmt.Sprintf(
+			"planning: malformed JSON after %d attempts: %v",
+			maxPlanningAttempts,
+			lastParseErr,
+		),
+	}, nil
 }
 
 // routeFromPlan parses concerns from a ## Plan body (freshly produced by
