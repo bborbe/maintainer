@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.42.1
 
 - fix(github-releaser): relax release-commit file-set gate to accept commits where a detected plugin manifest was already at the target version (byte-identical → absent from the commit), while still rejecting any file outside `{CHANGELOG.md} ∪ detected_manifests}` and commits missing `CHANGELOG.md`. Both the execution pre-push guard and the ai_review file-set check now use the shared `isSubsetIncludingChangelog` helper.
 
