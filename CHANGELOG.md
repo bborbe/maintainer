@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.42.0
 
 - feat(pr-reviewer): retry the Claude planning call up to 3 times on malformed JSON before returning `AgentStatusFailed`, so intermittent MiniMax bad output (e.g. a leading `B` from "Based on...") self-corrects without an operator SHA-bump.
 
