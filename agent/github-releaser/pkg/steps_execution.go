@@ -413,7 +413,7 @@ func (s *executionStep) guardCommittedFiles(
 			taskID, tag, authedURL, ref)
 		return result
 	}
-	if !sameStringSet(files, expectedFiles) {
+	if !isSubsetIncludingChangelog(files, expectedFiles) {
 		result, _ := s.fail(ctx, md, git.ErrorCategoryUnexpectedDiff,
 			errors.Errorf(ctx,
 				"release commit must change only %v, got %v", expectedFiles, files),
@@ -661,16 +661,21 @@ func deriveUnprefixedVersion(header string) string {
 	return header
 }
 
-// sameStringSet reports whether a and b contain the same elements,
-// ignoring order. It never mutates its inputs (callers reuse them
-// — e.g. expectedFiles is rendered into the failure message).
-func sameStringSet(a, b []string) bool {
-	if len(a) != len(b) {
+// isSubsetIncludingChangelog reports whether every file in committed is
+// present in allowed AND committed contains changelogFileName. It relaxes
+// the release-commit file-set gate so a detected manifest that was already
+// at the target version (byte-identical → absent from the commit) does not
+// fail the release, while any file outside the allowed set still fails
+// closed. Shared by the execution pre-push guard and the ai_review file-set
+// check — both must enforce the identical rule against the same commit.
+func isSubsetIncludingChangelog(committed, allowed []string) bool {
+	if !slices.Contains(committed, changelogFileName) {
 		return false
 	}
-	ac := slices.Clone(a)
-	bc := slices.Clone(b)
-	slices.Sort(ac)
-	slices.Sort(bc)
-	return slices.Equal(ac, bc)
+	for _, f := range committed {
+		if !slices.Contains(allowed, f) {
+			return false
+		}
+	}
+	return true
 }

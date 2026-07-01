@@ -12,9 +12,10 @@ var ParseOwnerRepoForTest = parseOwnerRepo
 // classifyValidationFailure helper for direct testing of its branches.
 var ClassifyValidationFailureForTest = classifyValidationFailure
 
-// SameStringSetForTest exposes the unexported sameStringSet helper so
-// the external _test package can exercise it directly.
-var SameStringSetForTest = sameStringSet
+// IsSubsetIncludingChangelogForTest exposes the unexported
+// isSubsetIncludingChangelog helper so the external _test package can
+// exercise it directly.
+var IsSubsetIncludingChangelogForTest = isSubsetIncludingChangelog
 
 // DeriveUnprefixedVersionForTest exposes the unexported deriveUnprefixedVersion
 // helper so the external _test package can exercise it directly.

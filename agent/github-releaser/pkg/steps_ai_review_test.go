@@ -941,6 +941,61 @@ var _ = Describe("AIReviewStep", func() {
 					Expect(review.UnexpectedFiles).To(ContainElement("plugin.json"))
 				},
 			)
+
+			// 3c — no-op manifest case: both manifests seeded into the
+			// workdir (so DetectManifests finds them → in allowed set),
+			// but CommittedFiles returns only CHANGELOG.md (manifest
+			// was already at target version). Guard must pass:
+			// UnexpectedFileChange=false, CheckUnexpectedFileChange NOT
+			// in FailedChecks, Approved=true.
+			It(
+				"no-op manifest (already at target version) → UnexpectedFileChange=false, CheckUnexpectedFileChange NOT in FailedChecks, Approved=true",
+				func() {
+					workdir, err := os.MkdirTemp("", "ai-review-test-")
+					Expect(err).NotTo(HaveOccurred())
+					DeferCleanup(func() { _ = os.RemoveAll(workdir) })
+
+					Expect(
+						os.MkdirAll(filepath.Join(workdir, ".claude-plugin"), 0o750),
+					).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, ".claude-plugin", "plugin.json"),
+						[]byte(`{"name":"x","version":"0.9.0"}`),
+						0o600,
+					)).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, ".claude-plugin", "marketplace.json"),
+						[]byte(`{"version":"0.9.0"}`),
+						0o600,
+					)).To(Succeed())
+					Expect(os.WriteFile(
+						filepath.Join(workdir, "CHANGELOG.md"),
+						[]byte("## v1.0.0\n\n- feat\n"),
+						0o600,
+					)).To(Succeed())
+
+					fakeClient.TagExistsReturns("abc1234", nil)
+					fakeClient.ResolveTagCommitReturns("abc1234", nil)
+					fakeClient.FetchChangelogReturns(
+						[]byte("## v1.0.0\n\n- feat\n"),
+						nil,
+					)
+					// No manifests in the committed set — they were already at target.
+					fakeOps.CommittedFilesReturns([]string{"CHANGELOG.md"}, nil)
+					// Default BeforeEach stubFaithfulLLM produces pass.
+
+					result, md := runStep(taskWithResultWithWorkdir(workdir, "abc1234", "v1.0.0"))
+
+					Expect(result.Status).To(Equal(agentlib.AgentStatusDone))
+					Expect(result.NextPhase).To(Equal("done"))
+
+					review := extractReview(md)
+					Expect(review.Approved).To(BeTrue())
+					Expect(review.Checks.UnexpectedFileChange).To(BeFalse())
+					Expect(review.UnexpectedFiles).To(BeEmpty())
+					Expect(review.FailedChecks).NotTo(ContainElement(pkg.CheckUnexpectedFileChange))
+				},
+			)
 		})
 
 		// Spec 064 — ai_review review-warning override. When the local
