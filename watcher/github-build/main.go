@@ -66,6 +66,12 @@ type application struct {
 	MaxTitleLen     int    `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN" usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                                          default:"200"`
 	TaskSuffix      string `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"   usage:"Optional suffix appended to build-failure task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
 
+	// TopicPrefix selects the Kafka topic prefix used for CQRS topic construction
+	// (e.g. "develop" / "master"); independent of Stage, which remains the
+	// deployment-stage identifier used for image tags and other non-topic
+	// purposes. Empty means unprefixed topics.
+	TopicPrefix base.TopicPrefix `required:"false" arg:"topic-prefix" env:"TOPIC_PREFIX" usage:"Kafka topic prefix for CQRS topic construction"`
+
 	TriggerHandler http.Handler
 }
 
@@ -115,14 +121,12 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		return errors.Wrap(ctx, err, "create allowlist snapshot")
 	}
 
-	branch := base.Branch(a.Stage)
-
 	currentDateTime := libtime.NewCurrentDateTime()
 	w, syncProducer, watcherCleanup, err := factory.CreateWatcher(
 		ctx,
 		ghClient,
 		a.KafkaBrokers,
-		a.Stage,
+		a.TopicPrefix,
 		repoAllowlist,
 		resolved,
 		"/data/cursor.json",
@@ -142,7 +146,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	triggerBuildCheckSender := factory.CreateTriggerBuildCheckCommandSender(
 		ctx,
 		syncProducer,
-		branch,
+		a.TopicPrefix,
 	)
 	triggerHandler := factory.CreateTriggerBuildCheckHandler(triggerBuildCheckSender)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
@@ -158,7 +162,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		syncProducer,
 		db,
 		w, // shared with the poll-interval loop
-		branch,
+		a.TopicPrefix,
 	)
 
 	glog.V(2).

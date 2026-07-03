@@ -45,9 +45,9 @@ func CreateGitHubAppClient(
 // CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
 func CreateKafkaSender(
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) task.CreateCommandSender {
-	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	sender := cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory)
 	return task.NewCreateCommandSender(sender, "")
 }
 
@@ -99,12 +99,12 @@ func CreateWatcher(
 func CreateTriggerPRReviewCommandSender(
 	ctx context.Context,
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) command.TriggerPRReviewCommandSender {
 	return command.NewTriggerPRReviewCommandSender(
 		base.NewCommandCreator(base.RequestIDChannel(ctx)),
 		cqrsiam.Initiator("watcher-github-pr"),
-		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+		cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory),
 	)
 }
 
@@ -134,7 +134,7 @@ func CreateCommandConsumer(
 	maxTitleLen int,
 	taskSuffix string,
 	metrics pkg.Metrics,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 	currentDateTime libtime.CurrentDateTimeGetter,
 ) run.Func {
 	executors := cdb.CommandObjectExecutorTxs{
@@ -156,7 +156,7 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		lib.GithubPRReviewV1SchemaID,
-		branch,
+		topicPrefix,
 		false, // ignoreUnsupported
 		executors,
 	)

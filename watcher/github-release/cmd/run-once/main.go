@@ -54,6 +54,9 @@ type Application struct {
 	AppID          int64            `required:"false" arg:"app-id"          env:"APP_ID"          usage:"GitHub App ID (preferred auth path)"`
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
+	// TopicPrefix selects the Kafka topic prefix used for CQRS topic construction
+	// (e.g. "develop" / "master"); independent of Stage. Empty means unprefixed topics.
+	TopicPrefix    base.TopicPrefix `required:"false" arg:"topic-prefix"    env:"TOPIC_PREFIX"    usage:"Kafka topic prefix for CQRS topic construction"`
 	CreateWatcher  WatcherFactory
 	CreateProducer ProducerFactory
 }
@@ -112,7 +115,7 @@ func (a *Application) Run(ctx context.Context, _ libsentry.Client) error {
 	}()
 
 	metrics := pkg.NewMetrics(prometheus.NewRegistry())
-	sender := factory.CreateKafkaSender(syncProducer, base.Branch(a.Stage))
+	sender := factory.CreateKafkaSender(syncProducer, a.TopicPrefix)
 	staticFilters := factory.CreateStaticFilters(allowlist)
 
 	w := a.CreateWatcher(

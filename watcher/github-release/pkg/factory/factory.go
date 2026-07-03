@@ -28,9 +28,9 @@ import (
 // CreateKafkaSender constructs a typed create-task command sender backed by a Kafka sync producer.
 func CreateKafkaSender(
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) task.CreateCommandSender {
-	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	sender := cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory)
 	return task.NewCreateCommandSender(sender, "")
 }
 
@@ -93,12 +93,12 @@ func CreateWatcher(
 func CreateTriggerReleaseCheckCommandSender(
 	ctx context.Context,
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) command.TriggerReleaseCheckCommandSender {
 	return command.NewTriggerReleaseCheckCommandSender(
 		base.NewCommandCreator(base.RequestIDChannel(ctx)),
 		cqrsiam.Initiator("watcher-github-release"),
-		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+		cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory),
 	)
 }
 
@@ -125,7 +125,7 @@ func CreateCommandConsumer(
 	syncProducer libkafka.SyncProducer,
 	db libkv.DB,
 	watcher pkg.Watcher,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) run.Func {
 	executors := cdb.CommandObjectExecutorTxs{
 		command.NewTriggerReleaseCheckCommandExecutor(watcher),
@@ -135,7 +135,7 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		lib.GithubReleaserV1SchemaID,
-		branch,
+		topicPrefix,
 		false, // ignoreUnsupported
 		executors,
 	)

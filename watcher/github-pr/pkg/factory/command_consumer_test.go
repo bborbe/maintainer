@@ -31,7 +31,7 @@ var _ = Describe("CreateTriggerPRReviewCommandSender", func() {
 		sender := factory.CreateTriggerPRReviewCommandSender(
 			context.Background(),
 			syncProducer,
-			base.Branch("dev"),
+			base.TopicPrefix("develop"),
 		)
 		Expect(sender).NotTo(BeNil())
 	})
@@ -57,7 +57,7 @@ var _ = Describe("CreateCommandConsumer", func() {
 			trustDecision,
 			"dev", 80, 200, "",
 			pkg.NewMetrics(),
-			base.Branch("dev"),
+			base.TopicPrefix("develop"),
 			libtime.NewCurrentDateTime(),
 		)
 		Expect(runFunc).NotTo(BeNil())

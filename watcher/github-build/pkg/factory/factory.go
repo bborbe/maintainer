@@ -35,9 +35,9 @@ import (
 // lifecycle (created in main.go so it can be reused across senders).
 func CreateKafkaCreateSender(
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) task.CreateCommandSender {
-	sender := cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory)
+	sender := cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory)
 	return task.NewCreateCommandSender(sender, "")
 }
 
@@ -74,7 +74,7 @@ func CreateWatcher(
 	ctx context.Context,
 	ghClient pkg.GitHubClient,
 	brokers libkafka.Brokers,
-	stage string,
+	topicPrefix base.TopicPrefix,
 	inputAllowlist []string,
 	resolved pkg.AllowlistSnapshot,
 	cursorPath string,
@@ -89,8 +89,7 @@ func CreateWatcher(
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(ctx, err, "create sync producer")
 	}
-	branch := base.Branch(stage)
-	createSender := CreateKafkaCreateSender(syncProducer, branch)
+	createSender := CreateKafkaCreateSender(syncProducer, topicPrefix)
 	maintenanceLoader := maintenance.NewLoader(ghClient)
 	repoFilter := filter.RepoFilters{filter.NewRepoAllowlistFilter(inputAllowlist)}
 	w := pkg.NewWatcher(
@@ -122,12 +121,12 @@ func CreateWatcher(
 func CreateTriggerBuildCheckCommandSender(
 	ctx context.Context,
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) command.TriggerBuildCheckCommandSender {
 	return command.NewTriggerBuildCheckCommandSender(
 		base.NewCommandCreator(base.RequestIDChannel(ctx)),
 		cqrsiam.Initiator("watcher-github-build"),
-		cdb.NewCommandObjectSender(syncProducer, branch, log.DefaultSamplerFactory),
+		cdb.NewCommandObjectSender(syncProducer, topicPrefix, log.DefaultSamplerFactory),
 	)
 }
 
@@ -155,7 +154,7 @@ func CreateCommandConsumer(
 	syncProducer libkafka.SyncProducer,
 	db libkv.DB,
 	watcher pkg.Watcher,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 ) run.Func {
 	executors := cdb.CommandObjectExecutorTxs{
 		command.NewTriggerBuildCheckCommandExecutor(watcher),
@@ -165,7 +164,7 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		lib.GithubBuildV1SchemaID,
-		branch,
+		topicPrefix,
 		false, // ignoreUnsupported
 		executors,
 	)

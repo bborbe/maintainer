@@ -135,6 +135,12 @@ type application struct {
 	MaxTitleLen      int              `required:"false" arg:"max-title-len"     env:"MAX_TITLE_LEN"     usage:"Max length of vault task filename (whole title; safety cap)"                                                                                                                                               default:"200"`
 	TaskSuffix       string           `required:"false" arg:"task-suffix"       env:"TASK_SUFFIX"       usage:"Optional suffix appended to PR task filenames as ' - suffix'; empty = no suffix. Use distinct values per stage to prevent task-file collisions when both watchers poll the same repo into the same vault."`
 
+	// TopicPrefix selects the Kafka topic prefix used for CQRS topic construction
+	// (e.g. "develop" / "master"); independent of Stage, which remains the
+	// deployment-stage identifier used for image tags, task-suffix disambiguation,
+	// and other non-topic purposes. Empty means unprefixed topics.
+	TopicPrefix base.TopicPrefix `required:"false" arg:"topic-prefix" env:"TOPIC_PREFIX" usage:"Kafka topic prefix for CQRS topic construction"`
+
 	TriggerHandler http.Handler
 }
 
@@ -249,8 +255,6 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	}
 	glog.V(2).Infof("trusted-authors count=%d", len(trustedAuthors))
 
-	branch := base.Branch(a.Stage)
-
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
 		a.KafkaBrokers,
@@ -264,7 +268,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 			glog.Warningf("close kafka sync producer: %v", err)
 		}
 	}()
-	createSender := factory.CreateKafkaSender(syncProducer, branch)
+	createSender := factory.CreateKafkaSender(syncProducer, a.TopicPrefix)
 
 	trustDecision := trust.And{trust.NewAuthorAllowlist(trustedAuthors)}
 
@@ -293,7 +297,11 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	)
 
 	// HTTP-side sender backs the /trigger handler.
-	triggerPRReviewSender := factory.CreateTriggerPRReviewCommandSender(ctx, syncProducer, branch)
+	triggerPRReviewSender := factory.CreateTriggerPRReviewCommandSender(
+		ctx,
+		syncProducer,
+		a.TopicPrefix,
+	)
 	triggerHandler := factory.CreateSinglePRTriggerHandler(triggerPRReviewSender)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
 
@@ -316,7 +324,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		a.MaxTitleLen,
 		a.TaskSuffix,
 		metrics, // shared with the watcher
-		branch,
+		a.TopicPrefix,
 		currentDateTime, // spec 067: time-injected clock for Force=true nonce
 	)
 

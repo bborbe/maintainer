@@ -29,7 +29,7 @@ var _ = Describe("CreateTriggerBuildCheckCommandSender", func() {
 		sender := factory.CreateTriggerBuildCheckCommandSender(
 			context.Background(),
 			syncProducer,
-			base.Branch("dev"),
+			base.TopicPrefix("develop"),
 		)
 		Expect(sender).NotTo(BeNil())
 	})
@@ -47,7 +47,7 @@ var _ = Describe("CreateCommandConsumer", func() {
 			syncProducer,
 			db,
 			watcher,
-			base.Branch("dev"),
+			base.TopicPrefix("develop"),
 		)
 		Expect(runFunc).NotTo(BeNil())
 	})

@@ -69,14 +69,14 @@ func CreateClaudeRunner(
 // content generator. Mirrors pr-reviewer.
 func CreateKafkaResultDeliverer(
 	syncProducer libkafka.SyncProducer,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 	taskID agentlib.TaskIdentifier,
 	originalContent string,
 	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.ResultDeliverer {
 	return delivery.NewKafkaResultDeliverer(
 		syncProducer,
-		branch,
+		topicPrefix,
 		taskID,
 		originalContent,
 		delivery.NewPassthroughContentGenerator(),
@@ -181,13 +181,13 @@ func CreateAgentProvider(
 func CreateDeliverer(
 	syncProducer libkafka.SyncProducer,
 	taskID agentlib.TaskIdentifier,
-	branch base.Branch,
+	topicPrefix base.TopicPrefix,
 	originalContent string,
 	currentDateTime libtime.CurrentDateTimeGetter,
 ) agentlib.ResultDeliverer {
 	return CreateKafkaResultDeliverer(
 		syncProducer,
-		branch,
+		topicPrefix,
 		taskID,
 		originalContent,
 		currentDateTime,
