@@ -46,6 +46,12 @@ spec:
               value: '{{ "KAFKA_BROKERS" | env }}'
             - name: STAGE
               value: '{{ "STAGE" | env }}'
+            # Kafka topic prefix for CQRS topic construction (cqrs v0.6.0 base.TopicPrefix).
+            # Independent of STAGE/BRANCH (used only for stage/image-tag purposes); preserves
+            # the legacy dev->develop / prod->master Kafka topic names now that cqrs no longer
+            # remaps Branch to a topic prefix automatically.
+            - name: TOPIC_PREFIX
+              value: '{{ "TOPIC_PREFIX" | env }}'
             - name: SENTRY_PROXY
               value: '{{"SENTRY_PROXY_URL" | env}}'
             - name: OWNER

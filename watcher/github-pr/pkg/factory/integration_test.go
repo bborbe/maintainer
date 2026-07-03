@@ -143,7 +143,7 @@ var _ = Describe("end-to-end command flow through wired consumer (spec 066 AC 11
 				trustDecision,
 				"dev", 80, 200, "",
 				metrics,
-				base.Branch("dev"),
+				base.TopicPrefix("develop"),
 				libtime.NewCurrentDateTime(),
 			)
 			Expect(runFunc).NotTo(BeNil(),

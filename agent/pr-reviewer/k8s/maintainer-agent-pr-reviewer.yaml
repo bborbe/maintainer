@@ -47,6 +47,11 @@ spec:
     APP_ID: '{{ "AGENT_PR_REVIEWER_APP_ID" | env }}'
     INSTALLATION_ID: '{{ "AGENT_PR_REVIEWER_INSTALLATION_ID" | env }}'
     BOT_GITHUB_LOGIN: '{{ "AGENT_PR_REVIEWER_BOT_LOGIN" | env }}'
+    # Kafka topic prefix for CQRS topic construction (cqrs v0.6.0 base.TopicPrefix).
+    # Independent of BRANCH (used only for stage/image-tag purposes); preserves the
+    # legacy dev->develop / prod->master Kafka topic names now that cqrs no longer
+    # remaps Branch to a topic prefix automatically.
+    TOPIC_PREFIX: '{{ "TOPIC_PREFIX" | env }}'
   trigger:
     statuses:
       - in_progress

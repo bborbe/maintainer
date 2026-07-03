@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bborbe/cqrs/base"
 	libkafka "github.com/bborbe/kafka"
 	libtime "github.com/bborbe/time"
 	. "github.com/onsi/ginkgo/v2"
@@ -70,7 +71,7 @@ var _ = Describe("Run", func() {
 				ctx context.Context,
 				ghClient pkg.GitHubClient,
 				brokers libkafka.Brokers,
-				stage string,
+				topicPrefix base.TopicPrefix,
 				inputAllowlist []string,
 				resolved pkg.AllowlistSnapshot,
 				cursorPath string,
@@ -133,7 +134,7 @@ var _ = Describe("Run", func() {
 				ctx context.Context,
 				ghClient pkg.GitHubClient,
 				brokers libkafka.Brokers,
-				stage string,
+				topicPrefix base.TopicPrefix,
 				inputAllowlist []string,
 				resolved pkg.AllowlistSnapshot,
 				cursorPath string,

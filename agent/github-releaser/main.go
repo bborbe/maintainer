@@ -75,6 +75,11 @@ type application struct {
 	// Branch for Kafka result delivery (dev / prod).
 	Branch base.Branch `required:"true" arg:"branch" env:"BRANCH" usage:"branch"`
 
+	// TopicPrefix selects the Kafka topic prefix used for CQRS topic construction
+	// (e.g. "develop" / "master"); independent of Branch, which remains the
+	// stage/image-tag identifier. Empty means unprefixed topics.
+	TopicPrefix base.TopicPrefix `required:"false" arg:"topic-prefix" env:"TOPIC_PREFIX" usage:"Kafka topic prefix for CQRS topic construction"`
+
 	// Phase to run (planning | execution | ai_review). Canonical values; CRD literal match.
 	Phase domain.TaskPhase `required:"false" arg:"phase" env:"PHASE" usage:"Agent phase: planning | execution | ai_review" default:"planning"`
 
@@ -194,7 +199,7 @@ func (a *application) createDeliverer(
 	deliverer := factory.CreateDeliverer(
 		syncProducer,
 		a.TaskID,
-		a.Branch,
+		a.TopicPrefix,
 		a.TaskContent,
 		currentDateTime,
 	)

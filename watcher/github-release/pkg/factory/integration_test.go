@@ -101,7 +101,7 @@ var _ = Describe("end-to-end command flow through wired executor (spec 067 AC 8 
 				new(libkafkamocks.KafkaSyncProducer),
 				new(kvmocks.DB),
 				watcher,
-				base.Branch("dev"),
+				base.TopicPrefix("develop"),
 			)
 			Expect(runFunc).NotTo(BeNil(),
 				"factory composition must succeed for the wired consumer")

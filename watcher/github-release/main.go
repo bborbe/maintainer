@@ -56,6 +56,12 @@ type application struct {
 	InstallationID int64            `required:"false" arg:"installation-id" env:"INSTALLATION_ID" usage:"GitHub App Installation ID"`
 	PEMKey         string           `required:"false" arg:"pem-key"         env:"PEM_KEY"         usage:"GitHub App PEM key (populated from k8s Secret)"                                                                              display:"length"`
 
+	// TopicPrefix selects the Kafka topic prefix used for CQRS topic construction
+	// (e.g. "develop" / "master"); independent of Stage, which remains the
+	// deployment-stage identifier used for image tags and other non-topic
+	// purposes. Empty means unprefixed topics.
+	TopicPrefix base.TopicPrefix `required:"false" arg:"topic-prefix" env:"TOPIC_PREFIX" usage:"Kafka topic prefix for CQRS topic construction"`
+
 	TriggerHandler http.Handler
 }
 
@@ -95,9 +101,8 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		}
 	}()
 
-	branch := base.Branch(a.Stage)
 	metrics := pkg.NewMetrics(nil)
-	sender := factory.CreateKafkaSender(syncProducer, branch)
+	sender := factory.CreateKafkaSender(syncProducer, a.TopicPrefix)
 	staticFilters := factory.CreateStaticFilters(allowlist)
 
 	w := factory.CreateWatcher(
@@ -114,7 +119,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 	triggerReleaseCheckSender := factory.CreateTriggerReleaseCheckCommandSender(
 		ctx,
 		syncProducer,
-		branch,
+		a.TopicPrefix,
 	)
 	triggerHandler := factory.CreateTriggerReleaseCheckHandler(triggerReleaseCheckSender)
 	a.TriggerHandler = libhttp.NewJSONErrorHandler(triggerHandler)
@@ -130,7 +135,7 @@ func (a *application) Run(ctx context.Context, _ libsentry.Client) error {
 		syncProducer,
 		db,
 		w, // shared with the poll-interval loop
-		branch,
+		a.TopicPrefix,
 	)
 
 	glog.V(2).Infof(
