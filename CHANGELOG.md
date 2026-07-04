@@ -8,6 +8,13 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.45.1
+
+- chore: combine `Makefile` + `Makefile.variables` + `Makefile.precommit` into a
+  single root `Makefile` (matches the `bborbe/agent` layout). The multi-file split
+  was a monorepo artifact; with one module at the repo root it is no longer needed.
+  No target/behavior change.
+
 ## v0.45.0
 
 - refactor: flatten the shared library to the repo root — `lib/` contents moved
