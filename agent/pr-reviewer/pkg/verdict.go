@@ -167,6 +167,35 @@ func ParseVerdict(reviewText string) Result {
 	}
 }
 
+// isFailClosedReason reports whether a request-changes Result.Reason came from
+// ParseVerdict fail-closing (empty / unparseable / no-verdict-block / unknown
+// verdict) rather than from a model-authored reason on a genuine request-changes
+// verdict. Used to log a diagnostic ONLY for the suspicious cases — a false
+// CHANGES_REQUESTED on an otherwise-clean review — without spamming pod logs on
+// every legitimate rejection.
+//
+// Keep the literals/prefixes in sync with the Reason strings ParseVerdict emits.
+func isFailClosedReason(reason string) bool {
+	return reason == "empty review text" ||
+		reason == "no verdict block" ||
+		strings.HasPrefix(reason, "malformed JSON:") ||
+		strings.HasPrefix(reason, "unknown verdict:")
+}
+
+// lastChars returns up to the final n characters of s (rune-safe), for logging
+// the tail of a review body the verdict parser saw without dumping the whole
+// thing into pod logs. The raw text is otherwise lost once the Job pod is GC'd.
+func lastChars(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[len(r)-n:])
+}
+
 // StripJSONVerdict removes the JSON verdict line (and surrounding code fence if present)
 // from the review text. Returns the cleaned review text for posting as a PR comment.
 // If no JSON verdict found, returns the text unchanged.
