@@ -1,6 +1,4 @@
 include ../../../../Makefile.variables
-include ../../../../common.env
-include ../../../../local.env
 
 # Override on the command line:
 #   make run-once REPO_ALLOWLIST=github.com/owner/repo

@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- refactor: converge build to publish-only model — `make buca` publishes `docker.io/bborbe/maintainer-*:$(VERSION)`; k8s deploy machinery removed (moved to the maintainer Helm chart).
+
 ## v0.44.0
 
 - feat(agent/pr-reviewer): log a diagnostic when `postAndRoute` fail-closes to `request-changes`. When `ParseVerdict` returns `request-changes` with a fail-closed reason (`empty review text` / `no verdict block` / `malformed JSON:` / `unknown verdict:`), log a `glog.Warningf` with the reason, `reviewBody` length, and its last 300 chars — the raw review text the parser saw is otherwise lost once the Job pod is GC'd, making the recurring false-`CHANGES_REQUESTED` symptom undiagnosable after the fact. Legitimate (model-authored) `request-changes` verdicts do not log. Pure helpers `isFailClosedReason` + `lastChars` (rune-safe tail) added with table tests. No behavior change to verdict/event mapping.
