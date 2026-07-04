@@ -1,0 +1,165 @@
+{{- range $watcher := .Values.watchers }}
+{{- if $watcher.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $watcher.name }}
+  namespace: {{ include "maintainer.namespace" $ }}
+  labels:
+    app: {{ $watcher.name }}
+    {{- include "maintainer.labels" $ | nindent 4 }}
+  annotations:
+    {{- if $.Values.keel.enabled }}
+    keel.sh/policy: force
+    keel.sh/trigger: poll
+    keel.sh/match-tag: "true"
+    keel.sh/pollSchedule: {{ $.Values.keel.pollSchedule | quote }}
+    {{- end }}
+    {{- with $.Values.rolloutNonce }}
+    random: {{ . | quote }}
+    {{- end }}
+spec:
+  replicas: 1
+  serviceName: {{ $watcher.name }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ $watcher.name }}
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9090"
+        prometheus.io/scheme: http
+        prometheus.io/scrape: "true"
+        {{- with $.Values.rolloutNonce }}
+        random: {{ . | quote }}
+        {{- end }}
+      labels:
+        app: {{ $watcher.name }}
+    spec:
+      securityContext:
+        fsGroup: 65534
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: service
+          image: {{ printf "%s/%s:%s" $.Values.image.registry $watcher.image ($watcher.tag | default $.Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          args:
+            - -v={{ $watcher.logLevel | default "2" }}
+          env:
+            {{- range $k, $v := $watcher.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- range $k, $v := $watcher.secretEnv }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $watcher.name }}
+                  key: {{ $k }}
+            {{- end }}
+          ports:
+            - containerPort: 9090
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: 9090
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 20Mi
+            limits:
+              cpu: 200m
+              memory: 100Mi
+          volumeMounts:
+            - name: datadir
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with $.Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- $storage := $watcher.storage | default dict }}
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $storage.storageClassName }}
+        # Omitted when empty so the cluster's DEFAULT StorageClass is used;
+        # an explicit "" would instead disable dynamic provisioning.
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $storage.size | default "100Mi" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $watcher.name }}
+  namespace: {{ include "maintainer.namespace" $ }}
+  labels:
+    app: {{ $watcher.name }}
+    {{- include "maintainer.labels" $ | nindent 4 }}
+  annotations:
+    admin/port: '9090'
+    admin/path: ''
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  selector:
+    app: {{ $watcher.name }}
+{{- if $watcher.secretEnv }}
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: {{ $watcher.name }}
+  namespace: {{ include "maintainer.namespace" $ }}
+  labels:
+    {{- include "maintainer.labels" $ | nindent 4 }}
+data:
+  {{- range $k, $v := $watcher.secretEnv }}
+  {{ $k }}: {{ $v | b64enc | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,25 @@
+apiVersion: v2
+name: maintainer
+description: >-
+  maintainer application chart — 3 GitHub watcher StatefulSets (build/pr/release)
+  plus 2 agent Config CRs (pr-reviewer, github-releaser). Application layer on top
+  of the core `agent` framework chart.
+type: application
+# Chart version — bumped on chart changes, independent of appVersion.
+version: 0.1.0
+# Default image tag for the maintainer components when a watcher/agent omits `tag`.
+appVersion: "0.44.0"
+home: https://github.com/bborbe/maintainer
+sources:
+  - https://github.com/bborbe/maintainer
+maintainers:
+  - name: Benjamin Borbe
+annotations:
+  # PREREQUISITE: this application chart does NOT ship the Config CRD. It emits
+  # `agent.benjamin-borbe.de/v1` Config objects that are owned + reconciled by the
+  # core `agent` chart (which installs the CRD + task controller + executor). Install
+  # the core `agent` chart FIRST (or ensure its CRD is present); otherwise the agent
+  # Config CRs here fail to apply with a "no matches for kind Config" error.
+  artifacthub.io/prerequisites: |
+    - Requires the core `agent` chart (owns the configs.agent.benjamin-borbe.de CRD,
+      the agent-task-controller, and the agent-task-executor). Install it first.

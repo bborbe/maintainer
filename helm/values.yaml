@@ -1,0 +1,185 @@
+# maintainer chart values.
+#
+# APPLICATION chart. Ships 3 GitHub watcher StatefulSets + 2 agent Config CRs.
+#
+# PREREQUISITE: install the core `agent` chart FIRST. It owns the
+# `configs.agent.benjamin-borbe.de` CRD (plus the task controller + executor).
+# This chart emits Config CRs of that kind but does NOT ship the CRD; applying
+# the agents before the CRD exists fails with "no matches for kind Config".
+#
+# Required per install: namespace. Everything else defaults to a portable
+# public-registry install; quant overrides keel + affinity + a mirror registry +
+# pull secret in its values overlay.
+
+# Namespace the components deploy into. Required (no default — the cluster owns it).
+namespace: ""
+
+# Image coordinates. Default to the public Docker Hub images; a self-sufficient
+# cluster overrides registry to its in-cluster mirror.
+image:
+  registry: docker.io
+  pullPolicy: IfNotPresent
+  # Private-registry pull secret(s), e.g. [{name: docker}]. Empty for public docker.io.
+  pullSecrets: []
+
+# keel auto-redeploy annotations (quant polls the registry). Off by default —
+# versioned deploys don't need it; bump the tag + re-apply instead.
+keel:
+  enabled: false
+  pollSchedule: "@every 1m"
+
+# Node affinity passthrough (quant pins pods to a node_type=agent node via
+# nodeAffinity). Empty = no affinity (generic clusters). Set the full affinity
+# object here. quant overlay sets:
+#   affinity:
+#     nodeAffinity:
+#       requiredDuringSchedulingIgnoredDuringExecution:
+#         nodeSelectorTerms:
+#           - matchExpressions:
+#               - key: node_type
+#                 operator: In
+#                 values: [agent]
+affinity: {}
+
+# Extra pod annotation used by quant to force a rollout (value of RANDOM). Empty = omit.
+rolloutNonce: ""
+
+# Watchers: values-driven list. Each enabled entry emits a StatefulSet + headless
+# Service + (when secretEnv is non-empty) a Secret. Empty by default. `env` is a
+# free-form map rendered as plain container env vars; `secretEnv` is a free-form
+# map rendered into a per-watcher Secret (base64) and wired back as secretKeyRef
+# env vars. `logLevel` feeds the `-v=` arg (NOT an env var). Copy the example
+# below (the 3 real maintainer watchers) and fill in real values / secrets.
+watchers: []
+  # - name: maintainer-watcher-github-build   # object name + Service + Secret name
+  #   enabled: true
+  #   image: bborbe/maintainer-watcher-github-build  # repo only; registry from image.registry
+  #   tag: ""                    # empty => Chart.appVersion
+  #   logLevel: "2"              # -v=<n> arg
+  #   storage:
+  #     size: 100Mi
+  #     storageClassName: ""     # empty => cluster default StorageClass (portable)
+  #   env:                       # plain container env vars
+  #     LISTEN: ':9090'
+  #     KAFKA_BROKERS: my-cluster-kafka-bootstrap.strimzi:9092
+  #     STAGE: dev
+  #     TOPIC_PREFIX: develop
+  #     SENTRY_PROXY: ""
+  #     REPO_ALLOWLIST: ""
+  #     APP_ID: ""
+  #     INSTALLATION_ID: ""
+  #     TASK_ASSIGNEE: build-fix-agent
+  #     TASK_STATUS: in_progress
+  #     TASK_PHASE: todo
+  #     TASK_SUFFIX: ""
+  #   secretEnv:                 # rendered into a per-watcher Secret (base64)
+  #     PEM_KEY: ""              # GitHub App private key (PEM)
+  #
+  # - name: maintainer-watcher-github-pr
+  #   enabled: true
+  #   image: bborbe/maintainer-watcher-github-pr
+  #   tag: ""
+  #   logLevel: "2"
+  #   storage:
+  #     size: 100Mi
+  #     storageClassName: ""
+  #   env:
+  #     LISTEN: ':9090'
+  #     KAFKA_BROKERS: my-cluster-kafka-bootstrap.strimzi:9092
+  #     STAGE: dev
+  #     TOPIC_PREFIX: develop
+  #     SENTRY_PROXY: ""
+  #     TRUSTED_AUTHORS: bborbe
+  #     REPO_ALLOWLIST: ""
+  #     TASK_SUFFIX: ""
+  #     APP_ID: ""
+  #     INSTALLATION_ID: ""
+  #   secretEnv:
+  #     PEM_KEY: ""
+  #
+  # - name: maintainer-watcher-github-release
+  #   enabled: true
+  #   image: bborbe/maintainer-watcher-github-release
+  #   tag: ""
+  #   logLevel: "2"
+  #   storage:
+  #     size: 100Mi
+  #     storageClassName: ""
+  #   env:                       # NOTE: no LISTEN key — release watcher has none,
+  #                              # yet still exposes 9090 (probes/metrics). Replicate exactly.
+  #     KAFKA_BROKERS: my-cluster-kafka-bootstrap.strimzi:9092
+  #     STAGE: dev
+  #     TOPIC_PREFIX: develop
+  #     SENTRY_PROXY: ""
+  #     OWNER: bborbe
+  #     REPO_ALLOWLIST: ""
+  #     POLL_INTERVAL: 10m
+  #     CURSOR_PATH: /data/cursor.json
+  #     APP_ID: ""
+  #     INSTALLATION_ID: ""
+  #   secretEnv:
+  #     PEM_KEY: ""
+
+# Agents: values-driven list. Each entry emits a Config CR (owned by the core
+# `agent` chart's CRD) + Secret + PriorityClass (cluster-scoped) + ResourceQuota
+# (caps concurrent pods). A PVC + Config volumeClaim/volumeMountPath are emitted
+# ONLY when the entry sets `volumeMountPath` — the maintainer agents mount nothing,
+# so leave it unset (no PVC). Empty by default. Copy the example (the 2 real
+# maintainer agents) below.
+agents: []
+  # - name: maintainer-agent-pr-reviewer   # object name + PriorityClass + Secret name
+  #   enabled: true
+  #   assignee: pr-reviewer-agent          # Config.spec.assignee (who claims matching tasks)
+  #   image: bborbe/maintainer-agent-pr-reviewer  # repo only; registry from image.registry
+  #   tag: ""                              # empty => Chart.appVersion
+  #   heartbeat: 5m
+  #   taskTypes: [pr-review, healthcheck]
+  #   triggerStatuses: [in_progress]
+  #   triggerPhases: [planning, execution, ai_review]
+  #   # volumeMountPath: (unset) — no volume mounted, so NO PVC is created
+  #   env:                                 # plain env injected into the Config
+  #     CLAUDE_CONFIG_DIR: /home/claude/.claude
+  #     REPO_ALLOWLIST: ""
+  #     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+  #     ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+  #     REVIEW_MODE: selector
+  #     APP_ID: ""
+  #     INSTALLATION_ID: ""
+  #     BOT_GITHUB_LOGIN: ""
+  #     TOPIC_PREFIX: develop
+  #   secretEnv:                           # rendered into a per-agent Secret (base64)
+  #     SENTRY_DSN: ""
+  #     ANTHROPIC_AUTH_TOKEN: ""
+  #     PEM_KEY: ""
+  #   resources:
+  #     requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 5Gi}
+  #     limits: {cpu: 500m, memory: 1Gi, ephemeral-storage: 5Gi}
+  #   priorityValue: 500                   # PriorityClass value (default 500)
+  #   concurrency: 3                       # max concurrent pods via ResourceQuota
+  #
+  # - name: maintainer-agent-github-releaser
+  #   enabled: true
+  #   assignee: github-releaser-agent
+  #   image: bborbe/maintainer-agent-github-releaser
+  #   tag: ""
+  #   heartbeat: 5m
+  #   taskTypes: [github-release, healthcheck]
+  #   triggerStatuses: [in_progress]
+  #   triggerPhases: [planning, execution, ai_review]
+  #   env:                                 # no REVIEW_MODE / BOT_GITHUB_LOGIN for the releaser
+  #     CLAUDE_CONFIG_DIR: /home/claude/.claude
+  #     REPO_ALLOWLIST: ""
+  #     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
+  #     ANTHROPIC_MODEL: MiniMax-M2.7-highspeed
+  #     APP_ID: ""
+  #     INSTALLATION_ID: ""
+  #     TOPIC_PREFIX: develop
+  #   secretEnv:
+  #     SENTRY_DSN: ""
+  #     ANTHROPIC_AUTH_TOKEN: ""
+  #     PEM_KEY: ""
+  #   resources:
+  #     requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 5Gi}
+  #     limits: {cpu: 500m, memory: 1Gi, ephemeral-storage: 5Gi}
+  #   priorityValue: 500
+  #   concurrency: 3
