@@ -1,4 +1,4 @@
-ARG DOCKER_REGISTRY=docker.quant.benjamin-borbe.de:443
+ARG DOCKER_REGISTRY=docker.io
 FROM ${DOCKER_REGISTRY}/golang:1.26.4 AS build
 ARG BUILD_GIT_COMMIT=none
 ARG BUILD_DATE=unknown
