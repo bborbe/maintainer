@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.44.1
 
 - refactor: converge build to publish-only model — `make buca` publishes `docker.io/bborbe/maintainer-*:$(VERSION)`; k8s deploy machinery removed (moved to the maintainer Helm chart).
 
