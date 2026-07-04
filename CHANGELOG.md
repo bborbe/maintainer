@@ -8,6 +8,18 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.45.0
+
+- refactor: flatten the shared library to the repo root — `lib/` contents moved
+  to the repository root and the module renamed `github.com/bborbe/maintainer/lib`
+  → `github.com/bborbe/maintainer` (matches the `bborbe/agent` layout: lib at root
+  + `helm/` chart alongside). Consumers now import `github.com/bborbe/maintainer/…`
+  (drop the `/lib` segment). Removed the extracted service dirs (`agent/`,
+  `watcher/`) — they now live in their own repos (`github-pr-review-agent`,
+  `github-releaser-agent`, `github-build-watcher`, `github-pr-watcher`,
+  `github-release-watcher`). CI collapses from a 6-module matrix to a single
+  root module. This repo is now the shared lib module + the Helm chart only.
+
 ## v0.44.1
 
 - Add `helm/` — a Helm chart for the maintainer application (the app layer on top of the core `agent` chart): 3 watcher StatefulSets (github-build/-pr/-release, values-driven `watchers` list) + the 2 agents (pr-reviewer, github-releaser) as `agent.benjamin-borbe.de/v1` Config CRs (values-driven `agents` list → Config + Secret + PriorityClass + ResourceQuota). Requires the core chart's Config CRD; images default to public `docker.io/bborbe/maintainer-*`, per-cluster overrides via values.

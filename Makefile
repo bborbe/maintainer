@@ -1,1 +1,2 @@
-include Makefile.folder
+include Makefile.variables
+include Makefile.precommit
