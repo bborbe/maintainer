@@ -87,6 +87,16 @@ func NormalizeURLForTest(url string) string {
 	return normalizeURL(url)
 }
 
+// IsFailClosedReasonForTest exposes isFailClosedReason for unit testing.
+func IsFailClosedReasonForTest(reason string) bool {
+	return isFailClosedReason(reason)
+}
+
+// LastCharsForTest exposes lastChars for unit testing.
+func LastCharsForTest(s string, n int) string {
+	return lastChars(s, n)
+}
+
 // AppendDismissDiagnosticForTest exposes appendDismissDiagnostic to the
 // _test package.
 func AppendDismissDiagnosticForTest(md *agentlib.Markdown, result PostResult) {

@@ -301,6 +301,22 @@ func (s *checkoutExecutionStep) postAndRoute(
 	verdict := ParseVerdict(reviewBody)
 	summary := StripJSONVerdict(reviewBody)
 
+	// Diagnostic for the recurring false-CHANGES_REQUESTED symptom: a
+	// request-changes verdict produced by ParseVerdict fail-closing (empty /
+	// unparseable / no-verdict-block) on a review whose posted body looks like a
+	// clean approve. The raw reviewBody the parser saw is lost once this Job's
+	// pod is GC'd, so surface the reason + length + tail here — the next
+	// recurrence is then self-diagnosing from pod logs alone. Legitimate
+	// request-changes verdicts (model-authored reason) do NOT log.
+	if verdict.Verdict == VerdictRequestChanges && isFailClosedReason(verdict.Reason) {
+		glog.Warningf(
+			"pr-reviewer fail-closed to request-changes: reason=%q reviewBody_len=%d reviewBody_tail=%q",
+			verdict.Reason,
+			len(reviewBody),
+			lastChars(reviewBody, 300),
+		)
+	}
+
 	prInfo, earlyResult := s.resolvePRInfo(ctx, md, prURLStr, jobRunTime)
 	if earlyResult != nil {
 		return earlyResult, nil

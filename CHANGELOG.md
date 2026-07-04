@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat(agent/pr-reviewer): log a diagnostic when `postAndRoute` fail-closes to `request-changes`. When `ParseVerdict` returns `request-changes` with a fail-closed reason (`empty review text` / `no verdict block` / `malformed JSON:` / `unknown verdict:`), log a `glog.Warningf` with the reason, `reviewBody` length, and its last 300 chars — the raw review text the parser saw is otherwise lost once the Job pod is GC'd, making the recurring false-`CHANGES_REQUESTED` symptom undiagnosable after the fact. Legitimate (model-authored) `request-changes` verdicts do not log. Pure helpers `isFailClosedReason` + `lastChars` (rune-safe tail) added with table tests. No behavior change to verdict/event mapping.
+
 ## v0.43.0
 
 - feat(lib,watcher/github-pr,watcher/github-release,watcher/github-build,agent/pr-reviewer,agent/github-releaser)!: bump `github.com/bborbe/cqrs` to v0.6.0 and `github.com/bborbe/agent` to v0.72.0 — `cdb.SchemaID` topic-building methods (`.CommandTopic()` etc.), `cdb.BuildTopic`, `cdb.NewCommandObjectSender`, `cdb.RunCommandConsumerTxDefault`, and `agent.NewKafkaResultDeliverer` now take `base.TopicPrefix` instead of `base.Branch`, and cqrs no longer auto-remaps `dev`→`develop`/`prod`→`master`. Each binary's config gained an independent, optional `TopicPrefix base.TopicPrefix` field (`arg:"topic-prefix" env:"TOPIC_PREFIX"`), threaded into all topic-construction call sites; the existing `Branch`/`Stage` field is unchanged and still used for its non-topic purposes (image tags, stage filters, logging). `dev.env`/`prod.env` set `TOPIC_PREFIX=develop`/`TOPIC_PREFIX=master` to preserve the legacy Kafka topic names; each watcher/agent's k8s StatefulSet manifest gained a sibling `TOPIC_PREFIX` env entry alongside `STAGE`. Golden regression tests added per module locking down the exact topic strings for `develop`/`master`/empty prefixes.
