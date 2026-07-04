@@ -1,6 +1,4 @@
 include ../../../../Makefile.variables
-include ../../../../common.env
-include ../../../../local.env
 
 # cmd binaries are CLI tools (installed via `go install`), not k8s services.
 # Stub buca/apply so the parent Makefile.folder recursion succeeds as a no-op

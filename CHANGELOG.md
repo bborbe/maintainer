@@ -11,6 +11,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## Unreleased
 
 - Add `helm/` — a Helm chart for the maintainer application (the app layer on top of the core `agent` chart): 3 watcher StatefulSets (github-build/-pr/-release, values-driven `watchers` list) + the 2 agents (pr-reviewer, github-releaser) as `agent.benjamin-borbe.de/v1` Config CRs (values-driven `agents` list → Config + Secret + PriorityClass + ResourceQuota). Requires the core chart's Config CRD; images default to public `docker.io/bborbe/maintainer-*`, per-cluster overrides via values.
+- refactor: converge build to publish-only model — `make buca` publishes `docker.io/bborbe/maintainer-*:$(VERSION)`; k8s deploy machinery removed (moved to the maintainer Helm chart).
 
 ## v0.44.0
 
