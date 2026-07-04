@@ -26,3 +26,4 @@ main
 pkg.test
 vendor
 /.dark-factory/
+/vendor/
