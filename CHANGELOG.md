@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- Add `helm/` — a Helm chart for the maintainer application (the app layer on top of the core `agent` chart): 3 watcher StatefulSets (github-build/-pr/-release, values-driven `watchers` list) + the 2 agents (pr-reviewer, github-releaser) as `agent.benjamin-borbe.de/v1` Config CRs (values-driven `agents` list → Config + Secret + PriorityClass + ResourceQuota). Requires the core chart's Config CRD; images default to public `docker.io/bborbe/maintainer-*`, per-cluster overrides via values.
+
 ## v0.44.0
 
 - feat(agent/pr-reviewer): log a diagnostic when `postAndRoute` fail-closes to `request-changes`. When `ParseVerdict` returns `request-changes` with a fail-closed reason (`empty review text` / `no verdict block` / `malformed JSON:` / `unknown verdict:`), log a `glog.Warningf` with the reason, `reviewBody` length, and its last 300 chars — the raw review text the parser saw is otherwise lost once the Job pod is GC'd, making the recurring false-`CHANGES_REQUESTED` symptom undiagnosable after the fact. Legitimate (model-authored) `request-changes` verdicts do not log. Pure helpers `isFailClosedReason` + `lastChars` (rune-safe tail) added with table tests. No behavior change to verdict/event mapping.
