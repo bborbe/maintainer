@@ -32,21 +32,23 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 {{- define "maintainer.kafkaCertVolumes" -}}
 - name: client-cert
   secret:
-    defaultMode: 420
+    # 0440 (octal): owner+group read, no world read. Files are owned root:fsGroup,
+    # so the non-root pod (runAsUser+fsGroup) reads via group; 0400 would deny it.
+    defaultMode: 288
     secretName: {{ .clientSecret }}
     items:
       - key: user.crt
         path: file
 - name: client-key
   secret:
-    defaultMode: 420
+    defaultMode: 288
     secretName: {{ .clientSecret }}
     items:
       - key: user.key
         path: file
 - name: server-cert
   secret:
-    defaultMode: 420
+    defaultMode: 288
     secretName: {{ .caCertSecret }}
     items:
       - key: ca.crt
