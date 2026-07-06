@@ -6,7 +6,7 @@ description: >-
   of the core `agent` framework chart.
 type: application
 # Chart version — bumped on chart changes, independent of appVersion.
-version: 0.1.0
+version: 0.2.0
 # Default image tag for the maintainer components when a watcher/agent omits `tag`.
 appVersion: "0.44.0"
 home: https://github.com/bborbe/maintainer

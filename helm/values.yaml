@@ -59,9 +59,22 @@ watchers: []
   #   storage:
   #     size: 100Mi
   #     storageClassName: ""     # empty => cluster default StorageClass (portable)
+  #   # Per-watcher Strimzi KafkaUser + mTLS client-cert mounts. Off by default →
+  #   # plaintext, no CR, no cert volumes. When enabled: emits a KafkaUser CR
+  #   # (type: tls) in strimziNamespace AND mounts client cert/key + cluster CA at
+  #   # /client-cert/file, /client-key/file, /server-cert/file (set KAFKA_BROKERS
+  #   # to tls://…:9093). Secrets referenced by name only (Strimzi issues them; an
+  #   # external syncer places them in this namespace).
+  #   kafkaUser:
+  #     enabled: false
+  #     cluster: my-cluster
+  #     strimziNamespace: strimzi
+  #     userName: ""             # empty => derived "<namespace>-<watcher name>"
+  #     clientSecret: ""         # empty => same as the KafkaUser name
+  #     caCertSecret: my-cluster-cluster-ca-cert
   #   env:                       # plain container env vars
   #     LISTEN: ':9090'
-  #     KAFKA_BROKERS: my-cluster-kafka-bootstrap.strimzi:9092
+  #     KAFKA_BROKERS: my-cluster-kafka-bootstrap.strimzi:9092   # tls://…:9093 with kafkaUser
   #     STAGE: dev
   #     TOPIC_PREFIX: develop
   #     SENTRY_PROXY: ""
