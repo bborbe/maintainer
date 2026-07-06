@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.46.0
 
 - helm: optional mTLS Kafka support (default off) for the watchers. When `watchers[].kafkaUser.enabled: true` the chart emits a Strimzi `KafkaUser` CR (`type: tls`) in `strimziNamespace` AND mounts the client cert/key + cluster CA at the fixed `/client-cert/file`, `/client-key/file`, `/server-cert/file` paths that `github.com/bborbe/kafka` reads for `tls://` brokers. New per-watcher values `kafkaUser.{enabled,cluster,strimziNamespace,userName,clientSecret,caCertSecret}` (secrets referenced by name only — Strimzi issues them, an external syncer places them in the app namespace). Default renders byte-identical to before → plaintext clusters (quant) unaffected. Mirrors the `bborbe/agent` chart 0.4.0 change. Chart 0.1.0 → 0.2.0. Unblocks the Octopus per-stage-Strimzi (mTLS) watcher deploy.
 
