@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.47.0
 
 - Add `GithubDarkFactoryV1SchemaID` (`maintainer-githubdarkfactory-v1`) to the CQRS schema registry + `CDBSchemaIDs`, so `trading/strimzi/topic-controller` provisions the command topics for the github-dark-factory watcher's new `/trigger` command (manual force-into-pipeline, mirrors the pr-review/releaser/build trigger schemas).
 - repo health (unblocks precommit): bump Go 1.26.4→1.26.5 (`GO-2026-5856` stdlib), bump `golang.org/x/text` v0.38.0→v0.40.0 (+ `x/sync` v0.22.0) fixing trivy `CVE-2026-56852`, ignore no-fix `GO-2026-5932` (openpgp) in govulncheck + trivy, and drop the now-unused `.osv-scanner.toml` ignores (osv-scanner fails on unused entries).
