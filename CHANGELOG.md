@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- Add `GithubDarkFactoryV1SchemaID` (`maintainer-githubdarkfactory-v1`) to the CQRS schema registry + `CDBSchemaIDs`, so `trading/strimzi/topic-controller` provisions the command topics for the github-dark-factory watcher's new `/trigger` command (manual force-into-pipeline, mirrors the pr-review/releaser/build trigger schemas).
+- repo health (unblocks precommit): bump Go 1.26.4→1.26.5 (`GO-2026-5856` stdlib), bump `golang.org/x/text` v0.38.0→v0.40.0 (+ `x/sync` v0.22.0) fixing trivy `CVE-2026-56852`, ignore no-fix `GO-2026-5932` (openpgp) in govulncheck + trivy, and drop the now-unused `.osv-scanner.toml` ignores (osv-scanner fails on unused entries).
+
 ## v0.46.0
 
 - helm: optional mTLS Kafka support (default off) for the watchers. When `watchers[].kafkaUser.enabled: true` the chart emits a Strimzi `KafkaUser` CR (`type: tls`) in `strimziNamespace` AND mounts the client cert/key + cluster CA at the fixed `/client-cert/file`, `/client-key/file`, `/server-cert/file` paths that `github.com/bborbe/kafka` reads for `tls://` brokers. New per-watcher values `kafkaUser.{enabled,cluster,strimziNamespace,userName,clientSecret,caCertSecret}` (secrets referenced by name only — Strimzi issues them, an external syncer places them in the app namespace). Default renders byte-identical to before → plaintext clusters (quant) unaffected. Mirrors the `bborbe/agent` chart 0.4.0 change. Chart 0.1.0 → 0.2.0. Unblocks the Octopus per-stage-Strimzi (mTLS) watcher deploy.
