@@ -49,6 +49,20 @@ var _ = Describe("CDBSchema", func() {
 		})
 	})
 
+	Describe("GithubDarkFactoryV1SchemaID", func() {
+		It("has expected group/kind/version", func() {
+			Expect(lib.GithubDarkFactoryV1SchemaID.Group).To(Equal(cdb.Group("maintainer")))
+			Expect(lib.GithubDarkFactoryV1SchemaID.Kind).To(Equal(cdb.Kind("githubdarkfactory")))
+			Expect(lib.GithubDarkFactoryV1SchemaID.Version).To(Equal(cdb.Version("v1")))
+		})
+
+		It("serializes to canonical string", func() {
+			Expect(
+				lib.GithubDarkFactoryV1SchemaID.String(),
+			).To(Equal("maintainer-githubdarkfactory-v1"))
+		})
+	})
+
 	Describe("CDBSchemaIDs registry", func() {
 		It("contains GithubPRReviewV1SchemaID", func() {
 			Expect(lib.CDBSchemaIDs.Contains(lib.GithubPRReviewV1SchemaID)).To(BeTrue())
@@ -60,6 +74,10 @@ var _ = Describe("CDBSchema", func() {
 
 		It("contains GithubBuildV1SchemaID", func() {
 			Expect(lib.CDBSchemaIDs.Contains(lib.GithubBuildV1SchemaID)).To(BeTrue())
+		})
+
+		It("contains GithubDarkFactoryV1SchemaID", func() {
+			Expect(lib.CDBSchemaIDs.Contains(lib.GithubDarkFactoryV1SchemaID)).To(BeTrue())
 		})
 
 		It("has no duplicate entries", func() {

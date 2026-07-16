@@ -13,6 +13,7 @@ var CDBSchemaIDs = cdb.SchemaIDs{
 	GithubPRReviewV1SchemaID,
 	GithubReleaserV1SchemaID,
 	GithubBuildV1SchemaID,
+	GithubDarkFactoryV1SchemaID,
 }
 
 // GithubPRReviewV1SchemaID is the schema for the github-pr watcher's command
@@ -39,5 +40,15 @@ var GithubReleaserV1SchemaID = cdb.SchemaID{
 var GithubBuildV1SchemaID = cdb.SchemaID{
 	Group:   "maintainer",
 	Kind:    "githubbuild",
+	Version: "v1",
+}
+
+// GithubDarkFactoryV1SchemaID is the schema for the github-dark-factory
+// watcher's command topic. Carries Trigger-style commands consumed by the
+// watcher pod to force a draft PR (with an approved spec) into the
+// dark-factory-implement pipeline immediately, bypassing the poll interval.
+var GithubDarkFactoryV1SchemaID = cdb.SchemaID{
+	Group:   "maintainer",
+	Kind:    "githubdarkfactory",
 	Version: "v1",
 }
