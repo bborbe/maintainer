@@ -11,6 +11,8 @@ completed: "2026-06-03T17:37:05Z"
 branch: dark-factory/github-releaser-major-bump-guard
 ---
 
+> **⚠️ SUPERSEDED (2026-07-16) — escalate → clamp.** The escalate-on-disallowed-major behavior specified below was replaced by a **clamp to minor** in `github-releaser-agent` **v0.2.0** (the releaser code was extracted from this monorepo into the standalone repo `bborbe/github-releaser-agent`). When a `major` bump is not permitted (no `.maintainer.yaml` `release.allowMajorBump`, no `--allow-major`/`ALLOW_MAJOR`), the agent now **caps the bump to `minor` and ships** instead of returning `NeedsInput` — reversing this spec's Non-goal "Do NOT add an auto-downgrade major to minor fallback." Rationale: escalation stalled releases indefinitely (`Seibert-Data/teamvault-cli` sat at v5.9.1 for a day); "never stall the pipeline, cap at minor" now outweighs "human ack on every major." The `release.allowMajorBump` opt-in and the `--allow-major` flag still mean "full range, no clamp"; the pre-1.0 cap is unchanged. Two layers: a runtime-injected prompt policy tells the classifier not to return `major`, and the planning code clamps deterministically. Tracking: Personal task `[[github-releaser clamp disallowed major bump to minor]]`. This spec is retained as the historical record of the original guard.
+
 ## Summary
 
 - Add a guard that blocks the github-releaser-agent from auto-releasing a **major** semver bump unless the repo has explicitly opted in. Default: blocked.
