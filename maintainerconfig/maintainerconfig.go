@@ -75,10 +75,24 @@ type MaintainerConfig struct {
 // planning step is responsible for surfacing the error as
 // `error_category=invalid_config`. See spec 060 § Desired Behavior 1 and
 // § Goal.
+//
+// AllowFork only has meaning when the repo carrying this config is itself a
+// fork. The github-release-watcher currently drops forked repos during repo
+// listing, upstream of this config being read at all, so a fork with
+// `autoRelease: true` never releases. AllowFork is the fix's per-repo half:
+// once the watcher stops filtering forks, it will additionally require
+// AllowFork=true before treating a fork as release-eligible. Default false
+// (field absent, or `.maintainer.yaml` absent) so a `.maintainer.yaml`
+// INHERITED from forking a repo that already sets `autoRelease: true` does
+// not silently start auto-tagging the fork — the fork owner must opt in
+// explicitly. Non-boolean values fail at parse time like the other fields.
 type ReleaseConfig struct {
 	AutoRelease      bool `yaml:"autoRelease"`
 	ChangelogRewrite bool `yaml:"changelogRewrite"`
 	AllowMajorBump   bool `yaml:"allowMajorBump"`
+	// AllowFork opts a forked repo into auto-release eligibility. See the
+	// field-group doc comment above for why this defaults closed.
+	AllowFork bool `yaml:"allowFork"`
 }
 
 // PrReviewerConfig is the `prReviewer:` namespace. AutoApprove=true means

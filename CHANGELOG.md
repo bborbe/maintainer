@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- `maintainerconfig`: add `release.allowFork` bool to `ReleaseConfig` — per-repo opt-in so the upcoming github-release-watcher fork-support change doesn't silently auto-tag a fork that inherited `autoRelease: true` from the repo it forked. Defaults false (field or file absent). Schema-only in this repo; the watcher's fork-listing half ships in a follow-up.
+
 ## v0.47.0
 
 - Add `GithubDarkFactoryV1SchemaID` (`maintainer-githubdarkfactory-v1`) to the CQRS schema registry + `CDBSchemaIDs`, so `trading/strimzi/topic-controller` provisions the command topics for the github-dark-factory watcher's new `/trigger` command (manual force-into-pipeline, mirrors the pr-review/releaser/build trigger schemas).
