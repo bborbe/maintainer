@@ -114,6 +114,35 @@ var _ = Describe("Parse", func() {
 				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
 				Release:    maintainerconfig.ReleaseConfig{AllowMajorBump: false},
 			}),
+		Entry("release.allowFork: true -> AllowFork true",
+			"release:\n  allowFork: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AllowFork: true,
+				},
+			}),
+		Entry("release: present but no allowFork field -> AllowFork false (default)",
+			"release:\n  autoRelease: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease: true,
+					AllowFork:   false,
+				},
+			}),
+		Entry("release.autoRelease: true and release.allowFork: true -> both true (fork opted in)",
+			"release:\n  autoRelease: true\n  allowFork: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease: true,
+					AllowFork:   true,
+				},
+			}),
+		Entry("no release: block -> AllowFork false",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				Release:    maintainerconfig.ReleaseConfig{AllowFork: false},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {
@@ -151,6 +180,15 @@ var _ = Describe("Parse", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 		Expect(err.Error()).To(ContainSubstring("not found"))
+	})
+
+	It("ParseStrict accepts release.allowFork now that the field exists", func() {
+		cfg, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("release:\n  allowFork: true\n"),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.Release.AllowFork).To(BeTrue())
 	})
 
 	It("ParseStrict rejects typo in top-level prReviewer key", func() {
@@ -194,6 +232,18 @@ var _ = Describe("Parse", func() {
 		cfg, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("release:\n  allowMajorBump: \"foo\"\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("release.allowFork: non-bool -> wrapped error", func() {
+		// Same YAML-truthy-coercion caveat as allowMajorBump above — "foo"
+		// is the non-truthy string that the type system actually rejects.
+		cfg, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("release:\n  allowFork: \"foo\"\n"),
 		)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
