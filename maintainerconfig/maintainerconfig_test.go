@@ -129,6 +129,14 @@ var _ = Describe("Parse", func() {
 					AllowFork:   false,
 				},
 			}),
+		Entry("release.autoRelease: true and release.allowFork: true -> both true (fork opted in)",
+			"release:\n  autoRelease: true\n  allowFork: true\n",
+			maintainerconfig.MaintainerConfig{
+				Release: maintainerconfig.ReleaseConfig{
+					AutoRelease: true,
+					AllowFork:   true,
+				},
+			}),
 		Entry("no release: block -> AllowFork false",
 			"prReviewer:\n  autoApprove: true\n",
 			maintainerconfig.MaintainerConfig{
@@ -224,6 +232,18 @@ var _ = Describe("Parse", func() {
 		cfg, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("release:\n  allowMajorBump: \"foo\"\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("release.allowFork: non-bool -> wrapped error", func() {
+		// Same YAML-truthy-coercion caveat as allowMajorBump above — "foo"
+		// is the non-truthy string that the type system actually rejects.
+		cfg, err := maintainerconfig.Parse(
+			ctx,
+			[]byte("release:\n  allowFork: \"foo\"\n"),
 		)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
