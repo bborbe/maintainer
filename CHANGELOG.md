@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.48.0
 
 - `maintainerconfig`: add `release.allowFork` bool to `ReleaseConfig` — per-repo opt-in so the upcoming github-release-watcher fork-support change doesn't silently auto-tag a fork that inherited `autoRelease: true` from the repo it forked. Defaults false (field or file absent). Schema-only in this repo; the watcher's fork-listing half ships in a follow-up.
 - repo health (unblocks precommit): bump `github.com/klauspost/compress` v1.18.6→v1.18.7 fixing govulncheck `GO-2026-5841` (OOB read in `s2`).
