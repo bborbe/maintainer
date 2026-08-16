@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.49.0
 
 - `maintainerconfig`: `ParseStrict` now ignores unknown top-level namespaces instead of rejecting them, so a repo adopting a newer bot's namespace no longer breaks binaries built before that namespace existed. Typos INSIDE a known namespace stay fatal, which is the property `ParseStrict` exists for. Fixes a silent prod wedge: adding `goUpdate:` to two repos made the deployed github-releaser-agent fail planning with `field goUpdate not found`, clearing the task assignee so the release never tagged and never retried. Trade-off: a misspelled namespace is now indistinguishable from a newer one, so both are ignored and logged at WARNING.
 
