@@ -143,6 +143,27 @@ var _ = Describe("Parse", func() {
 				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
 				Release:    maintainerconfig.ReleaseConfig{AllowFork: false},
 			}),
+		Entry("goUpdate.autoUpdate: true -> GoUpdate.AutoUpdate true",
+			"goUpdate:\n  autoUpdate: true\n",
+			maintainerconfig.MaintainerConfig{
+				GoUpdate: maintainerconfig.GoUpdateConfig{AutoUpdate: true},
+			}),
+		Entry("goUpdate.autoUpdate: false -> GoUpdate.AutoUpdate false",
+			"goUpdate:\n  autoUpdate: false\n",
+			maintainerconfig.MaintainerConfig{
+				GoUpdate: maintainerconfig.GoUpdateConfig{AutoUpdate: false},
+			}),
+		Entry("no goUpdate: block -> GoUpdate.AutoUpdate false",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				GoUpdate:   maintainerconfig.GoUpdateConfig{AutoUpdate: false},
+			}),
+		Entry("empty bytes -> GoUpdate.AutoUpdate false (file absent equivalent)",
+			"",
+			maintainerconfig.MaintainerConfig{
+				GoUpdate: maintainerconfig.GoUpdateConfig{AutoUpdate: false},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {

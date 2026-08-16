@@ -10,6 +10,8 @@
 //	  autoRelease: true     # github-release watcher gate
 //	prReviewer:
 //	  autoApprove: true     # pr-reviewer agent gate
+//	goUpdate:
+//	  autoUpdate: true      # github-update-go-watcher gate
 //
 // Adding the next bot (build-fix, dep-pin, …) is a one-field edit to
 // MaintainerConfig — every consumer imports this one type, so there is
@@ -47,6 +49,8 @@ type MaintainerConfig struct {
 	Release ReleaseConfig `yaml:"release"`
 	// PrReviewer is the pr-reviewer agent namespace.
 	PrReviewer PrReviewerConfig `yaml:"prReviewer"`
+	// GoUpdate is the github-update-go-watcher namespace.
+	GoUpdate GoUpdateConfig `yaml:"goUpdate"`
 }
 
 // ReleaseConfig is the `release:` namespace. AutoRelease=true is the ONLY
@@ -100,6 +104,16 @@ type ReleaseConfig struct {
 // comment-only.
 type PrReviewerConfig struct {
 	AutoApprove bool `yaml:"autoApprove"`
+}
+
+// GoUpdateConfig is the `goUpdate:` namespace. AutoUpdate=true is the
+// per-repo consent flag the github-update-go-watcher gates on before
+// opening a Go-version-bump PR — the same trust-gate shape as
+// ReleaseConfig.AutoRelease. A repo with no `.maintainer.yaml`, no
+// `goUpdate:` block, or `autoUpdate` absent/false all read as false
+// (opt-in, not opt-out).
+type GoUpdateConfig struct {
+	AutoUpdate bool `yaml:"autoUpdate"`
 }
 
 // Parse unmarshals a `.maintainer.yaml` document leniently (unknown fields

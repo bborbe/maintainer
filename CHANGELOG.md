@@ -8,6 +8,11 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- `maintainerconfig`: add `goUpdate.autoUpdate` bool to a new `GoUpdateConfig`, following the existing `ReleaseConfig`/`PrReviewerConfig` shape — the per-repo consent flag the upcoming github-update-go-watcher gates on. Defaults false (key, section, or file absent all read false). Schema-only in this repo; the watcher itself ships as a follow-up.
+- repo health (unblocks precommit): bump `golang.org/x/mod` v0.37.0→v0.40.0 fixing govulncheck `GO-2026-6179`/`GO-2026-6180` (transparency log tile verification bypass / unauthenticated hash lookup), bump Go 1.26.5→1.26.6 fixing stdlib `GO-2026-5026`/`GO-2026-5972`/`GO-2026-6090`.
+
 ## v0.48.0
 
 - `maintainerconfig`: add `release.allowFork` bool to `ReleaseConfig` — per-repo opt-in so the upcoming github-release-watcher fork-support change doesn't silently auto-tag a fork that inherited `autoRelease: true` from the repo it forked. Defaults false (field or file absent). Schema-only in this repo; the watcher's fork-listing half ships in a follow-up.
