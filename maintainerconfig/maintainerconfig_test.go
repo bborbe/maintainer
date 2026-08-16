@@ -182,13 +182,41 @@ var _ = Describe("Parse", func() {
 		Expect(cfg.PrReviewer.AutoApprove).To(BeTrue())
 	})
 
-	It("ParseStrict rejects unknown top-level field", func() {
-		_, err := maintainerconfig.ParseStrict(
+	It("ParseStrict ignores an unknown top-level namespace and still reads known ones", func() {
+		// Forward compatibility. A repo may adopt a namespace belonging to a
+		// bot this binary predates; that must not fail the parse, because the
+		// binary reading it may not be rebuilt for days. Rejecting this wedged
+		// two repos' releases on 2026-08-16 when `goUpdate:` was introduced.
+		cfg, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("build-fix:\n  enabled: true\nprReviewer:\n  autoApprove: true\n"),
 		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.PrReviewer.AutoApprove).To(BeTrue())
+	})
+
+	It("ParseStrict ignores the goUpdate namespace on a binary that predates it", func() {
+		// The exact document that broke github-releaser-agent in prod.
+		cfg, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte(
+				"release:\n  autoRelease: true\n  changelogRewrite: false\nprReviewer:\n  autoApprove: true\ngoUpdate:\n  autoUpdate: true\n",
+			),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.Release.AutoRelease).To(BeTrue())
+		Expect(cfg.PrReviewer.AutoApprove).To(BeTrue())
+	})
+
+	It("ParseStrict still rejects a typo inside a known namespace", func() {
+		// The property ParseStrict exists for must survive the change above:
+		// forward compatibility applies to unknown NAMESPACES, never to
+		// unknown keys inside a namespace this binary owns.
+		_, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("build-fix:\n  enabled: true\nrelease:\n  autoReleese: true\n"),
+		)
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 		Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 
@@ -212,13 +240,19 @@ var _ = Describe("Parse", func() {
 		Expect(cfg.Release.AllowFork).To(BeTrue())
 	})
 
-	It("ParseStrict rejects typo in top-level prReviewer key", func() {
-		_, err := maintainerconfig.ParseStrict(
+	It("ParseStrict no longer rejects a typo'd top-level namespace", func() {
+		// The accepted cost of forward compatibility, pinned so it is a
+		// decision rather than a surprise: a misspelled NAMESPACE is
+		// indistinguishable from one belonging to a newer bot, so it is
+		// ignored instead of fatal, and the gate it meant to set stays false.
+		// It is logged at WARNING so the typo is still discoverable.
+		// Typos INSIDE a known namespace remain fatal — asserted above.
+		cfg, err := maintainerconfig.ParseStrict(
 			ctx,
 			[]byte("prRevierer:\n  autoApprove: true\n"),
 		)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.PrReviewer.AutoApprove).To(BeFalse())
 	})
 
 	It("release.changelogRewrite: non-bool string value -> wrapped error", func() {
