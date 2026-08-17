@@ -10,21 +10,31 @@
 //	  autoRelease: true     # github-release watcher gate
 //	prReviewer:
 //	  autoApprove: true     # pr-reviewer agent gate
+//	goUpdate:
+//	  autoUpdate: true      # github-update-go-watcher gate
 //
 // Adding the next bot (build-fix, dep-pin, …) is a one-field edit to
 // MaintainerConfig — every consumer imports this one type, so there is
 // never a divergent copy of the file's shape.
 //
-// Unknown fields (top-level OR nested) are REJECTED at parse time
-// (yaml.NewDecoder + KnownFields(true)). This catches typos like
-// `changelogRwrite` or `prRevierer` that would otherwise produce a
-// silent default-false config — a high-trust .maintainer.yaml is
-// load-bearing for release gating, so a typo must fail loudly. To
-// add a new bot's namespace, extend MaintainerConfig with the new
-// field FIRST (one PR), then deploy the bot (next PR); the brief
-// window between the two is the only time a forward-incompat
-// .maintainer.yaml would error, and it errors loudly rather than
-// silently downgrading.
+// Typos in a KNOWN namespace are REJECTED by ParseStrict (`changelogRwrite`
+// inside `release:`), because a high-trust .maintainer.yaml is load-bearing for
+// release gating and a typo must fail loudly rather than produce a silent
+// default-false config.
+//
+// UNKNOWN top-level namespaces are IGNORED, even by ParseStrict. This is
+// forward compatibility, and it is not optional: one schema is read by several
+// independently-deployed binaries, so a repo adopting a new bot's namespace
+// must not break the bots that have not been rebuilt yet.
+//
+// This package previously rejected unknown top-level keys too, on the
+// assumption that "add the field, then deploy the bot" left only a brief
+// incompatible window. It does not. The window lasts until every consumer is
+// rebuilt AND redeployed, and until then the failure is severe and quiet:
+// on 2026-08-16, adding `goUpdate:` to two repos made the deployed
+// github-releaser-agent fail its planning step with
+// `field goUpdate not found`, which cleared the task's assignee and wedged the
+// release. No tag, no retry, no alert — the repo simply stopped releasing.
 //
 // Parse does NO I/O — fetching the bytes is each consumer's job (the
 // watcher fetches via the GitHub API; the agent reads the cloned workDir
@@ -34,8 +44,11 @@ package maintainerconfig
 import (
 	"bytes"
 	"context"
+	"reflect"
+	"strings"
 
 	"github.com/bborbe/errors"
+	"github.com/golang/glog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -47,6 +60,8 @@ type MaintainerConfig struct {
 	Release ReleaseConfig `yaml:"release"`
 	// PrReviewer is the pr-reviewer agent namespace.
 	PrReviewer PrReviewerConfig `yaml:"prReviewer"`
+	// GoUpdate is the github-update-go-watcher namespace.
+	GoUpdate GoUpdateConfig `yaml:"goUpdate"`
 }
 
 // ReleaseConfig is the `release:` namespace. AutoRelease=true is the ONLY
@@ -102,6 +117,16 @@ type PrReviewerConfig struct {
 	AutoApprove bool `yaml:"autoApprove"`
 }
 
+// GoUpdateConfig is the `goUpdate:` namespace. AutoUpdate=true is the
+// per-repo consent flag the github-update-go-watcher gates on before
+// opening a Go-version-bump PR — the same trust-gate shape as
+// ReleaseConfig.AutoRelease. A repo with no `.maintainer.yaml`, no
+// `goUpdate:` block, or `autoUpdate` absent/false all read as false
+// (opt-in, not opt-out).
+type GoUpdateConfig struct {
+	AutoUpdate bool `yaml:"autoUpdate"`
+}
+
 // Parse unmarshals a `.maintainer.yaml` document leniently (unknown fields
 // are silently ignored). Pure data extraction — no I/O. Empty input returns
 // a zero-value MaintainerConfig with nil error. Malformed YAML returns a
@@ -117,10 +142,16 @@ func Parse(ctx context.Context, content []byte) (MaintainerConfig, error) {
 }
 
 // ParseStrict unmarshals a `.maintainer.yaml` document with `KnownFields(true)`
-// so any unrecognized top-level or nested key produces a wrapped error.
-// Use this when the caller wants typos like `changelogRwrite` to fail loudly
-// (e.g. the github-releaser planning step where a silent zero-value would
-// disable the rewrite pipeline without operator signal).
+// applied to the namespaces this binary knows, so an unrecognized key INSIDE a
+// known namespace produces a wrapped error. Use this when the caller wants
+// typos like `changelogRwrite` to fail loudly (e.g. the github-releaser
+// planning step where a silent zero-value would disable the rewrite pipeline
+// without operator signal).
+//
+// Unknown top-level namespaces are ignored rather than rejected — see the
+// package doc for why that is required, and for the failure it prevents. The
+// cost is that a misspelled namespace is indistinguishable from a newer one;
+// both are ignored, and both are logged at WARNING.
 //
 // The lib's lenient Parse remains the default for fleet readers (watcher).
 func ParseStrict(ctx context.Context, content []byte) (MaintainerConfig, error) {
@@ -140,6 +171,19 @@ func parseInternal(
 		// short-circuit keeps the contract crisp.
 		return cfg, nil
 	}
+	if strict {
+		// Drop namespaces this binary does not know about BEFORE the strict
+		// decode. KnownFields(true) cannot distinguish "typo inside release:"
+		// from "namespace added by a newer schema", and conflating those makes
+		// every additive schema change a fleet-wide outage. Filtering first
+		// keeps typos inside known namespaces fatal, which is the property
+		// ParseStrict exists for.
+		filtered, err := dropUnknownNamespaces(ctx, content)
+		if err != nil {
+			return MaintainerConfig{}, err
+		}
+		content = filtered
+	}
 	dec := yaml.NewDecoder(bytes.NewReader(content))
 	if strict {
 		dec.KnownFields(true)
@@ -148,4 +192,55 @@ func parseInternal(
 		return MaintainerConfig{}, errors.Wrap(ctx, err, "unmarshal .maintainer.yaml")
 	}
 	return cfg, nil
+}
+
+// dropUnknownNamespaces removes top-level keys that MaintainerConfig does not
+// declare, so a document written against a newer schema still parses here.
+// Values are round-tripped as yaml.Node, which preserves the nested content
+// verbatim for the strict decode that follows.
+func dropUnknownNamespaces(ctx context.Context, content []byte) ([]byte, error) {
+	var raw map[string]yaml.Node
+	if err := yaml.Unmarshal(content, &raw); err != nil {
+		return nil, errors.Wrap(ctx, err, "unmarshal .maintainer.yaml")
+	}
+	known := knownNamespaces()
+	for key := range raw {
+		if _, ok := known[key]; ok {
+			continue
+		}
+		// Warning, not V(2). This is the one downside of tolerating unknown
+		// namespaces: a misspelled one (`prRevierer:`) is now indistinguishable
+		// from a genuinely newer one, so neither fails the parse. Logging it
+		// loudly is what keeps a typo discoverable. Volume is low — only the
+		// strict path filters, and that runs once per release, not per fleet
+		// scan (the watcher uses lenient Parse, which never reaches here).
+		glog.Warningf(
+			"ignoring unknown .maintainer.yaml namespace %q — either a newer schema than this binary, or a typo",
+			key,
+		)
+		delete(raw, key)
+	}
+	data, err := yaml.Marshal(raw)
+	if err != nil {
+		return nil, errors.Wrap(ctx, err, "marshal filtered .maintainer.yaml")
+	}
+	return data, nil
+}
+
+// knownNamespaces reads the yaml tags off MaintainerConfig rather than
+// hardcoding a list, so adding a namespace stays a one-field edit.
+func knownNamespaces() map[string]struct{} {
+	t := reflect.TypeOf(MaintainerConfig{})
+	out := make(map[string]struct{}, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("yaml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name, _, _ := strings.Cut(tag, ",")
+		if name != "" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
 }

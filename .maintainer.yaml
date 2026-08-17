@@ -18,3 +18,5 @@ prReviewer:
   autoApprove: true
 release:
   autoRelease: true
+goUpdate:
+  autoUpdate: true
