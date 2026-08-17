@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- chore: update module dependencies — `github.com/bborbe/cqrs` v0.6.0 -> v0.6.6, `github.com/bborbe/errors` v1.5.13 -> v1.5.17, `github.com/bradleyfalzon/ghinstallation/v2` v2.18.0 -> v2.19.0, `github.com/onsi/ginkgo/v2` v2.32.0 -> v2.32.1, and transitive bborbe modules; `github.com/IBM/sarama` v1.50.3 -> v1.60.1 (indirect)
+
 ## v0.49.0
 
 - `maintainerconfig`: `ParseStrict` now ignores unknown top-level namespaces instead of rejecting them, so a repo adopting a newer bot's namespace no longer breaks binaries built before that namespace existed. Typos INSIDE a known namespace stay fatal, which is the property `ParseStrict` exists for. Fixes a silent prod wedge: adding `goUpdate:` to two repos made the deployed github-releaser-agent fail planning with `field goUpdate not found`, clearing the task assignee so the release never tagged and never retried. Trade-off: a misspelled namespace is now indistinguishable from a newer one, so both are ignored and logged at WARNING.
