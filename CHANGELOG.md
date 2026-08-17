@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- repo health (unblocks precommit): bump Go 1.26.5→1.26.6 (`GO-2026-5856` stdlib), bump `golang.org/x/mod` v0.37.0→v0.40.0 fixing govulncheck `GO-2026-6179` + `GO-2026-6180`.
+
 ## v0.48.0
 
 - `maintainerconfig`: add `release.allowFork` bool to `ReleaseConfig` — per-repo opt-in so the upcoming github-release-watcher fork-support change doesn't silently auto-tag a fork that inherited `autoRelease: true` from the repo it forked. Defaults false (field or file absent). Schema-only in this repo; the watcher's fork-listing half ships in a follow-up.
