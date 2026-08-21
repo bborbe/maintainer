@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- chore: Reorder `format` target so `gofmt -w` runs last (after golines), and bump `GOLANGCI_LINT_VERSION` v2.12.2→v2.13.1 + `ERRCHECK_VERSION` v1.10.0→v1.20.0 in tools.env for Go 1.27 toolchain compatibility
+
 ## v0.49.1
 
 - chore: update module dependencies — `github.com/bborbe/cqrs` v0.6.0 -> v0.6.6, `github.com/bborbe/errors` v1.5.13 -> v1.5.17, `github.com/bradleyfalzon/ghinstallation/v2` v2.18.0 -> v2.19.0, `github.com/onsi/ginkgo/v2` v2.32.0 -> v2.32.1, and transitive bborbe modules; `github.com/IBM/sarama` v1.50.3 -> v1.60.1 (indirect)
