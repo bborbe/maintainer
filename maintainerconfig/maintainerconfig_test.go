@@ -164,6 +164,17 @@ var _ = Describe("Parse", func() {
 			maintainerconfig.MaintainerConfig{
 				GoUpdate: maintainerconfig.GoUpdateConfig{AutoUpdate: false},
 			}),
+		Entry("autoMerge.trivial: true -> Trivial true",
+			"autoMerge:\n  trivial: true\n",
+			maintainerconfig.MaintainerConfig{
+				AutoMerge: maintainerconfig.AutoMergeConfig{Trivial: true},
+			}),
+		Entry("autoMerge absent -> Trivial false",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				AutoMerge:  maintainerconfig.AutoMergeConfig{Trivial: false},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {
@@ -299,6 +310,20 @@ var _ = Describe("Parse", func() {
 		cfg, err := maintainerconfig.Parse(
 			ctx,
 			[]byte("release:\n  allowFork: \"foo\"\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("autoMerge.trivial: non-bool -> strict error", func() {
+		// Same YAML-truthy-coercion caveat as allowMajorBump above — "foo"
+		// is the non-truthy string that the type system actually rejects.
+		// yaml.v3 does not emit field paths in its error, so assert only on
+		// the wrapped "unmarshal .maintainer.yaml" prefix.
+		cfg, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("autoMerge:\n  trivial: \"foo\"\n"),
 		)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))

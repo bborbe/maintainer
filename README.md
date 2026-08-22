@@ -43,7 +43,7 @@ Imported by all five services. Packages:
 | `githubapp` | GitHub App auth (installation tokens from an App ID + PEM) |
 | `repoallowlist` | `REPO_ALLOWLIST` parsing + host-qualified include/exclude matching |
 | `prurl` | Platform-agnostic PR URL parser (GitHub / Bitbucket) |
-| `maintainerconfig` | `.maintainer.yaml` parsing (`prReviewer.autoApprove`, `release.autoRelease`, `release.allowMajorBump`) |
+| `maintainerconfig` | `.maintainer.yaml` parsing (`prReviewer.autoApprove`, `release.autoRelease`, `release.allowMajorBump`, `goUpdate.autoUpdate`, `autoMerge.trivial`) |
 | (root) | shared CQRS/CDB task schema helpers |
 
 ```bash
@@ -72,6 +72,10 @@ release:
   allowMajorBump: false  # github-releaser-agent needs explicit opt-in for major bumps
 prReviewer:
   autoApprove: true      # github-pr-review-agent's APPROVE counts toward the merge gate
+goUpdate:
+  autoUpdate: true       # github-update-go-watcher may open a Go-version-bump PR
+autoMerge:
+  trivial: true          # github-pr-watcher may auto-merge trivial PRs
 ```
 
 ## Build

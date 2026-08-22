@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat: add `autoMerge.trivial` per-repo opt-in gate to `maintainerconfig` — new `AutoMergeConfig` namespace so the github-pr-watcher trivial-classifier can gate trivial-PR auto-merge on repo consent; defaults `false` (field, block, or file absent all read false).
+
 ## v0.49.2
 
 - chore: Reorder `format` target so `gofmt -w` runs last (after golines), and bump `GOLANGCI_LINT_VERSION` v2.12.2→v2.13.1 + `ERRCHECK_VERSION` v1.10.0→v1.20.0 in tools.env for Go 1.27 toolchain compatibility

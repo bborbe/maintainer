@@ -12,6 +12,8 @@
 //	  autoApprove: true     # pr-reviewer agent gate
 //	goUpdate:
 //	  autoUpdate: true      # github-update-go-watcher gate
+//	autoMerge:
+//	  trivial: true         # github-pr-watcher trivial auto-merge gate
 //
 // Adding the next bot (build-fix, dep-pin, …) is a one-field edit to
 // MaintainerConfig — every consumer imports this one type, so there is
@@ -62,6 +64,8 @@ type MaintainerConfig struct {
 	PrReviewer PrReviewerConfig `yaml:"prReviewer"`
 	// GoUpdate is the github-update-go-watcher namespace.
 	GoUpdate GoUpdateConfig `yaml:"goUpdate"`
+	// AutoMerge is the github-pr-watcher trivial auto-merge namespace.
+	AutoMerge AutoMergeConfig `yaml:"autoMerge"`
 }
 
 // ReleaseConfig is the `release:` namespace. AutoRelease=true is the ONLY
@@ -125,6 +129,16 @@ type PrReviewerConfig struct {
 // (opt-in, not opt-out).
 type GoUpdateConfig struct {
 	AutoUpdate bool `yaml:"autoUpdate"`
+}
+
+// AutoMergeConfig is the `autoMerge:` namespace. Trivial=true is the
+// per-repo opt-in consent flag the github-pr-watcher trivial-classifier
+// gates auto-merge on before merging a trivial PR — the same trust-gate
+// shape as GoUpdateConfig.AutoUpdate. A repo with no `.maintainer.yaml`,
+// no `autoMerge:` block, or `trivial` absent/false all read as false
+// (opt-in, not opt-out).
+type AutoMergeConfig struct {
+	Trivial bool `yaml:"trivial"`
 }
 
 // Parse unmarshals a `.maintainer.yaml` document leniently (unknown fields
