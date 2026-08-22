@@ -8,7 +8,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
-## Unreleased
+## v0.50.0
 
 - feat: add `autoMerge.trivial` per-repo opt-in gate to `maintainerconfig` — new `AutoMergeConfig` namespace so the github-pr-watcher trivial-classifier can gate trivial-PR auto-merge on repo consent; defaults `false` (field, block, or file absent all read false).
 
