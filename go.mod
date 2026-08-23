@@ -16,18 +16,18 @@ require (
 	github.com/IBM/sarama v1.60.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/bborbe/collection v1.20.23 // indirect
-	github.com/bborbe/http v1.26.23 // indirect
+	github.com/bborbe/http v1.26.24 // indirect
 	github.com/bborbe/k8s v1.14.11 // indirect
 	github.com/bborbe/kafka v1.25.9 // indirect
 	github.com/bborbe/kv v1.21.11 // indirect
-	github.com/bborbe/log v1.6.23 // indirect
+	github.com/bborbe/log v1.6.24 // indirect
 	github.com/bborbe/math v1.3.21 // indirect
 	github.com/bborbe/parse v1.10.21 // indirect
 	github.com/bborbe/run v1.9.37 // indirect
 	github.com/bborbe/sentry v1.9.26 // indirect
 	github.com/bborbe/strimzi v1.8.14 // indirect
 	github.com/bborbe/time v1.27.10 // indirect
-	github.com/bborbe/validation v1.4.21 // indirect
+	github.com/bborbe/validation v1.4.22 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
