@@ -15,18 +15,18 @@ require (
 require (
 	github.com/IBM/sarama v1.60.2 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/bborbe/collection v1.20.25 // indirect
+	github.com/bborbe/collection v1.20.26 // indirect
 	github.com/bborbe/http v1.26.25 // indirect
 	github.com/bborbe/k8s v1.14.17 // indirect
 	github.com/bborbe/kafka v1.25.11 // indirect
-	github.com/bborbe/kv v1.21.12 // indirect
+	github.com/bborbe/kv v1.21.13 // indirect
 	github.com/bborbe/log v1.6.25 // indirect
 	github.com/bborbe/math v1.4.8 // indirect
-	github.com/bborbe/parse v1.11.0 // indirect
+	github.com/bborbe/parse v1.11.1 // indirect
 	github.com/bborbe/run v1.10.2 // indirect
-	github.com/bborbe/sentry v1.10.0 // indirect
+	github.com/bborbe/sentry v1.10.1 // indirect
 	github.com/bborbe/strimzi v1.8.16 // indirect
-	github.com/bborbe/time v1.27.11 // indirect
+	github.com/bborbe/time v1.27.12 // indirect
 	github.com/bborbe/validation v1.4.23 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
