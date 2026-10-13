@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/bborbe/cqrs v0.6.10
@@ -109,4 +109,6 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-exclude sigs.k8s.io/structured-merge-diff/v7 v7.0.0
+exclude (
+	sigs.k8s.io/structured-merge-diff/v7 v7.0.0
+)
