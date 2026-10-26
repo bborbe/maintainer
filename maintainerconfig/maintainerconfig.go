@@ -14,6 +14,11 @@
 //	  autoUpdate: true      # github-update-go-watcher gate
 //	autoMerge:
 //	  trivial: true         # github-pr-watcher trivial auto-merge gate
+//	dockerBuild:
+//	  autoBuild: true       # release-triggered image build gate
+//	  destinations:         # named destination classes, not registry URLs
+//	    - dockerhub
+//	    - internal
 //
 // Adding the next bot (build-fix, dep-pin, …) is a one-field edit to
 // MaintainerConfig — every consumer imports this one type, so there is
@@ -66,6 +71,8 @@ type MaintainerConfig struct {
 	GoUpdate GoUpdateConfig `yaml:"goUpdate"`
 	// AutoMerge is the github-pr-watcher trivial auto-merge namespace.
 	AutoMerge AutoMergeConfig `yaml:"autoMerge"`
+	// DockerBuild is the release-triggered image build namespace.
+	DockerBuild DockerBuildConfig `yaml:"dockerBuild"`
 }
 
 // ReleaseConfig is the `release:` namespace. AutoRelease=true is the ONLY
@@ -139,6 +146,24 @@ type GoUpdateConfig struct {
 // (opt-in, not opt-out).
 type AutoMergeConfig struct {
 	Trivial bool `yaml:"trivial"`
+}
+
+// DockerBuildConfig is the `dockerBuild:` namespace. AutoBuild=true is the
+// per-repo consent flag a release-triggered image builder gates on before
+// building and publishing an image — the same trust-gate shape as
+// GoUpdateConfig.AutoUpdate. A repo with no `.maintainer.yaml`, no
+// `dockerBuild:` block, or `autoBuild` absent/false all read as false
+// (opt-in, not opt-out).
+//
+// Destinations holds NAMED CLASSES (`dockerhub`, `ghcr`, `internal`), not
+// registry URLs. The builder resolves a class name to a concrete registry, so
+// moving a registry is one code change rather than a fleet-wide edit. The list
+// is deliberately a slice: the target shape publishes one image to more than
+// one class (agent images → `dockerhub` + `internal`), even though the current
+// build arm renders one destination per Job.
+type DockerBuildConfig struct {
+	AutoBuild    bool     `yaml:"autoBuild"`
+	Destinations []string `yaml:"destinations"`
 }
 
 // Parse unmarshals a `.maintainer.yaml` document leniently (unknown fields

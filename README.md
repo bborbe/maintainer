@@ -43,7 +43,7 @@ Imported by all five services. Packages:
 | `githubapp` | GitHub App auth (installation tokens from an App ID + PEM) |
 | `repoallowlist` | `REPO_ALLOWLIST` parsing + host-qualified include/exclude matching |
 | `prurl` | Platform-agnostic PR URL parser (GitHub / Bitbucket) |
-| `maintainerconfig` | `.maintainer.yaml` parsing (`prReviewer.autoApprove`, `release.autoRelease`, `release.allowMajorBump`, `goUpdate.autoUpdate`, `autoMerge.trivial`) |
+| `maintainerconfig` | `.maintainer.yaml` parsing (`prReviewer.autoApprove`, `release.autoRelease`, `release.allowMajorBump`, `goUpdate.autoUpdate`, `autoMerge.trivial`, `dockerBuild.autoBuild`, `dockerBuild.destinations`) |
 | (root) | shared CQRS/CDB task schema helpers |
 
 ```bash
@@ -76,6 +76,9 @@ goUpdate:
   autoUpdate: true       # github-update-go-watcher may open a Go-version-bump PR
 autoMerge:
   trivial: true          # github-pr-watcher may auto-merge trivial PRs
+dockerBuild:
+  autoBuild: true        # release tags may build and publish an image
+  destinations: [dockerhub]  # named destination classes, NOT registry URLs
 ```
 
 ## Build
