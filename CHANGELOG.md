@@ -11,6 +11,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## Unreleased
 
 - feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
+- fix: bump Go to 1.27.3 for GO-2026-6809 (crypto/x509 intermediate cert distrust)
 
 ## v0.50.12
 

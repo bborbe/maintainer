@@ -1,6 +1,6 @@
 module github.com/bborbe/maintainer
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/bborbe/cqrs v0.6.12
