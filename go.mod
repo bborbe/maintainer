@@ -3,8 +3,8 @@ module github.com/bborbe/maintainer
 go 1.27.3
 
 require (
-	github.com/bborbe/cqrs v0.6.12
-	github.com/bborbe/errors v1.6.3
+	github.com/bborbe/cqrs v0.6.14
+	github.com/bborbe/errors v1.6.5
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/golang/glog v1.2.5
 	github.com/onsi/ginkgo/v2 v2.33.1
@@ -15,19 +15,19 @@ require (
 require (
 	github.com/IBM/sarama v1.61.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/bborbe/collection v1.21.2 // indirect
-	github.com/bborbe/http v1.26.30 // indirect
-	github.com/bborbe/k8s v1.14.23 // indirect
-	github.com/bborbe/kafka v1.28.4 // indirect
-	github.com/bborbe/kv v1.21.18 // indirect
-	github.com/bborbe/log v1.7.4 // indirect
-	github.com/bborbe/math v1.4.15 // indirect
-	github.com/bborbe/parse v1.12.3 // indirect
-	github.com/bborbe/run v1.11.2 // indirect
-	github.com/bborbe/sentry v1.10.5 // indirect
-	github.com/bborbe/strimzi v1.8.21 // indirect
-	github.com/bborbe/time v1.27.17 // indirect
-	github.com/bborbe/validation v1.5.5 // indirect
+	github.com/bborbe/collection v1.21.4 // indirect
+	github.com/bborbe/http v1.26.31 // indirect
+	github.com/bborbe/k8s v1.14.24 // indirect
+	github.com/bborbe/kafka v1.29.1 // indirect
+	github.com/bborbe/kv v1.21.19 // indirect
+	github.com/bborbe/log v1.7.5 // indirect
+	github.com/bborbe/math v1.4.16 // indirect
+	github.com/bborbe/parse v1.12.4 // indirect
+	github.com/bborbe/run v1.11.5 // indirect
+	github.com/bborbe/sentry v1.10.6 // indirect
+	github.com/bborbe/strimzi v1.8.22 // indirect
+	github.com/bborbe/time v1.27.18 // indirect
+	github.com/bborbe/validation v1.5.6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -47,7 +47,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v88 v88.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 // indirect
+	github.com/google/pprof v0.0.0-20261026192309-dbd0ed30aa88 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.4 // indirect
@@ -64,7 +64,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.72.1 // indirect
-	github.com/prometheus/procfs v0.22.0 // indirect
+	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -73,7 +73,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/mod v0.42.0 // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
@@ -90,9 +90,9 @@ require (
 	k8s.io/client-go v0.38.0-alpha.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20261014044854-ca3452a79603 // indirect
-	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab // indirect
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v7 v7.0.0 // indirect
+	sigs.k8s.io/structured-merge-diff/v7 v7.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
