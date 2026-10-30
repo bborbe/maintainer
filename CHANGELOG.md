@@ -18,6 +18,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## v0.50.13
 
+- feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
 - chore: update Go to 1.27.3
 
 ## v0.50.12
