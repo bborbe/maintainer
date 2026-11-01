@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
+
 ## v0.50.15
 
 - chore: update github.com/bborbe/cqrs to v0.6.15
@@ -18,7 +22,6 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## v0.50.13
 
-- feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
 - chore: update Go to 1.27.3
 
 ## v0.50.12
