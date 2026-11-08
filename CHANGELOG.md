@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- chore: restate the do-not-merge contract in the gate workflow
+
 ## v0.51.0
 
 - feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
