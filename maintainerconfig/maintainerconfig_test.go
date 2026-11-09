@@ -175,6 +175,20 @@ var _ = Describe("Parse", func() {
 				PrReviewer: maintainerconfig.PrReviewerConfig{AutoApprove: true},
 				AutoMerge:  maintainerconfig.AutoMergeConfig{Trivial: false},
 			}),
+		Entry("dockerBuild.autoBuild: true with destinations -> parsed",
+			"dockerBuild:\n  autoBuild: true\n  destinations: [dockerhub, internal]\n",
+			maintainerconfig.MaintainerConfig{
+				DockerBuild: maintainerconfig.DockerBuildConfig{
+					AutoBuild:    true,
+					Destinations: []string{"dockerhub", "internal"},
+				},
+			}),
+		Entry("no dockerBuild: block -> zero value",
+			"prReviewer:\n  autoApprove: true\n",
+			maintainerconfig.MaintainerConfig{
+				PrReviewer:  maintainerconfig.PrReviewerConfig{AutoApprove: true},
+				DockerBuild: maintainerconfig.DockerBuildConfig{},
+			}),
 	)
 
 	It("malformed YAML -> wrapped error", func() {
@@ -328,5 +342,28 @@ var _ = Describe("Parse", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
 		Expect(cfg).To(Equal(maintainerconfig.MaintainerConfig{}))
+	})
+
+	It("ParseStrict parses dockerBuild and the values survive", func() {
+		// Asserting only "no error" would pass on the pre-change code: an
+		// unknown namespace is dropped rather than rejected. The values are
+		// what prove the namespace is actually known.
+		cfg, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("dockerBuild:\n  autoBuild: true\n  destinations: [dockerhub, internal]\n"),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.DockerBuild.AutoBuild).To(BeTrue())
+		Expect(cfg.DockerBuild.Destinations).To(Equal([]string{"dockerhub", "internal"}))
+	})
+
+	It("ParseStrict rejects a typo inside the dockerBuild namespace", func() {
+		_, err := maintainerconfig.ParseStrict(
+			ctx,
+			[]byte("dockerBuild:\n  autoBuildd: true\n"),
+		)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unmarshal .maintainer.yaml"))
+		Expect(err.Error()).To(ContainSubstring("not found"))
 	})
 })

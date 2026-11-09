@@ -8,6 +8,26 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## v0.51.1
+
+- chore: restate the do-not-merge contract in the gate workflow
+
+## v0.51.0
+
+- feat: add dockerBuild namespace to .maintainer.yaml schema (autoBuild, destinations)
+
+## v0.50.15
+
+- chore: update github.com/bborbe/cqrs to v0.6.15
+
+## v0.50.14
+
+- chore: update github.com/bborbe/cqrs to v0.6.14, github.com/bborbe/errors to v1.6.5
+
+## v0.50.13
+
+- chore: update Go to 1.27.3
+
 ## v0.50.12
 
 - chore: update go module dependencies
