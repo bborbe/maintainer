@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 * MINOR version when you add functionality in a backwards-compatible manner, and
 * PATCH version when you make backwards-compatible bug fixes.
 
+## Unreleased
+
+- chore: update github.com/bborbe/cqrs to v0.6.18, github.com/bborbe/errors to v1.7.1
+
 ## v0.52.1
 
 - chore: remove stale vulnerability ignore IDs that no longer apply (govulncheck, trivy)
